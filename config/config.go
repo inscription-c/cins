@@ -39,10 +39,8 @@ var (
 	DryRun bool
 	// IsBrc20C is brc20c protocol
 	IsBrc20C bool
-	// ChainType target chain name
-	ChainType string
-	// ChainId target chain first block_hash first 8 bytes, xxxxxx-xxxxxx is acceptable for forked chain.
-	ChainId string
+	// DstChain target chain coin_type
+	DstChain string
 	// Destination destination address
 	Destination string
 )

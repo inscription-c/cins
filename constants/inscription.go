@@ -1,25 +1,32 @@
 package constants
 
-const (
-	AppName    = "insc"
-	ProtocolId = "ins-c"
+import (
+	"fmt"
+	"regexp"
 )
 
 const (
+	AppName    = "insc"
+	ProtocolId = "ins-c"
+	DstChain   = "10001"
+
+	DefaultPostage = 10000
+	MaxPostage     = 20000
+
 	BodyTag            = 0
 	ContentTypeTag     = 1
 	PointerTag         = 2
 	MetadataTag        = 5
 	ContentEncodingTag = 9
+
+	InscriptionIdDelimiter = "i"
+	OutpointDelimiter      = ":"
+	IdRegexpContent        = `^[a-z0-9]{64}%s\d+$`
 )
 
-const (
-	ProtocolBRC20C  = "brc-20-c"
-	OperationDeploy = "deploy"
-	OperationMint   = "mint"
-	DecimalsDefault = "18"
-	DefaultPostage  = 10000
-	MaxPostage      = 20000
+var (
+	InscriptionIdRegexp = regexp.MustCompile(fmt.Sprintf(IdRegexpContent, InscriptionIdDelimiter))
+	OutpointRegexp      = regexp.MustCompile(fmt.Sprintf(IdRegexpContent, OutpointDelimiter))
 )
 
 type ContentType string

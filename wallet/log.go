@@ -2,7 +2,6 @@ package wallet
 
 import (
 	"fmt"
-	"github.com/btcsuite/btcd/rpcclient"
 	"github.com/btcsuite/btcwallet/chain"
 	"github.com/btcsuite/btcwallet/rpc/legacyrpc"
 	"github.com/btcsuite/btcwallet/rpc/rpcserver"
@@ -62,7 +61,7 @@ func init() {
 	wallet.UseLogger(walletLog)
 	wtxmgr.UseLogger(txmgrLog)
 	chain.UseLogger(chainLog)
-	rpcclient.UseLogger(chainLog)
+	//rpcclient.UseLogger(chainLog)
 	rpcserver.UseLogger(grpcLog)
 	legacyrpc.UseLogger(legacyRPCLog)
 	//neutrino.UseLogger(btcnLog)

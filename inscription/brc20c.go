@@ -4,8 +4,8 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"github.com/dotbitHQ/insc/client"
 	"github.com/dotbitHQ/insc/constants"
+	"github.com/dotbitHQ/insc/model"
 	"github.com/shopspring/decimal"
 	"regexp"
 )
@@ -94,7 +94,7 @@ func (b *BRC20C) Check() error {
 		p.Max = ""
 		p.Limit = ""
 		p.Decimals = ""
-		if client.InscriptionIdToOutpoint(p.TkId) == nil {
+		if model.InscriptionIdToOutpoint(p.TkId) == nil {
 			return errors.New("tkid invalid")
 		}
 	default:
