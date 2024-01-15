@@ -3,51 +3,18 @@ package inscription
 import (
 	"errors"
 	"fmt"
-	"github.com/btcsuite/btcd/btcec/v2"
-	"github.com/btcsuite/btcd/txscript"
-	"github.com/btcsuite/btcwallet/waddrmgr"
 	"github.com/dotbitHQ/insc/constants"
 	"github.com/nareix/joy4/av"
 	"github.com/nareix/joy4/av/avutil"
-	secp256k12 "github.com/olegabu/go-secp256k1-zkp"
 	"path/filepath"
 	"strings"
 )
 
-func GetXOnlyPublicKey() (*secp256k12.XonlyPubkey, error) {
-	sk := secp256k12.Random256()
-	kp, err := secp256k12.KeypairCreate(secp256k12.SharedContext(secp256k12.ContextBoth), sk[:])
-	if err != nil {
-		return nil, err
-	}
-	noneCtx, err := secp256k12.ContextCreate(secp256k12.ContextNone)
-	if err != nil {
-		return nil, err
-	}
-	xopk, _, err := secp256k12.KeypairXonlyPubkey(noneCtx, kp)
-	if err != nil {
-		return nil, err
-	}
-
-	return xopk, nil
-}
-
-func GetTapScript(internalKey *btcec.PublicKey, script []byte) (*waddrmgr.Tapscript, error) {
-	tapScript := &waddrmgr.Tapscript{
-		Type: waddrmgr.TapscriptTypeFullTree,
-		Leaves: []txscript.TapLeaf{
-			{
-				LeafVersion: txscript.BaseLeafVersion,
-				Script:      script,
-			},
-		},
-		ControlBlock: &txscript.ControlBlock{
-			InternalKey: internalKey,
-		},
-	}
-	return tapScript, nil
-}
-
+// ContentTypeForPath is a function that takes a file path as input and returns the media type of the file and an error.
+// It first checks the file extension and if it's mp4, it checks the codec of the file.
+// If the codec is not h264, it returns an error.
+// If the file extension is found in the list of supported media types, it returns the media type.
+// If the file extension is not supported, it returns an error.
 func ContentTypeForPath(path string) (*constants.Media, error) {
 	ext := constants.Extension(strings.ToLower(strings.TrimPrefix(filepath.Ext(path), ".")))
 	if ext == constants.ExtensionMp4 {
@@ -70,6 +37,11 @@ func ContentTypeForPath(path string) (*constants.Media, error) {
 	return nil, fmt.Errorf("unsupported file extension for `%s`", ext)
 }
 
+// CheckMp4Codec is a function that takes a file path as input and returns a boolean indicating whether the file's codec is h264 and an error.
+// It first opens the file and gets the streams.
+// It then checks each stream to see if it's a video stream and if the codec is h264.
+// If the stream is not a video stream or the codec is not h264, it returns false.
+// If all streams are video streams and the codec is h264, it returns true.
 func CheckMp4Codec(path string) (bool, error) {
 	file, err := avutil.Open(path)
 	if err != nil {

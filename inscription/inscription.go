@@ -396,11 +396,11 @@ func (i *Inscription) rawTx(tx *wire.MsgTx, noWitness ...bool) string {
 	return buf.String()
 }
 
-// createInscriptionTx is a method of the Inscription struct. It is responsible for
+// CreateInscriptionTx is a method of the Inscription struct. It is responsible for
 // creating the inscription transaction of the Inscription. It estimates the fee rate,
 // generates a temporary private key, builds the reveal transaction, and builds the
 // commit transaction. It returns an error if there is an error in any of the steps.
-func (i *Inscription) createInscriptionTx() error {
+func (i *Inscription) CreateInscriptionTx() error {
 	// get fee rate
 	feeRate, err := i.Wallet().EstimateFee(10)
 	if err != nil {
@@ -416,24 +416,24 @@ func (i *Inscription) createInscriptionTx() error {
 	i.priKey = priKey
 
 	// build reveal tx
-	if err := i.buildRevealTx(); err != nil {
+	if err := i.BuildRevealTx(); err != nil {
 		return err
 	}
 
 	// build commit tx
-	if err := i.buildCommitTx(); err != nil {
+	if err := i.BuildCommitTx(); err != nil {
 		return err
 	}
 	return nil
 }
 
-// buildCommitTx is a method of the Inscription struct. It is responsible
+// BuildCommitTx is a method of the Inscription struct. It is responsible
 // for building the commit transaction of the Inscription. It initializes
 // the total input and output amounts, creates the transaction inputs and
 // outputs, calculates the change, creates the change output, and clears
 // the input scripts for the transaction. It returns an error if there is
 // an error in any of the steps.
-func (i *Inscription) buildCommitTx() error {
+func (i *Inscription) BuildCommitTx() error {
 	var inTotal, outTotal int64
 	commitTx := wire.NewMsgTx(2)
 	i.commitTx = commitTx
@@ -495,21 +495,23 @@ func (i *Inscription) buildCommitTx() error {
 	return nil
 }
 
-// buildRevealTx is a method of the Inscription struct. It is responsible
+// BuildRevealTx is a method of the Inscription struct. It is responsible
 // for building the reveal transaction of the Inscription. It generates a
 // temporary key, builds the reveal script, creates the reveal transaction,
 // and clears the input scripts for the transaction. It returns an error if
 // there is an error in any of the steps.
-func (i *Inscription) buildRevealTx() error {
+func (i *Inscription) BuildRevealTx() error {
 	// Generate a temporary key
 	internalKey := i.priKey.PubKey()
 	i.internalKey = internalKey
 
 	// Start building the reveal script
+	// Append check sign op to the script
 	i.scriptBuilder = txscript.NewScriptBuilder()
 	i.scriptBuilder.AddData(schnorr.SerializePubKey(internalKey))
 	i.scriptBuilder.AddOp(txscript.OP_CHECKSIG)
-	if err := i.appendRevealScriptToBuilder(); err != nil {
+	// Append the inscription content to the script builder
+	if err := i.AppendInscriptionContentToBuilder(); err != nil {
 		return err
 	}
 	revealScript, err := i.scriptBuilder.Script()
@@ -519,7 +521,7 @@ func (i *Inscription) buildRevealTx() error {
 	i.revealScript = revealScript
 
 	// Generate the script address
-	if err := i.revealScriptAddress(); err != nil {
+	if err := i.RevealScriptAddress(); err != nil {
 		return err
 	}
 	log.Info("taprootAddress", i.revealTxAddress.String())
@@ -564,12 +566,12 @@ func (i *Inscription) buildRevealTx() error {
 	return nil
 }
 
-// signCommitTx is a method of the Inscription struct. It is responsible for
+// SignCommitTx is a method of the Inscription struct. It is responsible for
 // signing the commit transaction of the Inscription. It unlocks the wallet,
 // fetches the private keys for the transaction inputs, calculates the signature
 // hashes, and signs the transaction inputs. It returns an error if there is an
 // error in any of the steps.
-func (i *Inscription) signCommitTx() error {
+func (i *Inscription) SignCommitTx() error {
 	// This block of code is part of the signCommitTx method of the Inscription struct.
 	// It is responsible for signing the commit transaction of the Inscription.
 
@@ -657,11 +659,11 @@ func (i *Inscription) signCommitTx() error {
 	return nil
 }
 
-// signRevealTx is a method of the Inscription struct. It is responsible
+// SignRevealTx is a method of the Inscription struct. It is responsible
 // for signing the reveal transaction of the Inscription. It sets the previous
 // outpoint of the reveal transaction input, calculates the signature hash, and
 // signs the reveal transaction input. It returns an error if there is an error in any of the steps.
-func (i *Inscription) signRevealTx() error {
+func (i *Inscription) SignRevealTx() error {
 	// This block of code is part of the signRevealTx method of the Inscription struct.
 	// It is responsible for signing the reveal transaction of the Inscription.
 
@@ -698,11 +700,11 @@ func (i *Inscription) signRevealTx() error {
 	return nil
 }
 
-// appendRevealScriptToBuilder is a method of the Inscription struct. It is
+// AppendInscriptionContentToBuilder is a method of the Inscription struct. It is
 // responsible for appending the reveal script to the script builder. It adds the
 // protocol ID, content type, metadata, content encoding, and body to the script builder.
 // It returns an error if there is an error in any of the steps.
-func (i *Inscription) appendRevealScriptToBuilder() error {
+func (i *Inscription) AppendInscriptionContentToBuilder() error {
 	// This block of code is part of the appendRevealScriptToBuilder method of the Inscription struct.
 	// It is responsible for appending the reveal script to the script builder.
 
@@ -760,12 +762,12 @@ func (i *Inscription) appendRevealScriptToBuilder() error {
 	return nil
 }
 
-// revealScriptAddress is a method of the Inscription struct.
+// RevealScriptAddress is a method of the Inscription struct.
 // It is responsible for generating the reveal script address.
 // It creates a control block, a leaf node, a tap script, and an output key.
 // It then generates the taproot address from the output key.
 // It returns an error if there is an error in any of the steps.
-func (i *Inscription) revealScriptAddress() error {
+func (i *Inscription) RevealScriptAddress() error {
 	// Create a control block
 	controlBlock := &txscript.ControlBlock{
 		InternalKey: i.internalKey,
