@@ -43,6 +43,8 @@ var (
 	DstChain string
 	// Destination destination address
 	Destination string
+	// Rpclisten rpc server listen address
+	Rpclisten string
 )
 
 func init() {

@@ -51,6 +51,7 @@ func init() {
 	Cmd.Flags().StringVarP(&config.Username, "user", "u", "", "wallet api username")
 	Cmd.Flags().StringVarP(&config.Password, "password", "P", "", "wallet api password")
 	Cmd.Flags().BoolVarP(&config.Testnet, "testnet", "t", false, "bitcoin testnet3")
+	Cmd.Flags().StringVarP(&config.Rpclisten, "rpclisten", "", "", "Add an interface/port to listen for RPC connections (default port: 8334, testnet: 18334)")
 	if err := Cmd.MarkFlagRequired("user"); err != nil {
 		btcdLog.Error(err)
 		os.Exit(1)

@@ -447,6 +447,10 @@ func loadConfig() (*Config, []string, error) {
 		TxIndex:              true,
 		AddrIndex:            defaultAddrIndex,
 		DisableTLS:           true,
+		RPCListeners:         []string{},
+	}
+	if config.Rpclisten != "" {
+		cfg.RPCListeners = append(cfg.RPCListeners, config.Rpclisten)
 	}
 
 	// Create the home directory if it doesn't already exist.
