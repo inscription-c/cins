@@ -20,8 +20,8 @@ import (
 	secp "github.com/decred/dcrd/dcrec/secp256k1/v4"
 	"github.com/dotbitHQ/insc/config"
 	"github.com/dotbitHQ/insc/constants"
-	"github.com/dotbitHQ/insc/index"
-	"github.com/dotbitHQ/insc/model"
+	"github.com/dotbitHQ/insc/inscription/index"
+	"github.com/dotbitHQ/insc/inscription/log"
 	"github.com/go-playground/validator/v10"
 	"github.com/shopspring/decimal"
 	"github.com/ugorji/go/codec"
@@ -119,6 +119,9 @@ type options struct {
 	// walletClient is the client for the wallet.
 	walletClient *rpcclient.Client `validate:"required"`
 
+	// index indexer client
+	index *index.Indexer
+
 	// postage is the postage for the inscription.
 	postage uint64 `validate:"required"`
 
@@ -190,6 +193,16 @@ func WithDstChain(dstChain string) func(*options) {
 func WithWalletClient(cli *rpcclient.Client) func(*options) {
 	return func(options *options) {
 		options.walletClient = cli
+	}
+}
+
+// WithIndexer is a function that sets the indexer option for an Inscription.
+// It takes a pointer to an index.Indexer representing the indexer and returns a
+// function that sets the indexer in the options of an Inscription.
+func WithIndexer(index *index.Indexer) func(*options) {
+	return func(o *options) {
+		// Set the indexer in the options
+		o.index = index
 	}
 }
 
@@ -406,7 +419,7 @@ func (i *Inscription) CreateInscriptionTx() error {
 	if err != nil {
 		return err
 	}
-	i.feeRate = model.Sat(feeRate)
+	i.feeRate = index.AmountToSat(feeRate)
 
 	// gen temporary priKey
 	priKey, err := btcec.NewPrivateKey()
@@ -524,7 +537,7 @@ func (i *Inscription) BuildRevealTx() error {
 	if err := i.RevealScriptAddress(); err != nil {
 		return err
 	}
-	log.Info("taprootAddress", i.revealTxAddress.String())
+	log.Log.Info("taprootAddress", i.revealTxAddress.String())
 
 	// Create the witness for the transaction
 	revealTxWitness := make([][]byte, 0)
@@ -603,8 +616,8 @@ func (i *Inscription) SignCommitTx() error {
 		}
 
 		// It creates a new OutPoint for the UTXO and adds the private key to the map.
-		outpoint := model.NewOutPoint(utxo.TxID, utxo.Vout)
-		priKeyMap[outpoint.Outpoint()] = wif
+		outpoint := index.NewOutPoint(utxo.TxID, utxo.Vout)
+		priKeyMap[outpoint.String()] = wif
 
 		// It converts the OutPoint to a wire.OutPoint.
 		outpointObj, err := outpoint.WireOutpoint()
@@ -619,7 +632,7 @@ func (i *Inscription) SignCommitTx() error {
 		}
 
 		// It converts the amount of the UTXO to satoshis.
-		value := model.Amount(utxo.Amount).Sat()
+		value := index.Amount(utxo.Amount).Sat()
 
 		// It adds the previous output to the MultiPrevOutFetcher.
 		feature.AddPrevOut(*outpointObj, wire.NewTxOut(value, pkScript))
@@ -633,8 +646,8 @@ func (i *Inscription) SignCommitTx() error {
 		utxo := i.utxo[j]
 
 		// It creates a new OutPoint for the UTXO and retrieves the private key from the map.
-		outpoint := model.NewOutPoint(utxo.TxID, utxo.Vout)
-		wif := priKeyMap[outpoint.Outpoint()]
+		outpoint := index.NewOutPoint(utxo.TxID, utxo.Vout)
+		wif := priKeyMap[outpoint.String()]
 
 		// It converts the address of the UTXO to a script.
 		pkScript, err := addressToScript(utxo.Address)
@@ -643,7 +656,7 @@ func (i *Inscription) SignCommitTx() error {
 		}
 
 		// It converts the amount of the UTXO to satoshis.
-		value := model.Amount(utxo.Amount).Sat()
+		value := index.Amount(utxo.Amount).Sat()
 
 		// It creates a witness signature for the transaction input.
 		witness, err := txscript.WitnessSignature(i.commitTx, sigHashes, j, value, pkScript, txscript.SigHashAll, wif.PrivKey, wif.CompressPubKey)
@@ -716,7 +729,7 @@ func (i *Inscription) AppendInscriptionContentToBuilder() error {
 		AddData([]byte(constants.ProtocolId)).
 		AddOp(txscript.OP_1).
 		AddData(i.Header.ContentType.Bytes()).
-		AddData([]byte(constants.DstChain)).
+		AddData([]byte(fmt.Sprint(constants.DstChain))).
 		AddData([]byte(i.Header.DstChain))
 
 	// If metadata exists, add it to the script builder
@@ -752,7 +765,7 @@ func (i *Inscription) AppendInscriptionContentToBuilder() error {
 			if err == io.EOF {
 				break
 			}
-			i.scriptBuilder.AddData([]byte{constants.BodyTag})
+			i.scriptBuilder.AddOp(txscript.OP_0)
 			i.scriptBuilder.AddData(body)
 		}
 	}
@@ -823,16 +836,16 @@ func (i *Inscription) getUtxo() error {
 	}
 
 	// Combine unspent and locked UTXOs
-	utoxTotal := make([]*model.OutPoint, 0)
+	utoxTotal := make([]*index.OutPoint, 0)
 	for _, v := range unspentUtxo {
-		utoxTotal = append(utoxTotal, model.NewOutPoint(v.TxID, v.Vout))
+		utoxTotal = append(utoxTotal, index.NewOutPoint(v.TxID, v.Vout))
 	}
 	for _, v := range lockedUtxos {
-		utoxTotal = append(utoxTotal, model.NewOutPoint(v.Hash.String(), v.Index))
+		utoxTotal = append(utoxTotal, index.NewOutPoint(v.Hash.String(), v.Index))
 	}
 
 	// Get wallet inscriptions UTXOs
-	walletInscriptions, err := index.GetInscriptionByOutPoints(utoxTotal)
+	walletInscriptions, err := i.options.index.GetInscriptionByOutPoints(utoxTotal)
 	if err != nil {
 		return err
 	}
@@ -840,7 +853,7 @@ func (i *Inscription) getUtxo() error {
 	// Filter out UTXOs that are already used in inscriptions
 	utxo := make([]btcjson.ListUnspentResult, 0)
 	for _, v := range unspentUtxo {
-		outpoint := model.NewOutPoint(v.TxID, v.Vout)
+		outpoint := index.NewOutPoint(v.TxID, v.Vout)
 		if _, ok := walletInscriptions[outpoint.String()]; ok {
 			continue
 		}

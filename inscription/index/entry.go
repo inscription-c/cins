@@ -1,6 +1,7 @@
-package model
+package index
 
 import (
+	"bytes"
 	"fmt"
 	"github.com/btcsuite/btcd/btcjson"
 	"github.com/btcsuite/btcd/wire"
@@ -10,14 +11,52 @@ import (
 	"strings"
 )
 
+type Inscription struct {
+	Body            []byte
+	ContentEncoding []byte
+	ContentType     constants.ContentType
+	DstChain        []byte
+	Metadata        []byte
+	Parent          []byte
+	Pointer         []byte
+
+	DuplicateField        bool
+	IncompleteField       bool
+	UnRecognizedEvenField bool
+}
+
+type InscriptionId struct {
+	OutPoint
+}
+
+func (i *InscriptionId) String() string {
+	return fmt.Sprintf("%s%s%d", i.Hash, constants.InscriptionIdDelimiter, i.Index)
+}
+
+func StringToInscriptionId(s string) *InscriptionId {
+	s = strings.ToLower(s)
+	if !constants.InscriptionIdRegexp.MatchString(s) {
+		return nil
+	}
+	insId := strings.Split(s, constants.InscriptionIdDelimiter)
+	return &InscriptionId{
+		OutPoint: OutPoint{OutPoint: btcjson.OutPoint{
+			Hash:  insId[0],
+			Index: gconv.Uint32(insId[1]),
+		}},
+	}
+}
+
 type Amount float64
+
+type Sat uint64
 
 func (a Amount) Sat() int64 {
 	return decimal.NewFromFloat(float64(a)).
 		Mul(decimal.NewFromInt(constants.OneBtc)).IntPart()
 }
 
-func Sat(amount float64) int64 {
+func AmountToSat(amount float64) int64 {
 	return Amount(amount).Sat()
 }
 
@@ -35,15 +74,11 @@ func NewOutPoint(txId string, index uint32) *OutPoint {
 }
 
 func (o *OutPoint) String() string {
-	return fmt.Sprintf("%s%s%d", o.Hash, constants.InscriptionIdDelimiter, o.Index)
-}
-
-func (o *OutPoint) Outpoint() string {
 	return fmt.Sprintf("%s%s%d", o.Hash, constants.OutpointDelimiter, o.Index)
 }
 
 func (o *OutPoint) WireOutpoint() (*wire.OutPoint, error) {
-	return wire.NewOutPointFromString(o.Outpoint())
+	return wire.NewOutPointFromString(o.String())
 }
 
 func StringToOutpoint(s string) *OutPoint {
@@ -72,4 +107,12 @@ func InscriptionIdToOutpoint(s string) *OutPoint {
 			Index: gconv.Uint32(insId[1]),
 		},
 	}
+}
+
+func LoadHeader(v []byte) (*wire.BlockHeader, error) {
+	h := &wire.BlockHeader{}
+	if err := h.Deserialize(bytes.NewReader(v)); err != nil {
+		return nil, err
+	}
+	return h, nil
 }

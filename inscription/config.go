@@ -5,6 +5,7 @@ import (
 	"github.com/btcsuite/btcd/btcutil"
 	"github.com/dotbitHQ/insc/config"
 	"github.com/dotbitHQ/insc/constants"
+	"github.com/dotbitHQ/insc/inscription/log"
 	"os"
 	"path/filepath"
 )
@@ -55,6 +56,6 @@ func configCheck() error {
 	// Initialize log rotation.  After log rotation has been initialized, the
 	// logger variables may be used.
 	logFile := btcutil.AppDataDir(filepath.Join(constants.AppName, "inscription", "logs", "inscription.log"), false)
-	initLogRotator(logFile)
+	log.InitLogRotator(logFile)
 	return nil
 }

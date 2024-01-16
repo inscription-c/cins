@@ -1,4 +1,4 @@
-package inscription
+package log
 
 import (
 	"fmt"
@@ -42,18 +42,20 @@ var (
 	// is written to by the Write method of the logWriter type.
 	logRotatorPipe *io.PipeWriter
 
-	log = backendLog.Logger("INSC")
+	Log = backendLog.Logger("INSC")
+	Srv = backendLog.Logger("INSCSRV")
 )
 
 // subsystemLoggers maps each subsystem identifier to its associated logger.
 var subsystemLoggers = map[string]btclog.Logger{
-	"INSC": log,
+	"INSC":    Log,
+	"INSCSRV": Srv,
 }
 
-// initLogRotator initializes the logging rotater to write logs to logFile and
+// InitLogRotator initializes the logging rotater to write logs to logFile and
 // create roll files in the same directory.  It must be called before the
 // package-global log rotater variables are used.
-func initLogRotator(logFile string) {
+func InitLogRotator(logFile string) {
 	logDir, _ := filepath.Split(logFile)
 	err := os.MkdirAll(logDir, 0700)
 	if err != nil {

@@ -276,16 +276,30 @@ func loadConfig() (*Config, []string, error) {
 		BanThreshold:           neutrino.BanThreshold,
 		DBTimeout:              wallet.DefaultDBTimeout,
 	}
+
+	localhostListeners := map[string]struct{}{
+		"localhost": {},
+		"127.0.0.1": {},
+		"::1":       {},
+	}
+
 	cfg.Username = config.Username
 	cfg.Password = config.Password
 	cfg.WalletPass = strings.TrimSpace(config.WalletPass)
 	cfg.TestNet3 = config.Testnet
-	cfg.DisableClientTLS = true
+	cfg.RPCConnect = config.RpcConnect
 
-	if config.NoBtcd && config.RpcConnect == "" {
-		config.RpcConnect = "localhost:8334"
-		if config.Testnet {
-			config.RpcConnect = "localhost:18334"
+	if cfg.RPCConnect != "" {
+		rpcConnect, err := cfgutil.NormalizeAddress(cfg.RPCConnect, activeNet.RPCClientPort)
+		if err != nil {
+			return nil, nil, err
+		}
+		RPCHost, _, err := net.SplitHostPort(rpcConnect)
+		if err != nil {
+			return nil, nil, err
+		}
+		if _, ok := localhostListeners[RPCHost]; ok {
+			cfg.DisableClientTLS = true
 		}
 	}
 
@@ -501,72 +515,6 @@ func loadConfig() (*Config, []string, error) {
 		}
 	}
 
-	localhostListeners := map[string]struct{}{
-		"localhost": {},
-		"127.0.0.1": {},
-		"::1":       {},
-	}
-
-	if cfg.UseSPV {
-		neutrino.MaxPeers = cfg.MaxPeers
-		neutrino.BanDuration = cfg.BanDuration
-		neutrino.BanThreshold = cfg.BanThreshold
-	} else {
-		if cfg.RPCConnect == "" {
-			cfg.RPCConnect = net.JoinHostPort("localhost", activeNet.RPCClientPort)
-		}
-
-		// Add default port to connect flag if missing.
-		cfg.RPCConnect, err = cfgutil.NormalizeAddress(cfg.RPCConnect,
-			activeNet.RPCClientPort)
-		if err != nil {
-			fmt.Fprintf(os.Stderr,
-				"Invalid rpcconnect network address: %v\n", err)
-			return nil, nil, err
-		}
-
-		RPCHost, _, err := net.SplitHostPort(cfg.RPCConnect)
-		if err != nil {
-			return nil, nil, err
-		}
-		if cfg.DisableClientTLS {
-			if _, ok := localhostListeners[RPCHost]; !ok {
-				str := "%s: the --noclienttls option may not be used " +
-					"when connecting RPC to non localhost " +
-					"addresses: %s"
-				err := fmt.Errorf(str, funcName, cfg.RPCConnect)
-				fmt.Fprintln(os.Stderr, err)
-				return nil, nil, err
-			}
-		} else {
-			// If CAFile is unset, choose either the copy or local btcd cert.
-			if !cfg.CAFile.ExplicitlySet() {
-				cfg.CAFile.Value = filepath.Join(cfg.AppDataDir.Value, defaultCAFilename)
-
-				// If the CA copy does not exist, check if we're connecting to
-				// a local btcd and switch to its RPC cert if it exists.
-				certExists, err := cfgutil.FileExists(cfg.CAFile.Value)
-				if err != nil {
-					fmt.Fprintln(os.Stderr, err)
-					return nil, nil, err
-				}
-				if !certExists {
-					if _, ok := localhostListeners[RPCHost]; ok {
-						btcdCertExists, err := cfgutil.FileExists(
-							btcdDefaultCAFile)
-						if err != nil {
-							fmt.Fprintln(os.Stderr, err)
-							return nil, nil, err
-						}
-						if btcdCertExists {
-							cfg.CAFile.Value = btcdDefaultCAFile
-						}
-					}
-				}
-			}
-		}
-	}
-
 	// Only set default RPC listeners when there are no listeners set for
 	// the experimental RPC server.  This is required to prevent the old RPC
 	// server from sharing listen addresses, since it is impossible to
@@ -613,31 +561,6 @@ func loadConfig() (*Config, []string, error) {
 				err := fmt.Errorf("address `%s` may not be "+
 					"used as a listener address for both "+
 					"RPC servers", addr)
-				fmt.Fprintln(os.Stderr, err)
-				return nil, nil, err
-			}
-		}
-	}
-
-	// Only allow server TLS to be disabled if the RPC server is bound to
-	// localhost addresses.
-	if cfg.DisableServerTLS {
-		allListeners := append(cfg.LegacyRPCListeners,
-			cfg.ExperimentalRPCListeners...)
-		for _, addr := range allListeners {
-			host, _, err := net.SplitHostPort(addr)
-			if err != nil {
-				str := "%s: RPC listen interface '%s' is " +
-					"invalid: %v"
-				err := fmt.Errorf(str, funcName, addr, err)
-				fmt.Fprintln(os.Stderr, err)
-				return nil, nil, err
-			}
-			if _, ok := localhostListeners[host]; !ok {
-				str := "%s: the --noservertls option may not be used " +
-					"when binding RPC to non localhost " +
-					"addresses: %s"
-				err := fmt.Errorf(str, funcName, addr)
 				fmt.Fprintln(os.Stderr, err)
 				return nil, nil, err
 			}

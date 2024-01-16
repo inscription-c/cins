@@ -15,8 +15,6 @@ var (
 	WalletPass string
 	// Testnet is bitcoin testnet3
 	Testnet bool
-	// NoBtcd wallet no embed btcd
-	NoBtcd bool
 	// RpcConnect wallet rpc server url
 	RpcConnect string
 	// RPCCert wallet rpc server cert path

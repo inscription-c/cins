@@ -8,16 +8,10 @@ import (
 const (
 	AppName    = "insc"
 	ProtocolId = "ins-c"
-	DstChain   = "10001"
+	DstChain   = 10_000
 
-	DefaultPostage = 10000
-	MaxPostage     = 20000
-
-	BodyTag            = 0
-	ContentTypeTag     = 1
-	PointerTag         = 2
-	MetadataTag        = 5
-	ContentEncodingTag = 9
+	DefaultPostage = 10_000
+	MaxPostage     = 20_000
 
 	InscriptionIdDelimiter = "i"
 	OutpointDelimiter      = ":"

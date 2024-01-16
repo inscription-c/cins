@@ -5,7 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"github.com/dotbitHQ/insc/constants"
-	"github.com/dotbitHQ/insc/model"
+	"github.com/dotbitHQ/insc/inscription/index"
 	"github.com/shopspring/decimal"
 	"regexp"
 )
@@ -107,7 +107,7 @@ func (b *BRC20C) Check() error {
 		p.Max = ""
 		p.Limit = ""
 		p.Decimals = ""
-		if model.InscriptionIdToOutpoint(p.TkId) == nil {
+		if index.InscriptionIdToOutpoint(p.TkId) == nil {
 			return errors.New("tkid invalid")
 		}
 	default:

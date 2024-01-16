@@ -1,5 +1,7 @@
 package inscription
 
+import "github.com/dotbitHQ/insc/inscription/log"
+
 func OnClientConnected() {
-	log.Info("wallet client connected")
+	log.Log.Info("wallet client connected")
 }

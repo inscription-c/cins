@@ -3,9 +3,10 @@ package inscription
 import (
 	"errors"
 	"fmt"
-	"github.com/btcsuite/btcd/rpcclient"
 	"github.com/dotbitHQ/insc/config"
-	"github.com/dotbitHQ/insc/index"
+	"github.com/dotbitHQ/insc/inscription/index"
+	"github.com/dotbitHQ/insc/inscription/log"
+	"github.com/dotbitHQ/insc/inscription/server"
 	"github.com/dotbitHQ/insc/internal/signal"
 	"github.com/dotbitHQ/insc/wallet"
 	"github.com/spf13/cobra"
@@ -30,6 +31,10 @@ var Cmd = &cobra.Command{
 	},
 }
 
+func init() {
+	Cmd.AddCommand(server.Cmd)
+}
+
 // inscribe is a function that performs the inscription process.
 // It checks the configuration, gets the UTXO, creates the commit and reveal transactions, and signs and sends the transactions.
 // It also handles any errors that occur during these processes.
@@ -40,10 +45,13 @@ func inscribe() error {
 	}
 
 	// Get the database
-	db := index.DB()
+	db, err := index.DB(config.IndexDir)
+	if err != nil {
+		return err
+	}
 	signal.AddInterruptHandler(func() {
 		if err := db.Close(); err != nil {
-			log.Error("db.Close", "err", err)
+			log.Log.Error("db.Close", "err", err)
 		}
 	})
 
@@ -52,20 +60,39 @@ func inscribe() error {
 		config.RpcConnect,
 		config.Username,
 		config.Password,
-		&rpcclient.NotificationHandlers{
-			OnClientConnected: OnClientConnected,
-		},
+		true,
+	)
+	if err != nil {
+		return err
+	}
+	batchCli, err := wallet.NewBatchClient(
+		config.RpcConnect,
+		config.Username,
+		config.Password,
+		true,
 	)
 	if err != nil {
 		return err
 	}
 	signal.AddInterruptHandler(func() {
 		walletCli.Shutdown()
+		batchCli.Shutdown()
 	})
+
+	// indexer is an instance of the Indexer struct from the index package.
+	// The NewIndexer function is used to create this instance.
+	// The WithDB method is used to set the database for the indexer, taking the db variable as an argument.
+	// The WithClient method is used to set the wallet client for the indexer, taking the walletCli variable as an argument.
+	indexer := index.NewIndexer(
+		index.WithDB(db),
+		index.WithClient(walletCli),
+		index.WithBatchClient(batchCli),
+	)
 
 	// Create a new inscription from the file path
 	inscription, err := NewFromPath(config.FilePath,
 		WithWalletClient(walletCli),
+		WithIndexer(indexer),
 		WithPostage(config.Postage),
 		WithDstChain(config.DstChain),
 		WithWalletPass(config.WalletPass),
@@ -88,9 +115,9 @@ func inscribe() error {
 
 	// If it's a dry run, log the success and the transaction IDs and return
 	if config.DryRun {
-		log.Info("dry run success")
-		log.Info("commitTx: ", inscription.CommitTxId())
-		log.Info("revealTx: ", inscription.RevealTxId())
+		log.Log.Info("dry run success")
+		log.Log.Info("commitTx: ", inscription.CommitTxId())
+		log.Log.Info("revealTx: ", inscription.RevealTxId())
 		return nil
 	}
 
@@ -108,14 +135,14 @@ func inscribe() error {
 	if err != nil {
 		return err
 	}
-	log.Info("commitTxSendSuccess", commitTxHash)
+	log.Log.Info("commitTxSendSuccess", commitTxHash)
 
 	// Send the reveal transaction
 	revealTxHash, err := walletCli.SendRawTransaction(inscription.revealTx, false)
 	if err != nil {
 		return err
 	}
-	log.Info("revealTxSendSuccess", revealTxHash)
+	log.Log.Info("revealTxSendSuccess", revealTxHash)
 
 	return nil
 }

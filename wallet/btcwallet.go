@@ -26,7 +26,7 @@ var Cmd = &cobra.Command{
 	Use:   "wallet",
 	Short: "wallet embed btcd endpoint",
 	Run: func(cmd *cobra.Command, args []string) {
-		if !config.NoBtcd {
+		if config.RpcConnect == "" {
 			if err := btcd.Btcd(nil); err != nil {
 				fmt.Println(err)
 				os.Exit(1)
@@ -45,8 +45,7 @@ func init() {
 	Cmd.Flags().StringVarP(&config.Password, "password", "P", "", "btcd rpc server password")
 	Cmd.Flags().StringVarP(&config.WalletPass, "walletpass", "", "", "wallet password")
 	Cmd.Flags().BoolVarP(&config.Testnet, "testnet", "t", false, "bitcoin testnet3")
-	Cmd.Flags().BoolVarP(&config.NoBtcd, "nobtcd", "", false, "not using the embed btcd node")
-	Cmd.Flags().StringVarP(&config.RpcConnect, "rpcconnect", "", "localhost:8334", "Hostname/IP and port of btcd RPC server to connect to (default localhost:8334, testnet: localhost:18334)")
+	Cmd.Flags().StringVarP(&config.RpcConnect, "rpcconnect", "", "", "Hostname/IP and port of btcd RPC server to connect to (default localhost:8334, testnet: localhost:18334)")
 	if err := Cmd.MarkFlagRequired("user"); err != nil {
 		fmt.Println(err)
 		os.Exit(1)
@@ -228,8 +227,7 @@ func rpcClientConnectLoop(legacyRPCServer *legacyrpc.Server, loader *wallet.Load
 // authentication error.  Instead, all requests to the client will simply error.
 func startChainRPC(certs []byte) (*chain.RPCClient, error) {
 	log.Infof("Attempting RPC client connection to %v", cfg.RPCConnect)
-	rpcc, err := chain.NewRPCClient(activeNet.Params, cfg.RPCConnect,
-		cfg.BtcdUsername, cfg.BtcdPassword, certs, cfg.DisableClientTLS, 0)
+	rpcc, err := chain.NewRPCClient(activeNet.Params, cfg.RPCConnect, cfg.BtcdUsername, cfg.BtcdPassword, certs, cfg.DisableClientTLS, 0)
 	if err != nil {
 		return nil, err
 	}
