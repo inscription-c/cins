@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"github.com/dotbitHQ/insc/config"
+	"github.com/dotbitHQ/insc/constants"
 	"github.com/dotbitHQ/insc/inscription/index"
 	"github.com/dotbitHQ/insc/inscription/log"
 	"github.com/dotbitHQ/insc/inscription/server"
@@ -87,6 +88,7 @@ func inscribe() error {
 		index.WithDB(db),
 		index.WithClient(walletCli),
 		index.WithBatchClient(batchCli),
+		index.WithFlushNum(constants.DefaultWithFlushNum),
 	)
 
 	// Create a new inscription from the file path

@@ -419,7 +419,7 @@ func (i *Inscription) CreateInscriptionTx() error {
 	if err != nil {
 		return err
 	}
-	i.feeRate = index.AmountToSat(feeRate)
+	i.feeRate = int64(index.AmountToSat(feeRate))
 
 	// gen temporary priKey
 	priKey, err := btcec.NewPrivateKey()
@@ -632,7 +632,7 @@ func (i *Inscription) SignCommitTx() error {
 		}
 
 		// It converts the amount of the UTXO to satoshis.
-		value := index.Amount(utxo.Amount).Sat()
+		value := int64(index.Amount(utxo.Amount).Sat())
 
 		// It adds the previous output to the MultiPrevOutFetcher.
 		feature.AddPrevOut(*outpointObj, wire.NewTxOut(value, pkScript))
@@ -656,7 +656,7 @@ func (i *Inscription) SignCommitTx() error {
 		}
 
 		// It converts the amount of the UTXO to satoshis.
-		value := index.Amount(utxo.Amount).Sat()
+		value := int64(index.Amount(utxo.Amount).Sat())
 
 		// It creates a witness signature for the transaction input.
 		witness, err := txscript.WitnessSignature(i.commitTx, sigHashes, j, value, pkScript, txscript.SigHashAll, wif.PrivKey, wif.CompressPubKey)

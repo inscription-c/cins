@@ -8,4 +8,6 @@ const (
 	SegWitPkSize   = 33
 
 	AddressTypeP2shSegWit = "p2sh-segwit"
+
+	SubsidyHalvingInterval uint32 = 210_000
 )

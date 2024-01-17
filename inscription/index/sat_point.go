@@ -5,17 +5,18 @@ import (
 	"fmt"
 	"github.com/btcsuite/btcd/chaincfg/chainhash"
 	"github.com/btcsuite/btcd/wire"
+	"github.com/dotbitHQ/insc/constants"
 	"strconv"
 	"strings"
 )
 
 type SatPoint struct {
 	Outpoint *wire.OutPoint
-	Offset   int64
+	Offset   uint64
 }
 
 func NewSatPointFromString(satpoint string) (*SatPoint, error) {
-	parts := strings.Split(satpoint, ":")
+	parts := strings.Split(satpoint, constants.OutpointDelimiter)
 	if len(parts) != 3 {
 		return nil, errors.New("satpoint should be of the form txid:index:offset")
 	}
@@ -27,7 +28,7 @@ func NewSatPointFromString(satpoint string) (*SatPoint, error) {
 	if err != nil {
 		return nil, fmt.Errorf("invalid output index: %v", err)
 	}
-	offset, err := strconv.ParseInt(parts[2], 10, 64)
+	offset, err := strconv.ParseUint(parts[2], 10, 64)
 	if err != nil {
 		return nil, fmt.Errorf("invalid satpoint offset: %v", err)
 	}

@@ -1,22 +1,15 @@
 package index
 
 import (
-	"bytes"
 	"errors"
 	"fmt"
 	"github.com/btcsuite/btcd/btcjson"
-	"github.com/btcsuite/btcd/btcutil"
-	"github.com/btcsuite/btcd/chaincfg/chainhash"
 	"github.com/btcsuite/btcd/wire"
 	"github.com/dotbitHQ/insc/constants"
-	"github.com/dotbitHQ/insc/inscription/log"
-	"github.com/dotbitHQ/insc/wallet"
 	"github.com/gogf/gf/v2/util/gconv"
 	"github.com/golang/protobuf/proto"
 	"github.com/nutsdb/nutsdb"
-	"math"
 	"sort"
-	"time"
 )
 
 type Curse int
@@ -35,18 +28,18 @@ const (
 
 type Flotsam struct {
 	InscriptionId *InscriptionId
-	Offset        int64
+	Offset        uint64
 	Origin        Origin
 }
 
 type Origin struct {
-	New OriginNew
-	Old OriginOld
+	New *OriginNew
+	Old *OriginOld
 }
 
 type OriginNew struct {
 	Cursed        bool
-	Fee           int64
+	Fee           uint64
 	Hidden        bool
 	Pointer       []byte
 	ReInscription bool
@@ -57,275 +50,19 @@ type OriginOld struct {
 	OldSatPoint SatPoint
 }
 
-func (idx *Indexer) UpdateIndex() error {
-	var err error
-	idx.height, err = idx.BlockCount()
-	if err != nil {
-		return err
-	}
-
-	startingHeight, err := idx.opts.cli.GetBlockCount()
-	if err != nil {
-		return err
-	}
-	startingHeight += 1
-
-	if err := idx.Begin(func(tx *Tx) error {
-		if err := tx.Put(constants.BucketWriteTransactionStartingBlockCountToTimestamp,
-			gconv.Bytes(fmt.Sprint(idx.height)),
-			gconv.Bytes(fmt.Sprint(time.Now().Unix()))); err != nil {
-			return err
-		}
-
-		//blockCh := idx.fetchBlockFrom()
-		//outpointCh, valueCh := idx.spawnFetcher()
-		//uncommitted := 0
-		//valueCache := make(map[*wire.OutPoint]int64)
-		//
-		//for block := range blockCh {
-		//
-		//}
-		return nil
-	}, true); err != nil {
-		return err
-	}
-	return nil
-}
-
-func (idx *Indexer) spawnFetcher() (outpointCh chan *wire.OutPoint, valueCh chan int64) {
-	bufferSize := 20_000
-	batchSize := 2048
-	parallelRequests := 12
-	outpointCh = make(chan *wire.OutPoint, bufferSize)
-	valueCh = make(chan int64, bufferSize)
-
-	go func() {
-		for {
-			outpoint, ok := <-outpointCh
-			if !ok {
-				log.Srv.Debug("outpointCh closed")
-				break
-			}
-
-			outpoints := make([]*wire.OutPoint, 0, batchSize)
-			outpoints = append(outpoints, outpoint)
-			for i := 0; i < batchSize-1; i++ {
-				select {
-				case outpoint, ok := <-outpointCh:
-					if !ok {
-						break
-					}
-					outpoints = append(outpoints, outpoint)
-				default:
-					break
-				}
-			}
-
-			getTxByTxids := func(txids []string) ([]*btcutil.Tx, error) {
-				txs, err := idx.getTransactions(txids)
-				if err != nil {
-					return nil, err
-				}
-				return txs, nil
-			}
-
-			chunkSize := (len(outpoints) / parallelRequests) + 1
-			futs := make([]*btcutil.Tx, 0, parallelRequests)
-			txids := make([]string, 0, chunkSize)
-			for i := 0; i < len(outpoints); i++ {
-				txids = append(txids, outpoints[i].Hash.String())
-				if i != 0 && i%chunkSize == 0 {
-					txs, err := getTxByTxids(txids)
-					if err != nil {
-						log.Srv.Error("getTxByTxids", err)
-						return
-					}
-					futs = append(futs, txs...)
-					txids = make([]string, 0, chunkSize)
-				}
-			}
-			if len(txids) > 0 {
-				txs, err := getTxByTxids(txids)
-				if err != nil {
-					log.Srv.Error("getTxByTxids", err)
-					return
-				}
-				futs = append(futs, txs...)
-			}
-
-			for i, tx := range futs {
-				valueCh <- tx.MsgTx().TxOut[outpoints[i].Index].Value
-			}
-		}
-	}()
-	return
-}
-
-func (idx *Indexer) getTransactions(txids []string) (resp []*btcutil.Tx, err error) {
-	if len(txids) == 0 {
-		return
-	}
-	retries := 0
-	for {
-		if retries > 0 {
-			time.Sleep(100 * time.Millisecond * time.Duration(math.Pow(float64(2), float64(retries))))
-		}
-		var rawTxGetResp wallet.FutureBatchGetRawTransactionResult
-		for _, v := range txids {
-			cmd := btcjson.NewGetRawTransactionCmd(v, btcjson.Int(0))
-			rawTxGetResp = idx.opts.batchCli.SendCmd(cmd)
-		}
-		if err = idx.opts.batchCli.Send(); err != nil {
-			retries++
-			if retries >= 5 {
-				err = fmt.Errorf("failed to fetch raw transactions after 5 retries: %s", err)
-				return
-			}
-			continue
-		}
-		return rawTxGetResp.Receive()
-	}
-}
-
-func (idx *Indexer) fetchBlockFrom() chan *wire.MsgBlock {
-	ch := make(chan *wire.MsgBlock, 32)
-	go func() {
-		for {
-			block, err := idx.getBlockWithRetries(idx.height)
-			if err != nil {
-				log.Srv.Error(err)
-				break
-			}
-			ch <- block
-			idx.height++
-		}
-	}()
-	return ch
-}
-
-func (idx *Indexer) getBlockWithRetries(height int64) (*wire.MsgBlock, error) {
-	errs := -1
-	for {
-		errs++
-		if errs > 0 {
-			seconds := 1 << errs
-			if seconds > 120 {
-				err := errors.New("would sleep for more than 120s, giving up")
-				log.Srv.Error(err)
-			}
-			time.Sleep(time.Second * time.Duration(seconds))
-		}
-		hash, err := idx.opts.cli.GetBlockHash(height)
-		if err != nil {
-			log.Srv.Warn("GetBlockHash", err)
-			continue
-		}
-		block, err := idx.opts.cli.GetBlock(hash)
-		if err != nil {
-			log.Srv.Warn("GetBlock", err)
-			continue
-		}
-		return block, nil
-	}
-}
-
-func (idx *Indexer) indexBlock(
-	wtx *Tx,
-	outpointCh chan *wire.OutPoint,
-	valueCh chan int64,
-	block *wire.MsgBlock,
-	valueCache map[string]int64) error {
-	if err := idx.detectReorg(block, idx.height); err != nil {
-		return err
-	}
-	txids := make(map[string]struct{}, len(block.Transactions))
-	for _, tx := range block.Transactions {
-		txids[tx.TxHash().String()] = struct{}{}
-	}
-
-	// index inscriptions
-	for _, tx := range block.Transactions {
-		for _, input := range tx.TxIn {
-			preOutput := input.PreviousOutPoint
-			newHash := make([]byte, chainhash.HashSize)
-			// We don't need coinbase input value
-			if bytes.Compare(preOutput.Hash[:], newHash) == 0 {
-				continue
-			}
-			// We don't need input values from txs earlier in the block, since they'll be added to value_cache
-			// when the tx is indexed
-			if _, ok := txids[preOutput.Hash.String()]; ok {
-				continue
-			}
-			// We don't need input values we already have in our value_cache from earlier blocks
-			if _, ok := valueCache[preOutput.String()]; ok {
-				continue
-			}
-			// We don't need input values we already have in our outpoint_to_value table from earlier blocks that
-			// were committed to db already
-			if _, err := wtx.GetValueByOutpoint(preOutput.String()); err != nil && !errors.Is(err, nutsdb.ErrKeyNotFound) {
-				return err
-			} else if err == nil {
-				continue
-			}
-			// We don't know the value of this tx input. Send this outpoint to background thread to be fetched
-			outpointCh <- &preOutput
-		}
-	}
-
-	cursedInscriptionCount, err := idx.GetStatisticCount(constants.StatisticCursedInscriptions)
-	if err != nil {
-		return err
-	}
-	blessedInscriptionCount, err := idx.GetStatisticCount(constants.StatisticBlessedInscriptions)
-	if err != nil {
-		return err
-	}
-	unboundInscriptions, err := idx.GetStatisticCount(constants.StatisticUnboundInscriptions)
-	if err != nil {
-		return err
-	}
-	nextSequenceNumber, err := idx.NextSequenceNumber()
-	if err != nil {
-		return err
-	}
-
-	inscriptionUpdater := &InscriptionUpdater{
-		wtx:                     wtx,
-		blessedInscriptionCount: blessedInscriptionCount,
-		cursedInscriptionCount:  cursedInscriptionCount,
-		height:                  idx.height,
-		nextSequenceNumber:      nextSequenceNumber,
-		timestamp:               block.Header.Timestamp.Unix(),
-		unboundInscriptions:     unboundInscriptions,
-		valueCache:              valueCache,
-		valueCh:                 valueCh,
-	}
-
-	txs := append([]*wire.MsgTx{block.Transactions[len(block.Transactions)-1]}, block.Transactions[1:]...)
-	for i := range txs {
-		tx := txs[i]
-		if err := inscriptionUpdater.indexEnvelopers(tx); err != nil {
-			return err
-		}
-	}
-
-	return nil
-}
-
 type InscriptionUpdater struct {
 	wtx                     *Tx
 	flotsam                 []*Flotsam
-	lostSats                int64
-	reward                  int64
-	blessedInscriptionCount int64
-	cursedInscriptionCount  int64
-	height                  int64
-	nextSequenceNumber      int64
+	height                  uint64
+	lostSats                uint64
+	reward                  uint64
+	blessedInscriptionCount *uint64
+	cursedInscriptionCount  *uint64
+	nextSequenceNumber      *int64
+	unboundInscriptions     *uint64
+	valueCache              map[string]uint64
+	valueCh                 chan uint64
 	timestamp               int64
-	unboundInscriptions     int64
-	valueCache              map[string]int64
-	valueCh                 chan int64
 }
 
 type inscribedOffsetEntity struct {
@@ -338,20 +75,23 @@ type locationsInscription struct {
 	flotsam  *Flotsam
 }
 
-type rangeToVout struct {
-	outputValue int64
-	end         int64
+type SatRange struct {
+	start uint64
+	end   uint64
 }
 
-func (u *InscriptionUpdater) indexEnvelopers(tx *wire.MsgTx) error {
-	totalInputValue := int64(0)
-	idCounter := int64(0)
+func (u *InscriptionUpdater) indexEnvelopers(
+	tx *wire.MsgTx,
+	inputSatRange []*SatRange) error {
+
+	totalInputValue := uint64(0)
+	idCounter := uint64(0)
 	floatingInscriptions := make([]*Flotsam, 0)
-	inscribedOffsets := make(map[int64]*inscribedOffsetEntity)
+	inscribedOffsets := make(map[uint64]*inscribedOffsetEntity)
 	envelopes := ParsedEnvelopeFromTransaction(tx)
-	totalOutputValue := int64(0)
+	totalOutputValue := uint64(0)
 	for _, v := range tx.TxOut {
-		totalOutputValue += v.Value
+		totalOutputValue += uint64(v.Value)
 	}
 
 	for inputIndex := range tx.TxIn {
@@ -367,12 +107,12 @@ func (u *InscriptionUpdater) indexEnvelopers(tx *wire.MsgTx) error {
 			return err
 		}
 		for _, v := range inscriptions {
-			offset := totalInputValue + int64(v.SatPoint.Offset)
+			offset := totalInputValue + v.SatPoint.Offset
 			floatingInscriptions = append(floatingInscriptions, &Flotsam{
 				InscriptionId: v.Id,
 				Offset:        offset,
 				Origin: Origin{
-					Old: OriginOld{OldSatPoint: *v.SatPoint},
+					Old: &OriginOld{OldSatPoint: *v.SatPoint},
 				},
 			})
 
@@ -409,7 +149,7 @@ func (u *InscriptionUpdater) indexEnvelopers(tx *wire.MsgTx) error {
 				if err := u.wtx.Delete(constants.BucketOutpointToValue, []byte(txIn.PreviousOutPoint.String())); err != nil {
 					return err
 				}
-				currentInputValue = gconv.Int64(string(v))
+				currentInputValue = gconv.Uint64(string(v))
 			}
 		}
 		totalInputValue += currentInputValue
@@ -475,8 +215,8 @@ func (u *InscriptionUpdater) indexEnvelopers(tx *wire.MsgTx) error {
 				inscription.payload.UnRecognizedEvenField
 
 			if len(inscription.payload.Pointer) > 0 &&
-				gconv.Int64(string(inscription.payload.Pointer)) < totalOutputValue {
-				offset = gconv.Int64(string(inscription.payload.Pointer))
+				gconv.Uint64(string(inscription.payload.Pointer)) < totalOutputValue {
+				offset = gconv.Uint64(string(inscription.payload.Pointer))
 			}
 
 			_, reInscription := inscribedOffsets[offset]
@@ -485,7 +225,7 @@ func (u *InscriptionUpdater) indexEnvelopers(tx *wire.MsgTx) error {
 				InscriptionId: &inscriptionId,
 				Offset:        offset,
 				Origin: Origin{
-					New: OriginNew{
+					New: &OriginNew{
 						Cursed:        curse > 0,
 						Fee:           0,
 						Hidden:        false,
@@ -520,11 +260,11 @@ func (u *InscriptionUpdater) indexEnvelopers(tx *wire.MsgTx) error {
 		return floatingInscriptions[i].Offset < floatingInscriptions[j].Offset
 	})
 
-	rangeToVoutMap := make(map[rangeToVout]int)
-	outputValue := int64(0)
+	rangeToVoutMap := make(map[SatRange]int)
+	outputValue := uint64(0)
 	newLocations := make([]*locationsInscription, 0)
 	for vout, txOut := range tx.TxOut {
-		end := outputValue + txOut.Value
+		end := outputValue + uint64(txOut.Value)
 		for _, flotsam := range floatingInscriptions {
 			if flotsam.Offset >= end {
 				break
@@ -542,49 +282,50 @@ func (u *InscriptionUpdater) indexEnvelopers(tx *wire.MsgTx) error {
 			})
 		}
 
-		rangeToVoutMap[rangeToVout{
-			outputValue: outputValue,
-			end:         end,
+		rangeToVoutMap[SatRange{
+			start: outputValue,
+			end:   end,
 		}] = vout
 
 		outputValue = end
 
 		outpoint := NewOutPoint(tx.TxHash().String(), uint32(vout)).String()
-		u.valueCache[outpoint] = txOut.Value
+		u.valueCache[outpoint] = uint64(txOut.Value)
 	}
 
 	for _, flotsam := range newLocations {
 		if len(flotsam.flotsam.Origin.New.Pointer) > 0 {
-			pointer := gconv.Int64(string(flotsam.flotsam.Origin.New.Pointer))
+			pointer := gconv.Uint64(string(flotsam.flotsam.Origin.New.Pointer))
 			if pointer < outputValue {
 				for rangeEntity, vout := range rangeToVoutMap {
-					if pointer >= rangeEntity.outputValue && pointer < rangeEntity.end {
+					if pointer >= rangeEntity.start && pointer < rangeEntity.end {
 						flotsam.flotsam.Offset = pointer
 						flotsam.satpoint = &SatPoint{
 							Outpoint: &wire.OutPoint{
 								Hash:  tx.TxHash(),
 								Index: uint32(vout),
 							},
-							Offset: pointer - rangeEntity.outputValue,
+							Offset: pointer - rangeEntity.start,
 						}
 					}
 				}
 			}
 		}
-
-		// TODO
-		// u.updateInscriptionLocation()
+		if err := u.updateInscriptionLocation(inputSatRange, flotsam.flotsam, flotsam.satpoint); err != nil {
+			return err
+		}
 	}
 
 	if isCoinBase {
-		//for _, flotsam := range floatingInscriptions {
-		//newSatpoint := &SatPoint{
-		//	Outpoint: nil,
-		//	Offset:   u.lostSats + flotsam.Offset - outputValue,
-		//}
-		// TODO
-		// u.updateInscriptionLocation()
-		//}
+		for _, flotsam := range floatingInscriptions {
+			newSatpoint := &SatPoint{
+				Outpoint: nil,
+				Offset:   u.lostSats + flotsam.Offset - outputValue,
+			}
+			if err := u.updateInscriptionLocation(inputSatRange, flotsam, newSatpoint); err != nil {
+				return err
+			}
+		}
 		u.lostSats += u.reward - outputValue
 		return nil
 	}
@@ -605,9 +346,10 @@ type inscriptionEntry struct {
 }
 
 func (u *InscriptionUpdater) inscriptionsOnOutput(output wire.OutPoint) (inscriptions []*inscriptionEntry, err error) {
-	if err = u.wtx.LKeys(constants.BucketSatpointToSequenceNumber, fmt.Sprintf("%s:.*", output.String()), func(key string) bool {
+	pattern := fmt.Sprintf("%s%s.*", output.String(), constants.OutpointDelimiter)
+	if err = u.wtx.SKeys(constants.BucketSatpointToSequenceNumber, pattern, func(key string) bool {
 		var sequenceNumbers [][]byte
-		sequenceNumbers, err = u.wtx.LRange(constants.BucketSatpointToSequenceNumber, []byte(key), 0, -1)
+		sequenceNumbers, err = u.wtx.SMembers(constants.BucketSatpointToSequenceNumber, []byte(key))
 		if err != nil {
 			return false
 		}
@@ -643,6 +385,153 @@ func (u *InscriptionUpdater) inscriptionsOnOutput(output wire.OutPoint) (inscrip
 	return
 }
 
-func (u *InscriptionUpdater) updateInscriptionLocation() error {
+func (u *InscriptionUpdater) updateInscriptionLocation(
+	inputSatRanges []*SatRange,
+	flotsam *Flotsam,
+	newSatpoint *SatPoint,
+) error {
+	inscriptionid := flotsam.InscriptionId
+	var unbound bool
+	var sequenceNumber int64
+	if flotsam.Origin.Old != nil {
+		if err := u.wtx.Delete(constants.BucketSatpointToSequenceNumber, []byte(flotsam.Origin.Old.OldSatPoint.String())); err != nil {
+			return err
+		}
+		v, err := u.wtx.Get(constants.BucketInscriptionIdToSequenceNumber, []byte(inscriptionid.String()))
+		if err != nil {
+			return err
+		}
+		sequenceNumber = gconv.Int64(string(v))
+	} else if flotsam.Origin.New != nil {
+		unbound = flotsam.Origin.New.Unbound
+		inscriptionNumber := int64(0)
+		if flotsam.Origin.New.Cursed {
+			num := *u.cursedInscriptionCount
+			*u.cursedInscriptionCount++
+			inscriptionNumber = -(int64(num) + 1)
+		} else {
+			inscriptionNumber = int64(*u.blessedInscriptionCount)
+			*u.blessedInscriptionCount++
+		}
+
+		sequenceNumber = *u.nextSequenceNumber
+		*u.nextSequenceNumber++
+
+		if err := u.wtx.Put(constants.BucketInscriptionNumberToSequenceNumber,
+			[]byte(gconv.String(inscriptionNumber)),
+			[]byte(gconv.String(sequenceNumber))); err != nil {
+			return err
+		}
+
+		var sat *Sat
+		if !unbound {
+			sat = u.calculateSat(inputSatRanges, flotsam.Offset)
+		}
+		charms := uint16(0)
+		if flotsam.Origin.New.Cursed {
+			constants.CharmCursed.Set(&charms)
+		}
+		if flotsam.Origin.New.ReInscription {
+			constants.CharmReInscription.Set(&charms)
+		}
+		if sat != nil {
+			if sat.NineBall() {
+				constants.CharmNineBall.Set(&charms)
+			}
+			if sat.Coin() {
+				constants.CharmCoin.Set(&charms)
+			}
+
+			// TODO rarity sat
+		}
+
+		if newSatpoint.Outpoint == nil || IsEmptyHash(newSatpoint.Outpoint.Hash) {
+			constants.CharmLost.Set(&charms)
+		}
+
+		if unbound {
+			constants.CharmUnbound.Set(&charms)
+		}
+
+		if sat != nil {
+			if err := u.wtx.SAdd(
+				constants.BucketSatToSequenceNumber,
+				[]byte(gconv.String(uint64(*sat))),
+				[]byte(gconv.String(sequenceNumber))); err != nil {
+				return err
+			}
+		}
+
+		// TODO parent
+
+		entry := &InscriptionEntry{
+			Charms:            uint32(charms),
+			Fee:               flotsam.Origin.New.Fee,
+			Height:            u.height,
+			Id:                []byte(inscriptionid.String()),
+			InscriptionNumber: inscriptionNumber,
+			SequenceNumber:    sequenceNumber,
+			Timestamp:         u.timestamp,
+		}
+		if sat != nil {
+			satNum := uint64(*sat)
+			entry.Sat = &satNum
+		}
+		entryData, err := proto.Marshal(entry)
+		if err != nil {
+			return err
+		}
+		if err := u.wtx.Put(
+			constants.BucketSequenceNumberToInscriptionEntry,
+			[]byte(gconv.String(sequenceNumber)),
+			entryData); err != nil {
+			return err
+		}
+		if err := u.wtx.Put(
+			constants.BucketInscriptionIdToSequenceNumber,
+			[]byte(inscriptionid.String()),
+			[]byte(gconv.String(sequenceNumber))); err != nil {
+			return err
+		}
+		// TODO home_inscriptions
+	}
+
+	satPoint := newSatpoint
+	if unbound {
+		satPoint = &SatPoint{
+			Outpoint: nil,
+			Offset:   *u.unboundInscriptions,
+		}
+		*u.unboundInscriptions++
+	}
+
+	if err := u.wtx.SAdd(
+		constants.BucketSatpointToSequenceNumber,
+		[]byte(satPoint.String()),
+		[]byte(gconv.String(sequenceNumber))); err != nil {
+		return err
+	}
+	if err := u.wtx.Put(
+		constants.BucketSequenceNumberToSatpoint,
+		[]byte(gconv.String(sequenceNumber)),
+		[]byte(satPoint.String())); err != nil {
+		return err
+	}
+	return nil
+}
+
+func (u *InscriptionUpdater) calculateSat(
+	inputSatRanges []*SatRange,
+	inputOffset uint64,
+) *Sat {
+	offset := uint64(0)
+	for _, v := range inputSatRanges {
+		size := v.end - v.start
+		if offset+size > inputOffset {
+			n := Sat(v.start + inputOffset - offset)
+			return &n
+		}
+		offset += size
+	}
 	return nil
 }

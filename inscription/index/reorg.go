@@ -7,13 +7,17 @@ import (
 )
 
 const (
-	maxSavePoints     int64 = 2
-	savePointInterval int64 = 10
+	maxSavePoints     uint64 = 2
+	savePointInterval uint64 = 10
+	chainTipDistance  uint64 = 21
 )
 
-func (idx *Indexer) detectReorg(block *wire.MsgBlock, height int64) error {
+func detectReorg(wtx *Tx, idx *Indexer, block *wire.MsgBlock, height uint64) error {
 	bitcoindPrevBlockHash := block.Header.PrevBlock.String()
-	indexPreBlockHash, err := idx.BlockHash(height - 1)
+	if height == 0 {
+		return nil
+	}
+	indexPreBlockHash, err := idx.BlockHash(wtx, height-1)
 	if err != nil {
 		return err
 	}
@@ -21,8 +25,8 @@ func (idx *Indexer) detectReorg(block *wire.MsgBlock, height int64) error {
 		return nil
 	}
 	maxRecoverableReorgDepth := (maxSavePoints-1)*savePointInterval + height%savePointInterval
-	for depth := int64(1); depth < maxRecoverableReorgDepth; depth++ {
-		indexBlockHash, err := idx.BlockHash(height - depth)
+	for depth := uint64(1); depth < maxRecoverableReorgDepth; depth++ {
+		indexBlockHash, err := idx.BlockHash(wtx, height-depth)
 		if err != nil {
 			return err
 		}
@@ -31,7 +35,7 @@ func (idx *Indexer) detectReorg(block *wire.MsgBlock, height int64) error {
 		if h < 0 {
 			h = 0
 		}
-		bitcoinBlockHash, err := idx.opts.cli.GetBlockHash(h)
+		bitcoinBlockHash, err := idx.opts.cli.GetBlockHash(int64(h))
 		if err != nil {
 			return err
 		}

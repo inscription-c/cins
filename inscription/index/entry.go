@@ -51,12 +51,20 @@ type Amount float64
 
 type Sat uint64
 
-func (a Amount) Sat() int64 {
-	return decimal.NewFromFloat(float64(a)).
-		Mul(decimal.NewFromInt(constants.OneBtc)).IntPart()
+func (a Amount) Sat() Sat {
+	return Sat(decimal.NewFromFloat(float64(a)).
+		Mul(decimal.NewFromInt(constants.OneBtc)).IntPart())
 }
 
-func AmountToSat(amount float64) int64 {
+func (s *Sat) NineBall() bool {
+	return uint64(*s) >= 50*constants.OneBtc*9 && uint64(*s) < 50*constants.OneBtc*10
+}
+
+func (s *Sat) Coin() bool {
+	return uint64(*s)%constants.OneBtc == 0
+}
+
+func AmountToSat(amount float64) Sat {
 	return Amount(amount).Sat()
 }
 
@@ -111,7 +119,8 @@ func InscriptionIdToOutpoint(s string) *OutPoint {
 
 func LoadHeader(v []byte) (*wire.BlockHeader, error) {
 	h := &wire.BlockHeader{}
-	if err := h.Deserialize(bytes.NewReader(v)); err != nil {
+	buf := bytes.NewBuffer(v)
+	if err := h.Deserialize(buf); err != nil {
 		return nil, err
 	}
 	return h, nil

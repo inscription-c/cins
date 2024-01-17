@@ -7,17 +7,15 @@ import (
 	"github.com/nutsdb/nutsdb"
 )
 
-func (idx *Indexer) GetStatisticCount(key constants.Statistic) (count int64, err error) {
-	err = idx.Begin(func(tx *Tx) error {
-		v, err := tx.Get(constants.BucketStatisticToCount, []byte(key))
-		if err != nil && !errors.Is(err, nutsdb.ErrKeyNotFound) {
-			return err
-		}
-		if err != nil {
-			return nil
-		}
-		count = gconv.Int64(string(v))
-		return nil
-	})
+func (idx *Indexer) GetStatisticCount(tx *Tx, key constants.Statistic) (count uint64, err error) {
+	v, err := tx.Get(constants.BucketStatisticToCount, []byte(key))
+	if err != nil && !errors.Is(err, nutsdb.ErrKeyNotFound) {
+		return 0, err
+	}
+	if err != nil {
+		err = nil
+		return
+	}
+	count = gconv.Uint64(string(v))
 	return
 }
