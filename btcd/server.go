@@ -7,7 +7,7 @@ import (
 	"encoding/binary"
 	"errors"
 	"fmt"
-	"github.com/dotbitHQ/insc/internal/signal"
+	"github.com/inscription-c/insc/internal/signal"
 	"math"
 	"net"
 	"runtime"

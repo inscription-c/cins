@@ -4,8 +4,8 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"github.com/dotbitHQ/insc/constants"
-	"github.com/dotbitHQ/insc/inscription/index"
+	"github.com/inscription-c/insc/constants"
+	"github.com/inscription-c/insc/inscription/index"
 	"github.com/shopspring/decimal"
 	"regexp"
 )

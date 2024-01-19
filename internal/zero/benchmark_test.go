@@ -3,7 +3,7 @@ package zero_test
 import (
 	"testing"
 
-	. "github.com/dotbitHQ/insc/internal/zero"
+	. "github.com/inscription-c/insc/internal/zero"
 )
 
 var (

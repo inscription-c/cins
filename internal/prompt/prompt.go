@@ -8,7 +8,7 @@ import (
 	"bytes"
 	"encoding/hex"
 	"fmt"
-	"github.com/dotbitHQ/insc/internal/legacy/keystore"
+	"github.com/inscription-c/insc/internal/legacy/keystore"
 	"os"
 	"strings"
 

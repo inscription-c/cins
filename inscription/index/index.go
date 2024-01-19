@@ -4,24 +4,22 @@ import (
 	"bytes"
 	"errors"
 	"fmt"
-	"github.com/btcsuite/btcd/btcjson"
 	"github.com/btcsuite/btcd/btcutil"
 	"github.com/btcsuite/btcd/rpcclient"
 	"github.com/btcsuite/btcd/wire"
-	"github.com/dotbitHQ/insc/constants"
-	"github.com/dotbitHQ/insc/inscription/log"
-	"github.com/dotbitHQ/insc/internal/signal"
-	"github.com/dotbitHQ/insc/wallet"
 	"github.com/gogf/gf/v2/util/gconv"
-	"github.com/nutsdb/nutsdb"
-	"math"
+	"github.com/inscription-c/insc/constants"
+	"github.com/inscription-c/insc/inscription/index/dao"
+	"github.com/inscription-c/insc/inscription/index/tables"
+	"github.com/inscription-c/insc/inscription/log"
+	"golang.org/x/sync/errgroup"
+	"gorm.io/gorm"
 	"time"
 )
 
 type Options struct {
-	db       *nutsdb.DB
-	cli      *rpcclient.Client
-	batchCli *rpcclient.Client
+	db  *dao.DB
+	cli *rpcclient.Client
 
 	indexSats           bool
 	indexTransaction    bool
@@ -31,7 +29,7 @@ type Options struct {
 
 type Option func(*Options)
 
-func WithDB(db *nutsdb.DB) func(*Options) {
+func WithDB(db *dao.DB) func(*Options) {
 	return func(options *Options) {
 		options.db = db
 	}
@@ -40,12 +38,6 @@ func WithDB(db *nutsdb.DB) func(*Options) {
 func WithClient(cli *rpcclient.Client) func(*Options) {
 	return func(options *Options) {
 		options.cli = cli
-	}
-}
-
-func WithBatchClient(cli *rpcclient.Client) func(*Options) {
-	return func(options *Options) {
-		options.batchCli = cli
 	}
 }
 
@@ -76,70 +68,30 @@ func NewIndexer(opts ...Option) *Indexer {
 	return idx
 }
 
-func (idx *Indexer) Tx(fn func(tx *Tx) error, writable ...bool) error {
-	w := false
-	if len(writable) > 0 && writable[0] {
-		w = true
-	}
-	innerTx, err := idx.opts.db.Begin(w)
-	if err != nil {
-		return err
-	}
-	tx := &Tx{innerTx}
-	if err := fn(tx); err != nil {
-		_ = tx.Rollback()
-		return err
-	}
-	return tx.Commit()
-}
-
-func (idx *Indexer) Begin(writable ...bool) (*Tx, error) {
-	w := false
-	if len(writable) > 0 {
-		w = writable[0]
-	}
-	innerTx, err := idx.opts.db.Begin(w)
-	if err != nil {
-		return nil, err
-	}
-	return &Tx{innerTx}, nil
-}
-
 func (idx *Indexer) UpdateIndex() error {
-	if err := idx.Tx(func(tx *Tx) error {
-		var err error
-		idx.height, err = idx.BlockCount(tx)
+	var err error
+	wtx := idx.opts.db.Begin()
+	defer func() {
 		if err != nil {
-			return err
+			wtx.Rollback()
 		}
-		return nil
-	}); err != nil {
-		return err
-	}
+	}()
 
-	wtx, err := idx.Begin(true)
-	if err != nil {
-		return err
-	}
-
+	// latest block height
 	startingHeight, err := idx.opts.cli.GetBlockCount()
 	if err != nil {
 		return err
 	}
-	startingHeight += 1
-
-	if err = wtx.Tx.Put(constants.BucketWriteTransactionStartingBlockCountToTimestamp,
-		[]byte(fmt.Sprint(idx.height)),
-		[]byte(fmt.Sprint(time.Now().UnixMilli())), 0); err != nil {
-		return err
-	}
 
 	uncommitted := uint64(0)
-	blockCh := idx.fetchBlockFrom(idx.height)
 	outpointCh, valueCh := idx.spawnFetcher()
 	valueCache := make(map[string]uint64)
 
-	for block := range blockCh {
+	blocks, err := idx.fetchBlockFrom(idx.height, uint64(startingHeight))
+	if err != nil {
+		return err
+	}
+	for _, block := range blocks {
 		if err = idx.indexBlock(wtx, outpointCh, valueCh, block, valueCache); err != nil {
 			return err
 		}
@@ -258,52 +210,33 @@ func (idx *Indexer) spawnFetcher() (outpointCh chan *wire.OutPoint, valueCh chan
 	return
 }
 
-func (idx *Indexer) getTransactions(txids []string) (resp []*btcutil.Tx, err error) {
-	if len(txids) == 0 {
-		return
+func (idx *Indexer) fetchBlockFrom(start, end uint64) ([]*wire.MsgBlock, error) {
+	if start > end {
+		return nil, nil
 	}
-	retries := 0
-	for {
-		if retries > 0 {
-			time.Sleep(100 * time.Millisecond * time.Duration(math.Pow(float64(2), float64(retries))))
-		}
-		var rawTxGetResp wallet.FutureBatchGetRawTransactionResult
-		for _, v := range txids {
-			cmd := btcjson.NewGetRawTransactionCmd(v, btcjson.Int(0))
-			rawTxGetResp = idx.opts.batchCli.SendCmd(cmd)
-		}
-		if err = idx.opts.batchCli.Send(); err != nil {
-			retries++
-			if retries >= 5 {
-				err = fmt.Errorf("failed to fetch raw transactions after 5 retries: %s", err)
-				return
-			}
-			continue
-		}
-		return rawTxGetResp.Receive()
-	}
-}
 
-func (idx *Indexer) fetchBlockFrom(height uint64) chan *wire.MsgBlock {
-	ch := make(chan *wire.MsgBlock, 32)
-	go func() {
-		for {
-			select {
-			case <-signal.InterruptHandlersDone:
-				close(ch)
-				return
-			default:
-				block, err := idx.getBlockWithRetries(height)
-				if err != nil {
-					log.Srv.Error(err)
-					break
-				}
-				ch <- block
-				height++
+	maxFetch := uint64(32)
+	if end-start+1 < maxFetch {
+		maxFetch = end - start + 1
+	}
+
+	errWg := errgroup.Group{}
+	blocks := make([]*wire.MsgBlock, maxFetch)
+	for i := start; i < start+maxFetch; i++ {
+		height := i
+		errWg.Go(func() error {
+			block, err := idx.getBlockWithRetries(height)
+			if err != nil {
+				return err
 			}
-		}
-	}()
-	return ch
+			blocks[height-start] = block
+			return nil
+		})
+	}
+	if err := errWg.Wait(); err != nil {
+		return nil, err
+	}
+	return blocks, nil
 }
 
 func (idx *Indexer) getBlockWithRetries(height uint64) (*wire.MsgBlock, error) {
@@ -333,12 +266,11 @@ func (idx *Indexer) getBlockWithRetries(height uint64) (*wire.MsgBlock, error) {
 }
 
 func (idx *Indexer) indexBlock(
-	wtx *Tx,
-	outpointCh chan *wire.OutPoint,
-	valueCh chan uint64,
+	wtx *dao.DB,
 	block *wire.MsgBlock,
 	valueCache map[string]uint64) error {
-	if err := detectReorg(wtx, idx, block, idx.height); err != nil {
+
+	if err := detectReorg(wtx, block, idx.height); err != nil {
 		return err
 	}
 
@@ -354,6 +286,7 @@ func (idx *Indexer) indexBlock(
 			txids[tx.TxHash().String()] = struct{}{}
 		}
 		// index inscriptions
+		errWg := &errgroup.Group{}
 		for _, tx := range block.Transactions {
 			for _, input := range tx.TxIn {
 				preOutput := input.PreviousOutPoint
@@ -372,44 +305,41 @@ func (idx *Indexer) indexBlock(
 				}
 				// We don't need input values we already have in our outpoint_to_value table from earlier blocks that
 				// were committed to db already
-				if _, err := wtx.GetValueByOutpoint(preOutput.String()); err != nil && !errors.Is(err, nutsdb.ErrKeyNotFound) {
+				if _, err := wtx.GetValueByOutpoint(preOutput.String()); err != nil && !errors.Is(err, gorm.ErrRecordNotFound) {
 					return err
 				} else if err == nil {
 					continue
 				}
-				// We don't know the value of this tx input. Send this outpoint to background thread to be fetched
-				outpointCh <- &preOutput
+				errWg.Go(func() error {
+					tx, err := idx.opts.cli.GetRawTransaction(&preOutput.Hash)
+					if err != nil {
+						return err
+					}
+					valueCache[preOutput.String()] = uint64(tx.MsgTx().TxOut[preOutput.Index].Value)
+					return nil
+				})
 			}
+		}
+		if err := errWg.Wait(); err != nil {
+			return err
 		}
 	}
 
-	cursedInscriptionCount, err := idx.GetStatisticCount(wtx, constants.StatisticCursedInscriptions)
+	unboundInscriptions, err := wtx.GetStatisticCountByName(tables.StatisticUnboundInscriptions)
 	if err != nil {
 		return err
 	}
-	blessedInscriptionCount, err := idx.GetStatisticCount(wtx, constants.StatisticBlessedInscriptions)
+	nextSequenceNumber, err := wtx.NextSequenceNumber()
 	if err != nil {
 		return err
 	}
-	unboundInscriptions, err := idx.GetStatisticCount(wtx, constants.StatisticUnboundInscriptions)
-	if err != nil {
-		return err
-	}
-	nextSequenceNumber, err := idx.NextSequenceNumber(wtx)
-	if err != nil {
-		return err
-	}
-
 	inscriptionUpdater := &InscriptionUpdater{
-		wtx:                     wtx,
-		height:                  idx.height,
-		valueCache:              valueCache,
-		valueCh:                 valueCh,
-		blessedInscriptionCount: &blessedInscriptionCount,
-		cursedInscriptionCount:  &cursedInscriptionCount,
-		nextSequenceNumber:      &nextSequenceNumber,
-		timestamp:               block.Header.Timestamp.UnixMilli(),
-		unboundInscriptions:     &unboundInscriptions,
+		wtx:                 wtx,
+		height:              idx.height,
+		valueCache:          valueCache,
+		nextSequenceNumber:  &nextSequenceNumber,
+		unboundInscriptions: &unboundInscriptions,
+		timestamp:           block.Header.Timestamp.UnixMilli(),
 	}
 
 	if idx.opts.indexSats {

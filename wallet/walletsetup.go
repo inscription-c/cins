@@ -3,8 +3,8 @@ package wallet
 import (
 	"fmt"
 	"github.com/btcsuite/btcd/btcutil/hdkeychain"
-	"github.com/dotbitHQ/insc/config"
-	"github.com/dotbitHQ/insc/internal/legacy/keystore"
+	"github.com/inscription-c/insc/config"
+	"github.com/inscription-c/insc/internal/legacy/keystore"
 	"os"
 	"path/filepath"
 	"time"

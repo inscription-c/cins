@@ -3,9 +3,9 @@ package wallet
 import (
 	"errors"
 	"fmt"
-	"github.com/dotbitHQ/insc/btcd"
-	"github.com/dotbitHQ/insc/config"
-	"github.com/dotbitHQ/insc/internal/signal"
+	"github.com/inscription-c/insc/btcd"
+	"github.com/inscription-c/insc/config"
+	"github.com/inscription-c/insc/internal/signal"
 	"github.com/spf13/cobra"
 	"net"
 	"net/http"

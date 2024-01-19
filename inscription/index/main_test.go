@@ -3,9 +3,10 @@ package index
 import (
 	"github.com/btcsuite/btcd/btcutil"
 	"github.com/btcsuite/btcd/rpcclient"
-	"github.com/dotbitHQ/insc/constants"
-	"github.com/dotbitHQ/insc/inscription/log"
-	"github.com/dotbitHQ/insc/wallet"
+	"github.com/inscription-c/insc/constants"
+	"github.com/inscription-c/insc/inscription/index/dao"
+	"github.com/inscription-c/insc/inscription/log"
+	"github.com/inscription-c/insc/wallet"
 	"path/filepath"
 	"testing"
 )
@@ -37,7 +38,7 @@ func TestMain(t *testing.M) {
 		panic(err)
 	}
 
-	db, err := DB(dbPath)
+	db, err := dao.DB(dbPath)
 	if err != nil {
 		panic(err)
 	}

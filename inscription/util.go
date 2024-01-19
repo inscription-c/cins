@@ -3,7 +3,7 @@ package inscription
 import (
 	"errors"
 	"fmt"
-	"github.com/dotbitHQ/insc/constants"
+	"github.com/inscription-c/insc/constants"
 	"github.com/nareix/joy4/av"
 	"github.com/nareix/joy4/av/avutil"
 	"path/filepath"

@@ -1,14 +1,13 @@
 package index
 
 import (
-	"errors"
 	"fmt"
 	"github.com/btcsuite/btcd/btcjson"
 	"github.com/btcsuite/btcd/wire"
-	"github.com/dotbitHQ/insc/constants"
 	"github.com/gogf/gf/v2/util/gconv"
-	"github.com/golang/protobuf/proto"
-	"github.com/nutsdb/nutsdb"
+	"github.com/inscription-c/insc/constants"
+	"github.com/inscription-c/insc/inscription/index/dao"
+	"google.golang.org/protobuf/proto"
 	"sort"
 )
 
@@ -41,7 +40,7 @@ type OriginNew struct {
 	Cursed        bool
 	Fee           uint64
 	Hidden        bool
-	Pointer       []byte
+	Pointer       uint64
 	ReInscription bool
 	Unbound       bool
 }
@@ -51,18 +50,16 @@ type OriginOld struct {
 }
 
 type InscriptionUpdater struct {
-	wtx                     *Tx
-	flotsam                 []*Flotsam
-	height                  uint64
-	lostSats                uint64
-	reward                  uint64
-	blessedInscriptionCount *uint64
-	cursedInscriptionCount  *uint64
-	nextSequenceNumber      *int64
-	unboundInscriptions     *uint64
-	valueCache              map[string]uint64
-	valueCh                 chan uint64
-	timestamp               int64
+	wtx                 *dao.DB
+	flotsam             []*Flotsam
+	height              uint64
+	lostSats            uint64
+	reward              uint64
+	nextSequenceNumber  *uint64
+	unboundInscriptions *uint64
+	valueCache          map[string]uint64
+	valueCh             chan uint64
+	timestamp           int64
 }
 
 type inscribedOffsetEntity struct {
@@ -130,27 +127,6 @@ func (u *InscriptionUpdater) indexEnvelopers(
 		currentInputValue, ok := u.valueCache[txIn.PreviousOutPoint.String()]
 		if ok {
 			delete(u.valueCache, txIn.PreviousOutPoint.String())
-		} else {
-			v, err := u.wtx.Get(constants.BucketOutpointToValue, []byte(txIn.PreviousOutPoint.String()))
-			if err != nil && !errors.Is(err, nutsdb.ErrKeyNotFound) {
-				return err
-			}
-			if err != nil {
-				err = fmt.Errorf("failed to get transaction for %s", txIn.PreviousOutPoint.String())
-				select {
-				case currentInputValue, ok = <-u.valueCh:
-					if !ok {
-						return err
-					}
-				default:
-					return err
-				}
-			} else {
-				if err := u.wtx.Delete(constants.BucketOutpointToValue, []byte(txIn.PreviousOutPoint.String())); err != nil {
-					return err
-				}
-				currentInputValue = gconv.Uint64(string(v))
-			}
 		}
 		totalInputValue += currentInputValue
 
@@ -158,67 +134,20 @@ func (u *InscriptionUpdater) indexEnvelopers(
 			if inscription.input != inputIndex {
 				break
 			}
-			inscriptionId := InscriptionId{OutPoint{OutPoint: btcjson.OutPoint{
-				Hash:  tx.TxHash().String(),
-				Index: uint32(idCounter),
-			}}}
-
-			// TODO chain jubilee_height check
-			var curse Curse
-			if inscription.payload.UnRecognizedEvenField {
-				curse = CurseUnrecognizedEvenField
-			} else if inscription.payload.DuplicateField {
-				curse = CurseDuplicateField
-			} else if inscription.payload.IncompleteField {
-				curse = CurseIncompleteField
-			} else if inscription.input != 0 {
-				curse = CurseNotInFirstInput
-			} else if inscription.offset != 0 {
-				curse = CurseNotAtOffsetZero
-			} else if len(inscription.payload.Pointer) > 0 {
-				curse = CursePointer
-			} else if inscription.pushNum {
-				curse = CursePushNum
-			} else if inscription.stutter {
-				curse = CurseStutter
-			} else {
-				inscribedEntity, ok := inscribedOffsets[offset]
-				if ok {
-					if inscribedEntity.count > 1 {
-						curse = CurseReInscription
-					} else {
-						initialInscriptionSequenceNumber, err := u.wtx.Get(constants.BucketInscriptionIdToSequenceNumber, []byte(inscribedEntity.inscriptionId.String()))
-						if err != nil && !errors.Is(err, nutsdb.ErrKeyNotFound) {
-							return err
-						}
-						initialInscriptionIsCursed := false
-						inscriptionEntryData, err := u.wtx.Get(constants.BucketSequenceNumberToInscriptionEntry, initialInscriptionSequenceNumber)
-						if err != nil && !errors.Is(err, nutsdb.ErrKeyNotFound) {
-							return err
-						}
-						if err == nil {
-							inscriptionEntry := &InscriptionEntry{}
-							if err := proto.Unmarshal(inscriptionEntryData, inscriptionEntry); err != nil {
-								return err
-							}
-							initialInscriptionIsCursed = inscriptionEntry.InscriptionNumber < 0
-						}
-						if !initialInscriptionIsCursed {
-							curse = CurseReInscription
-						}
-					}
-				}
+			inscriptionId := InscriptionId{
+				OutPoint{
+					OutPoint: btcjson.OutPoint{
+						Hash:  tx.TxHash().String(),
+						Index: uint32(idCounter),
+					},
+				},
 			}
 
-			unbound := currentInputValue == 0 ||
-				curse == CurseUnrecognizedEvenField ||
-				inscription.payload.UnRecognizedEvenField
-
-			if len(inscription.payload.Pointer) > 0 &&
-				gconv.Uint64(string(inscription.payload.Pointer)) < totalOutputValue {
-				offset = gconv.Uint64(string(inscription.payload.Pointer))
+			unbound := currentInputValue == 0 || inscription.payload.UnRecognizedEvenField
+			pointer := inscription.payload.Pointer
+			if pointer > 0 && pointer < totalOutputValue {
+				offset = inscription.payload.Pointer
 			}
-
 			_, reInscription := inscribedOffsets[offset]
 
 			floatingInscriptions = append(floatingInscriptions, &Flotsam{
@@ -226,7 +155,6 @@ func (u *InscriptionUpdater) indexEnvelopers(
 				Offset:        offset,
 				Origin: Origin{
 					New: &OriginNew{
-						Cursed:        curse > 0,
 						Fee:           0,
 						Hidden:        false,
 						Pointer:       inscription.payload.Pointer,
@@ -260,9 +188,10 @@ func (u *InscriptionUpdater) indexEnvelopers(
 		return floatingInscriptions[i].Offset < floatingInscriptions[j].Offset
 	})
 
-	rangeToVoutMap := make(map[SatRange]int)
 	outputValue := uint64(0)
+	rangeToVoutMap := make(map[SatRange]int)
 	newLocations := make([]*locationsInscription, 0)
+
 	for vout, txOut := range tx.TxOut {
 		end := outputValue + uint64(txOut.Value)
 		for _, flotsam := range floatingInscriptions {
@@ -294,20 +223,19 @@ func (u *InscriptionUpdater) indexEnvelopers(
 	}
 
 	for _, flotsam := range newLocations {
-		if len(flotsam.flotsam.Origin.New.Pointer) > 0 {
-			pointer := gconv.Uint64(string(flotsam.flotsam.Origin.New.Pointer))
-			if pointer < outputValue {
-				for rangeEntity, vout := range rangeToVoutMap {
-					if pointer >= rangeEntity.start && pointer < rangeEntity.end {
-						flotsam.flotsam.Offset = pointer
-						flotsam.satpoint = &SatPoint{
-							Outpoint: &wire.OutPoint{
-								Hash:  tx.TxHash(),
-								Index: uint32(vout),
-							},
-							Offset: pointer - rangeEntity.start,
-						}
-					}
+		pointer := flotsam.flotsam.Origin.New.Pointer
+		if pointer > 0 && pointer < outputValue {
+			for rangeEntity, vout := range rangeToVoutMap {
+				if pointer < rangeEntity.start || pointer >= rangeEntity.end {
+					continue
+				}
+				flotsam.flotsam.Offset = pointer
+				flotsam.satpoint = &SatPoint{
+					Outpoint: &wire.OutPoint{
+						Hash:  tx.TxHash(),
+						Index: uint32(vout),
+					},
+					Offset: pointer - rangeEntity.start,
 				}
 			}
 		}
@@ -392,7 +320,7 @@ func (u *InscriptionUpdater) updateInscriptionLocation(
 ) error {
 	inscriptionid := flotsam.InscriptionId
 	var unbound bool
-	var sequenceNumber int64
+	var sequenceNumber uint64
 	if flotsam.Origin.Old != nil {
 		if err := u.wtx.Delete(constants.BucketSatpointToSequenceNumber, []byte(flotsam.Origin.Old.OldSatPoint.String())); err != nil {
 			return err
@@ -402,7 +330,9 @@ func (u *InscriptionUpdater) updateInscriptionLocation(
 			return err
 		}
 		sequenceNumber = gconv.Int64(string(v))
-	} else if flotsam.Origin.New != nil {
+	}
+
+	if flotsam.Origin.New != nil {
 		unbound = flotsam.Origin.New.Unbound
 		inscriptionNumber := int64(0)
 		if flotsam.Origin.New.Cursed {

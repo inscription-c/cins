@@ -2,8 +2,8 @@ package index
 
 import (
 	"errors"
-	"github.com/dotbitHQ/insc/constants"
 	"github.com/gogf/gf/v2/util/gconv"
+	"github.com/inscription-c/insc/constants"
 	"github.com/nutsdb/nutsdb"
 )
 

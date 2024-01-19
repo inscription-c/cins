@@ -6,7 +6,7 @@ import (
 	"strings"
 	"testing"
 
-	. "github.com/dotbitHQ/insc/internal/zero"
+	. "github.com/inscription-c/insc/internal/zero"
 )
 
 func makeOneBytes(n int) []byte {

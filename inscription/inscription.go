@@ -18,11 +18,11 @@ import (
 	"github.com/btcsuite/btcd/wire"
 	"github.com/btcsuite/btcwallet/waddrmgr"
 	secp "github.com/decred/dcrd/dcrec/secp256k1/v4"
-	"github.com/dotbitHQ/insc/config"
-	"github.com/dotbitHQ/insc/constants"
-	"github.com/dotbitHQ/insc/inscription/index"
-	"github.com/dotbitHQ/insc/inscription/log"
 	"github.com/go-playground/validator/v10"
+	"github.com/inscription-c/insc/config"
+	"github.com/inscription-c/insc/constants"
+	"github.com/inscription-c/insc/inscription/index"
+	"github.com/inscription-c/insc/inscription/log"
 	"github.com/shopspring/decimal"
 	"github.com/ugorji/go/codec"
 	"io"
@@ -650,7 +650,7 @@ func (i *Inscription) SignCommitTx() error {
 		wif := priKeyMap[outpoint.String()]
 
 		// It converts the address of the UTXO to a script.
-		pkScript, err := addressToScript(utxo.Address)
+		pkScript, err := addressScript(utxo.Address)
 		if err != nil {
 			return err
 		}
@@ -883,21 +883,6 @@ func calculateTxFee(tx *wire.MsgTx, feeRate int64) int64 {
 		fee = constants.DustLimit
 	}
 	return fee
-}
-
-// addressToScript is a function that converts a given address to a script.
-// It first decodes the address, then generates a pay-to-address script from the decoded address.
-// It returns the generated script and any error that occurred during the process.
-func addressToScript(addr string) (pkScript []byte, err error) {
-	scriptAddr, err := btcutil.DecodeAddress(addr, getNetParams())
-	if err != nil {
-		return nil, err
-	}
-	pkScript, err = txscript.PayToAddrScript(scriptAddr)
-	if err != nil {
-		return nil, err
-	}
-	return
 }
 
 // addressScript is a function that converts a given address to a script.

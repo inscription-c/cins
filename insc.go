@@ -1,9 +1,9 @@
 package main
 
 import (
-	"github.com/dotbitHQ/insc/btcd"
-	"github.com/dotbitHQ/insc/inscription"
-	"github.com/dotbitHQ/insc/wallet"
+	"github.com/inscription-c/insc/btcd"
+	"github.com/inscription-c/insc/inscription"
+	"github.com/inscription-c/insc/wallet"
 	"github.com/spf13/cobra"
 	"os"
 )

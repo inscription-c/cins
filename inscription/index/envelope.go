@@ -4,8 +4,8 @@ import (
 	"bytes"
 	"github.com/btcsuite/btcd/txscript"
 	"github.com/btcsuite/btcd/wire"
-	"github.com/dotbitHQ/insc/constants"
 	"github.com/gogf/gf/v2/util/gconv"
+	"github.com/inscription-c/insc/constants"
 )
 
 type Instruction struct {

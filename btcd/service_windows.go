@@ -2,7 +2,7 @@ package btcd
 
 import (
 	"fmt"
-	"github.com/dotbitHQ/insc/internal/signal"
+	"github.com/inscription-c/insc/internal/signal"
 	"os"
 	"path/filepath"
 	"time"

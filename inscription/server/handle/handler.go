@@ -5,21 +5,20 @@ import (
 	"errors"
 	"fmt"
 	"github.com/btcsuite/btcd/rpcclient"
-	"github.com/dotbitHQ/insc/inscription/log"
-	"github.com/dotbitHQ/insc/internal/signal"
 	"github.com/gin-gonic/gin"
-	"github.com/nutsdb/nutsdb"
+	"github.com/inscription-c/insc/inscription/index/dao"
+	"github.com/inscription-c/insc/inscription/log"
+	"github.com/inscription-c/insc/internal/signal"
 	"net/http"
 	"os"
 )
 
 type Options struct {
-	addr     string
-	testnet  bool
-	engin    *gin.Engine
-	db       *nutsdb.DB
-	cli      *rpcclient.Client
-	batchCli *rpcclient.Client
+	addr    string
+	testnet bool
+	engin   *gin.Engine
+	db      *dao.DB
+	cli     *rpcclient.Client
 }
 
 type Option func(*Options)
@@ -36,7 +35,7 @@ func WithEngin(g *gin.Engine) func(*Options) {
 	}
 }
 
-func WithDB(db *nutsdb.DB) func(*Options) {
+func WithDB(db *dao.DB) func(*Options) {
 	return func(options *Options) {
 		options.db = db
 	}
@@ -50,12 +49,6 @@ func WithTestNet(testnet bool) func(*Options) {
 func WithClient(cli *rpcclient.Client) func(*Options) {
 	return func(options *Options) {
 		options.cli = cli
-	}
-}
-
-func WithBatchClient(cli *rpcclient.Client) func(*Options) {
-	return func(options *Options) {
-		options.batchCli = cli
 	}
 }
 

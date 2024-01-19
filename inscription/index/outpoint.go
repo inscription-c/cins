@@ -1,8 +1,8 @@
 package index
 
 import (
-	"github.com/dotbitHQ/insc/constants"
 	"github.com/gogf/gf/v2/util/gconv"
+	"github.com/inscription-c/insc/constants"
 )
 
 func (tx *Tx) GetValueByOutpoint(outpoint string) (value int64, err error) {

@@ -10,7 +10,7 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
-	"github.com/dotbitHQ/insc/internal/legacy/rename"
+	"github.com/inscription-c/insc/internal/legacy/rename"
 	"io"
 	"math/big"
 	"os"

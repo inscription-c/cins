@@ -42,14 +42,16 @@ var (
 	// is written to by the Write method of the logWriter type.
 	logRotatorPipe *io.PipeWriter
 
-	Log = backendLog.Logger("INSC")
-	Srv = backendLog.Logger("INSCSRV")
+	Log  = backendLog.Logger("INSC")
+	Srv  = backendLog.Logger("ISRV")
+	Gorm = backendLog.Logger("GORM")
 )
 
 // subsystemLoggers maps each subsystem identifier to its associated logger.
 var subsystemLoggers = map[string]btclog.Logger{
-	"INSC":    Log,
-	"INSCSRV": Srv,
+	"INSC": Log,
+	"ISRV": Srv,
+	"GORM": Gorm,
 }
 
 // InitLogRotator initializes the logging rotater to write logs to logFile and

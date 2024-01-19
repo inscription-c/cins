@@ -3,9 +3,9 @@ package inscription
 import (
 	"fmt"
 	"github.com/btcsuite/btcd/btcutil"
-	"github.com/dotbitHQ/insc/config"
-	"github.com/dotbitHQ/insc/constants"
-	"github.com/dotbitHQ/insc/inscription/log"
+	"github.com/inscription-c/insc/config"
+	"github.com/inscription-c/insc/constants"
+	"github.com/inscription-c/insc/inscription/log"
 	"os"
 	"path/filepath"
 )
@@ -20,7 +20,6 @@ func init() {
 	Cmd.Flags().StringVarP(&config.FilePath, "filepath", "f", "", "inscription file path")
 	Cmd.Flags().StringVarP(&config.RpcConnect, "rpcconnect", "s", "localhost:8332", "the URL of wallet RPC server to connect to (default localhost:8332, testnet: localhost:18332)")
 	Cmd.Flags().Uint64VarP(&config.Postage, "postage", "p", constants.DefaultPostage, "Amount of postage to include in the inscription. Default `10000sat`.")
-	Cmd.Flags().StringVarP(&config.IndexDir, "indexdir", "d", config.IndexDir, fmt.Sprintf("inscriptions index database dir. Default `%s`", config.IndexDir))
 	Cmd.Flags().BoolVarP(&config.Compress, "compress", "", false, "Compress inscription content with brotli.")
 	Cmd.Flags().StringVarP(&config.CborMetadata, "cbormetadata", "", "", "Include CBOR in file at <METADATA> as inscription metadata")
 	Cmd.Flags().StringVarP(&config.JsonMetadata, "jsonmetadata", "", "", "Include JSON in file at <METADATA> converted to CBOR as inscription metadata")

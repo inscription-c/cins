@@ -1,12 +1,11 @@
 package index
 
 import (
-	"bytes"
 	"fmt"
 	"github.com/btcsuite/btcd/btcjson"
 	"github.com/btcsuite/btcd/wire"
-	"github.com/dotbitHQ/insc/constants"
 	"github.com/gogf/gf/v2/util/gconv"
+	"github.com/inscription-c/insc/constants"
 	"github.com/shopspring/decimal"
 	"strings"
 )
@@ -18,7 +17,7 @@ type Inscription struct {
 	DstChain        []byte
 	Metadata        []byte
 	Parent          []byte
-	Pointer         []byte
+	Pointer         uint64
 
 	DuplicateField        bool
 	IncompleteField       bool
@@ -115,13 +114,4 @@ func InscriptionIdToOutpoint(s string) *OutPoint {
 			Index: gconv.Uint32(insId[1]),
 		},
 	}
-}
-
-func LoadHeader(v []byte) (*wire.BlockHeader, error) {
-	h := &wire.BlockHeader{}
-	buf := bytes.NewBuffer(v)
-	if err := h.Deserialize(buf); err != nil {
-		return nil, err
-	}
-	return h, nil
 }

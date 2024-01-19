@@ -1,7 +1,7 @@
 package index
 
 import (
-	"github.com/dotbitHQ/insc/constants"
+	"github.com/inscription-c/insc/constants"
 	"github.com/nutsdb/nutsdb"
 )
 

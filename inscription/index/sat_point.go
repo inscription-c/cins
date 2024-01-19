@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"github.com/btcsuite/btcd/chaincfg/chainhash"
 	"github.com/btcsuite/btcd/wire"
-	"github.com/dotbitHQ/insc/constants"
+	"github.com/inscription-c/insc/constants"
 	"strconv"
 	"strings"
 )

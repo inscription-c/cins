@@ -3,13 +3,14 @@ package inscription
 import (
 	"errors"
 	"fmt"
-	"github.com/dotbitHQ/insc/config"
-	"github.com/dotbitHQ/insc/constants"
-	"github.com/dotbitHQ/insc/inscription/index"
-	"github.com/dotbitHQ/insc/inscription/log"
-	"github.com/dotbitHQ/insc/inscription/server"
-	"github.com/dotbitHQ/insc/internal/signal"
-	"github.com/dotbitHQ/insc/wallet"
+	"github.com/inscription-c/insc/config"
+	"github.com/inscription-c/insc/constants"
+	"github.com/inscription-c/insc/inscription/index"
+	"github.com/inscription-c/insc/inscription/index/dao"
+	"github.com/inscription-c/insc/inscription/log"
+	"github.com/inscription-c/insc/inscription/server"
+	"github.com/inscription-c/insc/internal/signal"
+	"github.com/inscription-c/insc/wallet"
 	"github.com/spf13/cobra"
 	"os"
 )
@@ -46,7 +47,7 @@ func inscribe() error {
 	}
 
 	// Get the database
-	db, err := index.DB(config.IndexDir)
+	db, err := dao.DB(config.IndexDir)
 	if err != nil {
 		return err
 	}

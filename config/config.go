@@ -1,11 +1,5 @@
 package config
 
-import (
-	"github.com/btcsuite/btcd/btcutil"
-	"github.com/dotbitHQ/insc/constants"
-	"path/filepath"
-)
-
 var (
 	// Username rpc server user name
 	Username string
@@ -25,8 +19,6 @@ var (
 	FilePath string
 	// Postage inscribe postage default is 10000sat
 	Postage uint64
-	// IndexDir inscriptions index database dir
-	IndexDir string
 	// Compress compress inscription
 	Compress bool
 	// CborMetadata cbor metadata file path
@@ -43,9 +35,20 @@ var (
 	Destination string
 	// Rpclisten rpc server listen address
 	Rpclisten string
+	// MysqlAddr inscription index database addr
+	MysqlAddr string
+	// MysqlUser inscription index database user
+	MysqlUser string
+	// MysqlPassword inscription index database password
+	MysqlPassword string
+	// MysqlDBName inscription index database name
+	MysqlDBName string
+	// NoEmbedDB no embed db
+	NoEmbedDB bool
+	// DataDir data dir
+	DataDir string
+	// DBListenPort db listen port
+	DBListenPort string
+	// DBStatusListenPort db status listen port
+	DBStatusListenPort string
 )
-
-func init() {
-	Postage = constants.DefaultPostage
-	IndexDir = btcutil.AppDataDir(filepath.Join(constants.AppName, "inscription", "index"), false)
-}

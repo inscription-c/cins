@@ -2,16 +2,15 @@ package server
 
 import (
 	"github.com/btcsuite/btcd/rpcclient"
-	"github.com/dotbitHQ/insc/inscription/index"
-	"github.com/dotbitHQ/insc/inscription/log"
+	"github.com/inscription-c/insc/inscription/index"
+	"github.com/inscription-c/insc/inscription/log"
 	"time"
 )
 
 type Options struct {
-	rescan   bool
-	idx      *index.Indexer
-	cli      *rpcclient.Client
-	batchCli *rpcclient.Client
+	rescan bool
+	idx    *index.Indexer
+	cli    *rpcclient.Client
 }
 
 type Option func(*Options)
@@ -24,12 +23,6 @@ type Runner struct {
 func WithClient(cli *rpcclient.Client) func(*Options) {
 	return func(options *Options) {
 		options.cli = cli
-	}
-}
-
-func WithBatchIndex(cli *rpcclient.Client) func(*Options) {
-	return func(options *Options) {
-		options.batchCli = cli
 	}
 }
 

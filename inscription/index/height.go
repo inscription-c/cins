@@ -1,6 +1,6 @@
 package index
 
-import "github.com/dotbitHQ/insc/constants"
+import "github.com/inscription-c/insc/constants"
 
 type Height struct {
 	Height uint64
