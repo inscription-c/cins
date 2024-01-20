@@ -3,6 +3,7 @@ package signal
 import (
 	"os"
 	"os/signal"
+	"syscall"
 )
 
 // interruptChannel is used to receive SIGINT (Ctrl+C) signals.
@@ -20,7 +21,7 @@ var SimulateInterruptChannel = make(chan struct{}, 1)
 
 // signals defines the signals that are handled to do a clean shutdown.
 // Conditional compilation is used to also include SIGTERM and KILL on Unix.
-var signals = []os.Signal{os.Interrupt, os.Kill}
+var signals = []os.Signal{os.Interrupt, os.Kill, syscall.SIGTERM, syscall.SIGHUP}
 
 // SimulateInterrupt requests invoking the clean termination process by an
 // internal component instead of a SIGINT.

@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"github.com/btcsuite/btclog"
 	"github.com/inscription-c/insc/constants"
+	"github.com/inscription-c/insc/internal/signal"
 	gormMysqlDriver "gorm.io/driver/mysql"
 	"gorm.io/gorm"
 	"gorm.io/gorm/logger"
@@ -65,7 +66,6 @@ import (
 	"github.com/pingcap/tidb/pkg/util/metricsutil"
 	"github.com/pingcap/tidb/pkg/util/printer"
 	"github.com/pingcap/tidb/pkg/util/sem"
-	"github.com/pingcap/tidb/pkg/util/signal"
 	stmtsummaryv2 "github.com/pingcap/tidb/pkg/util/stmtsummary/v2"
 	"github.com/pingcap/tidb/pkg/util/sys/linux"
 	storageSys "github.com/pingcap/tidb/pkg/util/sys/storage"
@@ -483,7 +483,7 @@ func TIDB(options *DBOptions) {
 	// For regression of issue like https://github.com/pingcap/tidb/issues/28190
 	terror.RegisterFinish()
 
-	signal.SetupSignalHandler(func() {
+	signal.AddInterruptHandler(func() {
 		svr.Close()
 		cleanup(svr, storage, dom)
 		cpuprofile.StopCPUProfiler()

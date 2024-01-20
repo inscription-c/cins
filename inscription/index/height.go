@@ -1,14 +1,19 @@
 package index
 
-import "github.com/inscription-c/insc/constants"
-
 type Height struct {
-	Height uint64
+	height uint32
 }
 
-func (h *Height) Subsidy() uint64 {
-	if h.Height < 33 {
-		return (50 * constants.OneBtc) >> h.Height
+func NewHeight(height uint32) *Height {
+	return &Height{
+		height: height,
 	}
-	return 0
+}
+
+func (h *Height) N() uint32 {
+	return h.height
+}
+
+func (h *Height) Subsidy() uint32 {
+	return NewEpochFrom(h).Subsidy()
 }

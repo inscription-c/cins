@@ -4,7 +4,13 @@ import (
 	"errors"
 	"github.com/inscription-c/insc/inscription/index/tables"
 	"gorm.io/gorm"
+	"gorm.io/gorm/clause"
 )
+
+type Inscription struct {
+	*tables.Inscriptions
+	*SatPoint
+}
 
 func (d *DB) NextSequenceNumber() (num uint64, err error) {
 	ins := &tables.Inscriptions{}
@@ -16,4 +22,26 @@ func (d *DB) NextSequenceNumber() (num uint64, err error) {
 		return 0, err
 	}
 	return ins.Id + 1, nil
+}
+
+func (d *DB) GetInscriptionById(inscriptionId string) (ins tables.Inscriptions, err error) {
+	err = d.DB.Where("inscription_id = ?", inscriptionId).First(&ins).Error
+	if errors.Is(err, gorm.ErrRecordNotFound) {
+		err = nil
+	}
+	return
+}
+
+func (d *DB) DeleteInscriptionById(inscriptionId string) (sequenceNum uint64, err error) {
+	ins := &tables.Inscriptions{}
+	err = d.DB.Clauses(clause.Returning{}).Where("inscription_id = ?", inscriptionId).Delete(ins).Error
+	if err != nil {
+		return
+	}
+	sequenceNum = ins.Id
+	return
+}
+
+func (d *DB) CreateInscription(ins *tables.Inscriptions) error {
+	return d.DB.Create(ins).Error
 }

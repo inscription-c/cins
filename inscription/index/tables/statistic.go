@@ -24,7 +24,7 @@ const (
 type Statistic struct {
 	Id        uint64        `gorm:"column:id;primary_key;AUTO_INCREMENT;NOT NULL"`
 	Name      StatisticType `gorm:"column:name;type:varchar(255);default:;NOT NULL;comment:'statistic name'"`
-	Count     uint64        `gorm:"column:count;type:bigint unsigned;default:0;NOT NULL;comment:'count'"`
+	Count     uint32        `gorm:"column:count;type:bigint unsigned;default:0;NOT NULL;comment:'count'"`
 	CreatedAt time.Time     `gorm:"column:created_at;type:timestamp;default:CURRENT_TIMESTAMP;NOT NULL"`
 	UpdatedAt time.Time     `gorm:"column:updated_at;type:timestamp;default:CURRENT_TIMESTAMP;NOT NULL"`
 }

@@ -7,6 +7,7 @@ import (
 	"github.com/inscription-c/insc/constants"
 	"github.com/inscription-c/insc/inscription/index"
 	"github.com/inscription-c/insc/inscription/index/dao"
+	"github.com/inscription-c/insc/inscription/index/tables"
 	"github.com/inscription-c/insc/inscription/log"
 	"github.com/inscription-c/insc/inscription/server"
 	"github.com/inscription-c/insc/internal/signal"
@@ -47,15 +48,30 @@ func inscribe() error {
 	}
 
 	// Get the database
-	db, err := dao.DB(config.IndexDir)
+	db, err := dao.NewDB(
+		dao.WithAddr(config.MysqlAddr),
+		dao.WithUser(config.MysqlUser),
+		dao.WithPassword(config.MysqlPassword),
+		dao.WithDBName(config.MysqlDBName),
+		dao.WithLogger(log.Gorm),
+		dao.WithDataDir(config.DataDir),
+		dao.WithNoEmbedDB(config.NoEmbedDB),
+		dao.WithServerPort(config.DBListenPort),
+		dao.WithStatusPort(config.DBStatusListenPort),
+		dao.WithAutoMigrateTables(
+			&tables.BlockInfo{},
+			&tables.Inscriptions{},
+			&tables.OutpointSatRange{},
+			&tables.OutpointValue{},
+			&tables.Sat{},
+			&tables.SatPoint{},
+			&tables.SatSatPoint{},
+			&tables.Statistic{},
+		),
+	)
 	if err != nil {
 		return err
 	}
-	signal.AddInterruptHandler(func() {
-		if err := db.Close(); err != nil {
-			log.Log.Error("db.Close", "err", err)
-		}
-	})
 
 	// Create a new wallet client
 	walletCli, err := wallet.NewWalletClient(
@@ -88,7 +104,6 @@ func inscribe() error {
 	indexer := index.NewIndexer(
 		index.WithDB(db),
 		index.WithClient(walletCli),
-		index.WithBatchClient(batchCli),
 		index.WithFlushNum(constants.DefaultWithFlushNum),
 	)
 

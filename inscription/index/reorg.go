@@ -6,7 +6,7 @@ import (
 	"github.com/inscription-c/insc/inscription/index/dao"
 )
 
-func detectReorg(wtx *dao.DB, block *wire.MsgBlock, height uint64) error {
+func detectReorg(wtx *dao.DB, block *wire.MsgBlock, height uint32) error {
 	bitcoindPrevBlockHash := block.Header.PrevBlock.String()
 	if height == 0 {
 		return nil

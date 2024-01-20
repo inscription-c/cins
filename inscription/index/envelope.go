@@ -6,6 +6,7 @@ import (
 	"github.com/btcsuite/btcd/wire"
 	"github.com/gogf/gf/v2/util/gconv"
 	"github.com/inscription-c/insc/constants"
+	"github.com/inscription-c/insc/inscription/index/model"
 )
 
 type Instruction struct {
@@ -44,17 +45,17 @@ func (w *Witness) ScriptTokenizer() *txscript.ScriptTokenizer {
 }
 
 func ParsedEnvelopeFromTransaction(tx *wire.MsgTx) []*Envelope {
-	stuttered := false
 	envelopes := make([]*Envelope, 0)
 	for i, input := range tx.TxIn {
 		w := &Witness{TxWitness: input.Witness}
 		if !w.IsTaprootScript() {
 			continue
 		}
-		tokenizer := w.ScriptTokenizer()
+		stuttered := false
 		envelope := &Envelope{}
+		tokenizer := w.ScriptTokenizer()
 		for tokenizer.Next() {
-			stuttered = envelope.fromInstructions(tokenizer, i, len(envelopes), stuttered)
+			stuttered = envelope.fromInstructions(tokenizer, i, len(envelopes))
 			if !stuttered && envelope.completed {
 				envelopes = append(envelopes, envelope)
 			}
@@ -66,7 +67,7 @@ func ParsedEnvelopeFromTransaction(tx *wire.MsgTx) []*Envelope {
 type Envelope struct {
 	input     int
 	offset    int
-	payload   *Inscription
+	payload   *model.Inscription
 	pushNum   bool
 	stutter   bool
 	completed bool
@@ -76,7 +77,6 @@ func (e *Envelope) fromInstructions(
 	instructions *txscript.ScriptTokenizer,
 	input int,
 	offset int,
-	stutter bool,
 ) bool {
 	if !e.accept(instructions, &Instruction{opcode: txscript.OP_IF}) {
 		return e.isPushBytes(instructions.Opcode())
@@ -87,13 +87,10 @@ func (e *Envelope) fromInstructions(
 	}
 
 	latestOpCode := -1
-	pushNum := false
-	payload := &Inscription{
-		Body:            make([]byte, 0),
-		ContentEncoding: make([]byte, 0),
-		Metadata:        make([]byte, 0),
-		Pointer:         make([]byte, 0),
-		DstChain:        make([]byte, 0),
+	payload := &model.Inscription{
+		Body:     make([]byte, 0),
+		Metadata: make([]byte, 0),
+		Pointer:  -1,
 	}
 	for instructions.Next() {
 		switch instructions.Opcode() {
@@ -101,63 +98,63 @@ func (e *Envelope) fromInstructions(
 			e.input = input
 			e.offset = offset
 			e.payload = payload
-			e.pushNum = pushNum
-			e.stutter = stutter
+			e.pushNum = false
+			e.stutter = false
 			e.completed = true
 			return false
 		case txscript.OP_1NEGATE:
-			pushNum = true
+			e.pushNum = true
 			latestOpCode = txscript.OP_1NEGATE
 		case txscript.OP_0:
-			pushNum = true
+			e.pushNum = true
 			latestOpCode = txscript.OP_0
 		case txscript.OP_1:
-			pushNum = true
+			e.pushNum = true
 			latestOpCode = txscript.OP_1
 		case txscript.OP_2:
-			pushNum = true
+			e.pushNum = true
 			latestOpCode = txscript.OP_2
 		case txscript.OP_3:
-			pushNum = true
+			e.pushNum = true
 			latestOpCode = txscript.OP_3
 		case txscript.OP_4:
-			pushNum = true
+			e.pushNum = true
 			latestOpCode = txscript.OP_4
 		case txscript.OP_5:
-			pushNum = true
+			e.pushNum = true
 			latestOpCode = txscript.OP_5
 		case txscript.OP_6:
-			pushNum = true
+			e.pushNum = true
 			latestOpCode = txscript.OP_6
 		case txscript.OP_7:
-			pushNum = true
+			e.pushNum = true
 			latestOpCode = txscript.OP_7
 		case txscript.OP_8:
-			pushNum = true
+			e.pushNum = true
 			latestOpCode = txscript.OP_8
 		case txscript.OP_9:
-			pushNum = true
+			e.pushNum = true
 			latestOpCode = txscript.OP_9
 		case txscript.OP_10:
-			pushNum = true
+			e.pushNum = true
 			latestOpCode = txscript.OP_10
 		case txscript.OP_11:
-			pushNum = true
+			e.pushNum = true
 			latestOpCode = txscript.OP_11
 		case txscript.OP_12:
-			pushNum = true
+			e.pushNum = true
 			latestOpCode = txscript.OP_12
 		case txscript.OP_13:
-			pushNum = true
+			e.pushNum = true
 			latestOpCode = txscript.OP_13
 		case txscript.OP_14:
-			pushNum = true
+			e.pushNum = true
 			latestOpCode = txscript.OP_14
 		case txscript.OP_15:
-			pushNum = true
+			e.pushNum = true
 			latestOpCode = txscript.OP_15
 		case txscript.OP_16:
-			pushNum = true
+			e.pushNum = true
 			latestOpCode = txscript.OP_16
 		default:
 			if !e.isPushBytes(instructions.Opcode()) {
@@ -169,33 +166,33 @@ func (e *Envelope) fromInstructions(
 				case constants.DstChain:
 					latestOpCode = constants.DstChain
 				default:
-					pushNum = true
+					e.pushNum = true
 					return false
 				}
 			case constants.DstChain:
-				if len(payload.DstChain) > 0 {
+				if payload.DstChain != "" {
 					payload.DuplicateField = true
 				}
-				payload.DstChain = append(payload.DstChain, instructions.Data()...)
+				payload.DstChain = string(instructions.Data())
 			case txscript.OP_0:
 				payload.Body = append(payload.Body, instructions.Data()...)
 			case txscript.OP_1:
-				if len(payload.ContentType) > 0 {
+				if payload.ContentType != "" {
 					payload.DuplicateField = true
 				}
 				payload.ContentType = constants.ContentType(instructions.Data())
 			case txscript.OP_2:
-				if len(payload.Pointer) > 0 {
+				if payload.Pointer >= 0 {
 					payload.DuplicateField = true
 				}
-				payload.Pointer = append(payload.Pointer, instructions.Data()...)
+				payload.Pointer = gconv.Int32(string(instructions.Data()))
 			case txscript.OP_5:
 				payload.Metadata = append(payload.Metadata, instructions.Data()...)
 			case txscript.OP_9:
-				if len(payload.ContentEncoding) > 0 {
+				if payload.ContentEncoding != "" {
 					payload.DuplicateField = true
 				}
-				payload.ContentEncoding = append(payload.ContentEncoding, instructions.Data()...)
+				payload.ContentEncoding = string(instructions.Data())
 			}
 			latestOpCode = -1
 		}

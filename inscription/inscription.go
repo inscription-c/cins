@@ -22,6 +22,7 @@ import (
 	"github.com/inscription-c/insc/config"
 	"github.com/inscription-c/insc/constants"
 	"github.com/inscription-c/insc/inscription/index"
+	"github.com/inscription-c/insc/inscription/index/model"
 	"github.com/inscription-c/insc/inscription/log"
 	"github.com/shopspring/decimal"
 	"github.com/ugorji/go/codec"
@@ -616,7 +617,7 @@ func (i *Inscription) SignCommitTx() error {
 		}
 
 		// It creates a new OutPoint for the UTXO and adds the private key to the map.
-		outpoint := index.NewOutPoint(utxo.TxID, utxo.Vout)
+		outpoint := model.NewOutPoint(utxo.TxID, utxo.Vout)
 		priKeyMap[outpoint.String()] = wif
 
 		// It converts the OutPoint to a wire.OutPoint.
@@ -646,7 +647,7 @@ func (i *Inscription) SignCommitTx() error {
 		utxo := i.utxo[j]
 
 		// It creates a new OutPoint for the UTXO and retrieves the private key from the map.
-		outpoint := index.NewOutPoint(utxo.TxID, utxo.Vout)
+		outpoint := model.NewOutPoint(utxo.TxID, utxo.Vout)
 		wif := priKeyMap[outpoint.String()]
 
 		// It converts the address of the UTXO to a script.
@@ -836,12 +837,12 @@ func (i *Inscription) getUtxo() error {
 	}
 
 	// Combine unspent and locked UTXOs
-	utoxTotal := make([]*index.OutPoint, 0)
+	utoxTotal := make([]*model.OutPoint, 0)
 	for _, v := range unspentUtxo {
-		utoxTotal = append(utoxTotal, index.NewOutPoint(v.TxID, v.Vout))
+		utoxTotal = append(utoxTotal, model.NewOutPoint(v.TxID, v.Vout))
 	}
 	for _, v := range lockedUtxos {
-		utoxTotal = append(utoxTotal, index.NewOutPoint(v.Hash.String(), v.Index))
+		utoxTotal = append(utoxTotal, model.NewOutPoint(v.Hash.String(), v.Index))
 	}
 
 	// Get wallet inscriptions UTXOs
@@ -853,7 +854,7 @@ func (i *Inscription) getUtxo() error {
 	// Filter out UTXOs that are already used in inscriptions
 	utxo := make([]btcjson.ListUnspentResult, 0)
 	for _, v := range unspentUtxo {
-		outpoint := index.NewOutPoint(v.TxID, v.Vout)
+		outpoint := model.NewOutPoint(v.TxID, v.Vout)
 		if _, ok := walletInscriptions[outpoint.String()]; ok {
 			continue
 		}
