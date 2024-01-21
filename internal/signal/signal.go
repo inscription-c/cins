@@ -6,8 +6,8 @@ import (
 	"syscall"
 )
 
-// interruptChannel is used to receive SIGINT (Ctrl+C) signals.
-var interruptChannel chan os.Signal
+// InterruptChannel is used to receive SIGINT (Ctrl+C) signals.
+var InterruptChannel chan os.Signal
 
 // addHandlerChannel is used to add an interrupt handler to the list of handlers
 // to be invoked on SIGINT (Ctrl+C) signals.
@@ -50,7 +50,7 @@ func mainInterruptHandler() {
 
 	for {
 		select {
-		case <-interruptChannel:
+		case <-InterruptChannel:
 			invokeCallbacks()
 			return
 		case <-SimulateInterruptChannel:
@@ -68,9 +68,9 @@ func mainInterruptHandler() {
 func AddInterruptHandler(handler func()) {
 	// Create the channel and start the main interrupt handler which invokes
 	// all other callbacks and exits if not already done.
-	if interruptChannel == nil {
-		interruptChannel = make(chan os.Signal, 1)
-		signal.Notify(interruptChannel, signals...)
+	if InterruptChannel == nil {
+		InterruptChannel = make(chan os.Signal, 1)
+		signal.Notify(InterruptChannel, signals...)
 		go mainInterruptHandler()
 	}
 

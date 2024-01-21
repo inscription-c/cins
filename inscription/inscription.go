@@ -19,9 +19,9 @@ import (
 	"github.com/btcsuite/btcwallet/waddrmgr"
 	secp "github.com/decred/dcrd/dcrec/secp256k1/v4"
 	"github.com/go-playground/validator/v10"
-	"github.com/inscription-c/insc/config"
 	"github.com/inscription-c/insc/constants"
 	"github.com/inscription-c/insc/inscription/index"
+	"github.com/inscription-c/insc/inscription/index/dao"
 	"github.com/inscription-c/insc/inscription/index/model"
 	"github.com/inscription-c/insc/inscription/log"
 	"github.com/shopspring/decimal"
@@ -117,11 +117,10 @@ type Header struct {
 // It contains the wallet client, the postage, the wallet password, the destination chain,
 // the CBOR metadata, and the JSON metadata.
 type options struct {
+	db *dao.DB
+
 	// walletClient is the client for the wallet.
 	walletClient *rpcclient.Client `validate:"required"`
-
-	// index indexer client
-	index *index.Indexer
 
 	// postage is the postage for the inscription.
 	postage uint64 `validate:"required"`
@@ -197,13 +196,9 @@ func WithWalletClient(cli *rpcclient.Client) func(*options) {
 	}
 }
 
-// WithIndexer is a function that sets the indexer option for an Inscription.
-// It takes a pointer to an index.Indexer representing the indexer and returns a
-// function that sets the indexer in the options of an Inscription.
-func WithIndexer(index *index.Indexer) func(*options) {
+func WithDB(db *dao.DB) Option {
 	return func(o *options) {
-		// Set the indexer in the options
-		o.index = index
+		o.db = db
 	}
 }
 
@@ -284,7 +279,7 @@ func NewFromPath(path string, inputOpts ...Option) (*Inscription, error) {
 	contentEncoding := ""
 
 	// If compression is enabled, compress the body
-	if config.Compress {
+	if compress {
 		buf := bytes.NewBufferString("")
 		bw := brotli.NewWriterOptions(buf, brotli.WriterOptions{Quality: 11, LGWin: 24})
 		if _, err := bw.Write(body); err != nil {
@@ -313,7 +308,7 @@ func NewFromPath(path string, inputOpts ...Option) (*Inscription, error) {
 
 	// Initialize the body protocol of the Inscription
 	var incBody Protocol
-	if config.IsBrc20C {
+	if brc20c {
 		incBody = &BRC20C{
 			DefaultProtocol: DefaultProtocol{
 				Reader{
@@ -476,8 +471,8 @@ func (i *Inscription) BuildCommitTx() error {
 	if err != nil {
 		return err
 	}
-	commitTx.AddTxOut(wire.NewTxOut(int64(config.Postage)+i.revealFee, recipientScript))
-	outTotal += int64(config.Postage) + i.revealFee
+	commitTx.AddTxOut(wire.NewTxOut(int64(postage)+i.revealFee, recipientScript))
+	outTotal += int64(postage) + i.revealFee
 	// output end
 
 	// change calculate
@@ -562,11 +557,11 @@ func (i *Inscription) BuildRevealTx() error {
 	}
 
 	// Create the transaction output
-	destAddrScript, err := addressScript(strings.TrimSpace(config.Destination))
+	destAddrScript, err := addressScript(strings.TrimSpace(destination))
 	if err != nil {
 		return err
 	}
-	revealTxOutput := wire.NewTxOut(int64(config.Postage), destAddrScript)
+	revealTxOutput := wire.NewTxOut(int64(postage), destAddrScript)
 
 	// Create the reveal transaction
 	revealTx := wire.NewMsgTx(2)
@@ -590,7 +585,7 @@ func (i *Inscription) SignCommitTx() error {
 	// It is responsible for signing the commit transaction of the Inscription.
 
 	// First, it unlocks the wallet using the wallet passphrase.
-	if err := i.Wallet().WalletPassphrase(config.WalletPass, 5); err != nil {
+	if err := i.Wallet().WalletPassphrase(walletPass, 5); err != nil {
 		return err
 	}
 
@@ -903,7 +898,7 @@ func addressScript(address string) ([]byte, error) {
 // Otherwise, it returns the mainnet parameters.
 func getNetParams() *chaincfg.Params {
 	netParams := &chaincfg.MainNetParams
-	if config.Testnet {
+	if testnet {
 		netParams = &chaincfg.TestNet3Params
 	}
 	return netParams

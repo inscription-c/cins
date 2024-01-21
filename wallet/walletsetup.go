@@ -3,7 +3,6 @@ package wallet
 import (
 	"fmt"
 	"github.com/btcsuite/btcd/btcutil/hdkeychain"
-	"github.com/inscription-c/insc/config"
 	"github.com/inscription-c/insc/internal/legacy/keystore"
 	"os"
 	"path/filepath"
@@ -162,7 +161,7 @@ func createWallet(cfg *Config) error {
 		return err
 	}
 	fmt.Println("Creating the wallet...")
-	w, err := loader.CreateNewWallet([]byte(cfg.WalletPass), []byte(config.WalletPass), seed, time.Now())
+	w, err := loader.CreateNewWallet([]byte(cfg.WalletPass), []byte(walletPass), seed, time.Now())
 	if err != nil {
 		return err
 	}

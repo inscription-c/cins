@@ -1,6 +1,7 @@
 package server
 
 import (
+	"errors"
 	"github.com/btcsuite/btcd/rpcclient"
 	"github.com/inscription-c/insc/inscription/index"
 	"github.com/inscription-c/insc/inscription/log"
@@ -56,8 +57,12 @@ func (r *Runner) Start() {
 		for {
 			select {
 			case <-ticker.C:
-				if err := r.opts.idx.UpdateIndex(); err != nil {
+				err := r.opts.idx.UpdateIndex()
+				if err != nil && !errors.Is(err, index.ErrInterrupted) {
 					log.Srv.Error("UpdateIndex", "err", err)
+				}
+				if errors.Is(err, index.ErrInterrupted) {
+					return
 				}
 			case <-r.exist:
 				return

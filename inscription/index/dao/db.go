@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"flag"
 	"fmt"
+	"github.com/btcsuite/btcd/btcutil"
 	"github.com/btcsuite/btclog"
 	"github.com/inscription-c/insc/constants"
 	"github.com/inscription-c/insc/internal/signal"
@@ -50,7 +51,6 @@ import (
 	"github.com/pingcap/tidb/pkg/statistics"
 	kvstore "github.com/pingcap/tidb/pkg/store"
 	"github.com/pingcap/tidb/pkg/store/copr"
-	"github.com/pingcap/tidb/pkg/store/driver"
 	"github.com/pingcap/tidb/pkg/store/mockstore"
 	pumpcli "github.com/pingcap/tidb/pkg/tidb-binlog/pump_client"
 	"github.com/pingcap/tidb/pkg/util"
@@ -84,7 +84,6 @@ import (
 
 type DB struct {
 	*gorm.DB
-	db *gorm.DB
 }
 
 type DBOptions struct {
@@ -164,6 +163,13 @@ func WithStatusPort(port string) DBOption {
 	}
 }
 
+func (d *DB) Transaction(fn func(tx *DB) error) error {
+	return d.DB.Transaction(func(tx *gorm.DB) error {
+		d := &DB{DB: tx}
+		return fn(d)
+	})
+}
+
 func NewDB(opts ...DBOption) (*DB, error) {
 	options := &DBOptions{}
 	for _, opt := range opts {
@@ -208,23 +214,8 @@ func NewDB(opts ...DBOption) (*DB, error) {
 	sqlDB.SetMaxIdleConns(50)
 
 	return &DB{
-		db: db,
+		DB: db,
 	}, nil
-}
-
-func (d *DB) Begin() *DB {
-	d.DB = d.db.Begin()
-	return d
-}
-
-func (d *DB) Commit() *DB {
-	d.DB = d.DB.Commit()
-	return d
-}
-
-func (d *DB) Rollback() *DB {
-	d.DB = d.DB.Rollback()
-	return d
 }
 
 type GormLogger struct {
@@ -431,11 +422,20 @@ func TIDB(options *DBOptions) {
 	fset := initFlagSet()
 	err := fset.Set(nmStorePath, options.dataDir)
 	terror.MustNil(err)
-	err = fset.Set(nmSocket, filepath.Join(options.dataDir, "db.sock"))
+	socketFile := filepath.Join(options.dataDir, "db.sock")
+	_ = os.Remove(socketFile)
+	err = fset.Set(nmSocket, socketFile)
 	terror.MustNil(err)
 	err = fset.Set(nmStatusPort, options.serverStatusPort)
 	terror.MustNil(err)
 	err = fset.Set(nmPort, options.serverPort)
+	terror.MustNil(err)
+	err = fset.Set(nmLogLevel, "warn")
+	terror.MustNil(err)
+	logDir := btcutil.AppDataDir(filepath.Join(constants.AppName, "inscription", "logs"), false)
+	err = fset.Set(nmLogFile, filepath.Join(logDir, "tidb.log"))
+	terror.MustNil(err)
+	err = fset.Set(nmLogSlowQuery, filepath.Join(logDir, "slow_query.log"))
 	terror.MustNil(err)
 	config.InitializeConfig(*configPath, *configCheck, *configStrict, overrideConfig, fset)
 	registerStores()
@@ -543,31 +543,34 @@ func setCPUAffinity() {
 }
 
 func registerStores() {
-	err := kvstore.Register("tikv", driver.TiKVDriver{})
-	terror.MustNil(err)
-	err = kvstore.Register("mocktikv", mockstore.MockTiKVDriver{})
-	terror.MustNil(err)
-	err = kvstore.Register("unistore", mockstore.EmbedUnistoreDriver{})
+	err := kvstore.Register("unistore", mockstore.EmbedUnistoreDriver{})
 	terror.MustNil(err)
 }
 
 func createStoreAndDomain(keyspaceName string) (kv.Storage, *domain.Domain) {
 	cfg := config.GetGlobalConfig()
-	var fullPath string
-	if keyspaceName == "" {
-		fullPath = fmt.Sprintf("%s://%s", cfg.Store, cfg.Path)
-	} else {
-		fullPath = fmt.Sprintf("%s://%s?keyspaceName=%s", cfg.Store, cfg.Path, keyspaceName)
-	}
 	var err error
-	storage, err := kvstore.New(fullPath)
+	var s kv.Storage
+	err = util.RunWithRetry(util.DefaultMaxRetries, util.RetryInterval, func() (bool, error) {
+		logutil.BgLogger().Info("new store", zap.String("path", cfg.Path))
+		opts := []mockstore.MockTiKVStoreOption{mockstore.WithPath(cfg.Path), mockstore.WithStoreType(mockstore.EmbedUnistore)}
+		txnLocalLatches := config.GetGlobalConfig().TxnLocalLatches
+		if txnLocalLatches.Enabled {
+			opts = append(opts, mockstore.WithTxnLocalLatches(txnLocalLatches.Capacity))
+		}
+		s, err = mockstore.NewMockStore(opts...)
+		if err != nil {
+			return false, err
+		}
+		return true, nil
+	})
 	terror.MustNil(err)
 	copr.GlobalMPPFailedStoreProber.Run()
 	mppcoordmanager.InstanceMPPCoordinatorManager.Run()
 	// Bootstrap a session to load information schema.
-	dom, err := session.BootstrapSession(storage)
+	dom, err := session.BootstrapSession(s)
 	terror.MustNil(err)
-	return storage, dom
+	return s, dom
 }
 
 func setupBinlogClient() {

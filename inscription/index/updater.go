@@ -1,13 +1,19 @@
 package index
 
 import (
+	"errors"
 	"fmt"
+	"github.com/btcsuite/btcd/rpcclient"
 	"github.com/btcsuite/btcd/wire"
 	"github.com/inscription-c/insc/inscription/index/dao"
 	"github.com/inscription-c/insc/inscription/index/model"
 	"github.com/inscription-c/insc/inscription/index/tables"
+	"golang.org/x/sync/errgroup"
+	"gorm.io/gorm"
 	"sort"
 )
+
+var ErrInterrupted = errors.New("interrupted")
 
 type Curse int
 
@@ -89,6 +95,99 @@ func (u *InscriptionUpdater) indexEnvelopers(
 		totalOutputValue += v.Value
 	}
 
+	latestOutpoint := ""
+	needFetchOutpoints := make([]string, 0)
+	needFetchOutpointsMap := make(map[string]string)
+
+	for inputIndex := range tx.TxIn {
+		txIn := tx.TxIn[inputIndex]
+		if IsEmptyHash(txIn.PreviousOutPoint.Hash) {
+			totalInputValue += int64(NewHeight(u.idx.height).Subsidy())
+			continue
+		}
+
+		if _, ok := u.valueCache[txIn.PreviousOutPoint.String()]; ok {
+			continue
+		}
+
+		_, err := u.wtx.GetValueByOutpoint(txIn.PreviousOutPoint.String())
+		if err != nil && !errors.Is(err, gorm.ErrRecordNotFound) {
+			return err
+		}
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			preOutpoint := txIn.PreviousOutPoint.String()
+			needFetchOutpoints = append(needFetchOutpoints, preOutpoint)
+			if latestOutpoint != "" {
+				needFetchOutpointsMap[preOutpoint] = latestOutpoint
+			} else {
+				needFetchOutpointsMap[preOutpoint] = ""
+			}
+			latestOutpoint = preOutpoint
+		}
+	}
+
+	var errCh chan error
+	var valueCh chan int64
+
+	if len(needFetchOutpoints) > 0 {
+		currentNum := len(needFetchOutpoints)/2 + 1
+		if currentNum > 32 {
+			currentNum = 32
+		}
+		errCh = make(chan error)
+		valueCh = make(chan int64, currentNum)
+
+		errWg := &errgroup.Group{}
+		errWg.Go(func() error {
+			batchResult := make([]rpcclient.FutureGetRawTransactionResult, 0)
+			for i := 0; i < len(needFetchOutpoints); i++ {
+				outpoint, err := wire.NewOutPointFromString(needFetchOutpoints[i])
+				if err != nil {
+					return err
+				}
+				res := u.idx.BatchRpcClient().GetRawTransactionAsync(&outpoint.Hash)
+				batchResult = append(batchResult, res)
+				if i > 0 && i%currentNum == 0 {
+					if err := u.idx.BatchRpcClient().Send(); err != nil {
+						return err
+					}
+					for _, v := range batchResult {
+						tx, err := v.Receive()
+						if err != nil {
+							return err
+						}
+						for _, txOut := range tx.MsgTx().TxOut {
+							valueCh <- txOut.Value
+						}
+					}
+					batchResult = make([]rpcclient.FutureGetRawTransactionResult, 0)
+				}
+			}
+
+			if len(batchResult) > 0 {
+				if err := u.idx.BatchRpcClient().Send(); err != nil {
+					return err
+				}
+				for _, v := range batchResult {
+					tx, err := v.Receive()
+					if err != nil {
+						return err
+					}
+					for _, txOut := range tx.MsgTx().TxOut {
+						valueCh <- txOut.Value
+					}
+				}
+			}
+			return nil
+		})
+
+		go func() {
+			if err := errWg.Wait(); err != nil {
+				errCh <- err
+			}
+		}()
+	}
+
 	for inputIndex := range tx.TxIn {
 		txIn := tx.TxIn[inputIndex]
 		// is coin base
@@ -129,16 +228,23 @@ func (u *InscriptionUpdater) indexEnvelopers(
 		if ok {
 			delete(u.valueCache, preOutpoint)
 		} else {
-			if currentInputValue, err = u.wtx.GetValueByOutpoint(preOutpoint); err == nil {
+			currentInputValue, err = u.wtx.GetValueByOutpoint(preOutpoint)
+			if err != nil && !errors.Is(err, gorm.ErrRecordNotFound) {
+				return err
+			}
+			if err == nil {
 				if err := u.wtx.DeleteValueByOutpoint(preOutpoint); err != nil {
 					return err
 				}
 			} else {
-				tx, err := u.idx.opts.cli.GetRawTransaction(&txIn.PreviousOutPoint.Hash)
-				if err != nil {
+				select {
+				case err := <-errCh:
 					return err
+				case currentInputValue, ok = <-valueCh:
+					if !ok {
+						return fmt.Errorf("valueCh closed")
+					}
 				}
-				currentInputValue = tx.MsgTx().TxOut[txIn.PreviousOutPoint.Index].Value
 			}
 		}
 		totalInputValue += currentInputValue
@@ -311,7 +417,7 @@ func (u *InscriptionUpdater) indexEnvelopers(
 	if isCoinBase {
 		for _, flotsam := range floatingInscriptions {
 			newSatpoint := &dao.SatPoint{
-				Offset: uint32(uint64(u.lostSats) + flotsam.Offset - outputValue),
+				Offset: uint32(u.lostSats + flotsam.Offset - outputValue),
 			}
 			if err := u.updateInscriptionLocation(inputSatRange, flotsam, newSatpoint); err != nil {
 				return err

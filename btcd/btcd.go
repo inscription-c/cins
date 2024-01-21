@@ -3,7 +3,6 @@ package btcd
 import (
 	"fmt"
 	"github.com/btcsuite/btcd/limits"
-	"github.com/inscription-c/insc/config"
 	"github.com/inscription-c/insc/internal/signal"
 	"github.com/spf13/cobra"
 	"net"
@@ -27,8 +26,18 @@ const (
 	blockDbNamePrefix = "blocks"
 )
 
+type Options struct {
+	user      string
+	password  string
+	testnet   bool
+	rpcListen string
+}
+
+type Option func(*Options)
+
 var (
-	cfg *Config
+	cfg     *Config
+	options = &Options{}
 )
 
 // winServiceMain is only invoked on Windows.  It detects when btcd is running
@@ -48,10 +57,10 @@ var Cmd = &cobra.Command{
 }
 
 func init() {
-	Cmd.Flags().StringVarP(&config.Username, "user", "u", "", "wallet api username")
-	Cmd.Flags().StringVarP(&config.Password, "password", "P", "", "wallet api password")
-	Cmd.Flags().BoolVarP(&config.Testnet, "testnet", "t", false, "bitcoin testnet3")
-	Cmd.Flags().StringVarP(&config.Rpclisten, "rpclisten", "", "", "Add an interface/port to listen for RPC connections (default port: 8334, testnet: 18334)")
+	Cmd.Flags().StringVarP(&options.user, "user", "u", "", "wallet api username")
+	Cmd.Flags().StringVarP(&options.password, "password", "P", "", "wallet api password")
+	Cmd.Flags().BoolVarP(&options.testnet, "testnet", "t", false, "bitcoin testnet3")
+	Cmd.Flags().StringVarP(&options.rpcListen, "rpclisten", "", ":8334", "Add an interface/port to listen for RPC connections (default port: 8334, testnet: 18334)")
 	if err := Cmd.MarkFlagRequired("user"); err != nil {
 		btcdLog.Error(err)
 		os.Exit(1)
@@ -62,12 +71,40 @@ func init() {
 	}
 }
 
+func WithUser(user string) Option {
+	return func(options *Options) {
+		options.user = user
+	}
+}
+
+func WithPassword(password string) Option {
+	return func(options *Options) {
+		options.password = password
+	}
+}
+
+func WithTestnet(testnet bool) Option {
+	return func(options *Options) {
+		options.testnet = testnet
+	}
+}
+
+func WithRpcListen(rpcListen string) Option {
+	return func(options *Options) {
+		options.rpcListen = rpcListen
+	}
+}
+
 // Btcd is the real main function for btcd.  It is necessary to work around
 // the fact that deferred functions do not run when os.Exit() is called.  The
 // optional serverChan parameter is mainly used by the service code to be
 // notified with the server once it is setup so it can gracefully stop it when
 // requested from the service control manager.
-func Btcd(serverChan chan<- *Server) error {
+func Btcd(serverChan chan<- *Server, opts ...Option) error {
+	for _, v := range opts {
+		v(options)
+	}
+
 	// If GOGC is not explicitly set, override GC percent.
 	if os.Getenv("GOGC") == "" {
 		// Block and transaction processing can cause bursty allocations.  This

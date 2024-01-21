@@ -3,21 +3,94 @@ package inscription
 import (
 	"errors"
 	"fmt"
-	"github.com/inscription-c/insc/config"
+	"github.com/btcsuite/btcd/btcutil"
+	"github.com/inscription-c/insc/btcd"
 	"github.com/inscription-c/insc/constants"
-	"github.com/inscription-c/insc/inscription/index"
 	"github.com/inscription-c/insc/inscription/index/dao"
-	"github.com/inscription-c/insc/inscription/index/tables"
 	"github.com/inscription-c/insc/inscription/log"
 	"github.com/inscription-c/insc/inscription/server"
 	"github.com/inscription-c/insc/internal/signal"
-	"github.com/inscription-c/insc/wallet"
 	"github.com/spf13/cobra"
 	"os"
+	"path/filepath"
+)
+
+var (
+	username             string
+	password             string
+	walletPass           string
+	testnet              bool
+	rpcCert              string
+	tlsSkipVerify        bool
+	inscriptionsFilePath string
+	rpcConnect           string
+	postage              = uint64(constants.DefaultPostage)
+	compress             bool
+	cborMetadata         string
+	jsonMetadata         string
+	dryRun               bool
+	brc20c               bool
+	dstChain             string
+	destination          string
+	mysqlAddr            string
+	mysqlUser            string
+	mysqlPass            string
 )
 
 // InsufficientBalanceError is an error that represents an insufficient balance.
 var InsufficientBalanceError = errors.New("InsufficientBalanceError")
+
+func init() {
+	Cmd.Flags().StringVarP(&username, "user", "u", "", "wallet rpc server username")
+	Cmd.Flags().StringVarP(&password, "password", "P", "", "wallet rpc server password")
+	Cmd.Flags().StringVarP(&walletPass, "walletpass", "", "", "wallet password for master private key")
+	Cmd.Flags().BoolVarP(&testnet, "testnet", "t", false, "bitcoin testnet3")
+	Cmd.Flags().StringVarP(&rpcCert, "rpccert", "c", "", "rpc cert file path")
+	Cmd.Flags().BoolVarP(&tlsSkipVerify, "tlsskipverify", "", false, "skip server tls verify")
+	Cmd.Flags().StringVarP(&inscriptionsFilePath, "filepath", "f", "", "inscription file path")
+	Cmd.Flags().StringVarP(&rpcConnect, "rpcconnect", "s", "localhost:8332", "the URL of wallet RPC server to connect to (default localhost:8332, testnet: localhost:18332)")
+	Cmd.Flags().Uint64VarP(&postage, "postage", "p", constants.DefaultPostage, "Amount of postage to include in the inscription. Default `10000sat`.")
+	Cmd.Flags().BoolVarP(&compress, "compress", "", false, "Compress inscription content with brotli.")
+	Cmd.Flags().StringVarP(&cborMetadata, "cbormetadata", "", "", "Include CBOR in file at <METADATA> as inscription metadata")
+	Cmd.Flags().StringVarP(&jsonMetadata, "jsonmetadata", "", "", "Include JSON in file at <METADATA> converted to CBOR as inscription metadata")
+	Cmd.Flags().BoolVarP(&dryRun, "dryrun", "", false, "Don't sign or broadcast transactions.")
+	Cmd.Flags().BoolVarP(&brc20c, "brc20c", "", false, "is brc-20-c protocol, add this flag will auto check protocol content effectiveness")
+	Cmd.Flags().StringVarP(&dstChain, "dstchain", "", "", "target chain coin_type for https://github.com/satoshilabs/slips/blob/master/slip-0044.md")
+	Cmd.Flags().StringVarP(&destination, "destination", "", "", "Send inscription to <DESTINATION> address.")
+	Cmd.Flags().StringVarP(&mysqlAddr, "mysqladdr", "", "127.0.0.1:4000", "index server database address")
+	Cmd.Flags().StringVarP(&mysqlUser, "mysqluser", "", "root", "index server database user")
+	Cmd.Flags().StringVarP(&mysqlPass, "mysqlpass", "", "", "index server database password")
+	if err := Cmd.MarkFlagRequired("filepath"); err != nil {
+		fmt.Println(err)
+		os.Exit(1)
+	}
+	if err := Cmd.MarkFlagRequired("dstchain"); err != nil {
+		fmt.Println(err)
+		os.Exit(1)
+	}
+	if err := Cmd.MarkFlagRequired("destination"); err != nil {
+		fmt.Println(err)
+		os.Exit(1)
+	}
+}
+
+func configCheck() error {
+	if testnet {
+		rpcConnect = "localhost:18332"
+	}
+	if postage < constants.DustLimit {
+		return fmt.Errorf("postage must be greater than or equal %d", constants.DustLimit)
+	}
+	if postage > constants.MaxPostage {
+		return fmt.Errorf("postage must be less than or equal %d", constants.MaxPostage)
+	}
+
+	// Initialize log rotation.  After log rotation has been initialized, the
+	// logger variables may be used.
+	logFile := btcutil.AppDataDir(filepath.Join(constants.AppName, "inscription", "logs", "inscription.log"), false)
+	log.InitLogRotator(logFile)
+	return nil
+}
 
 // Cmd is a cobra command that runs the inscribe function when executed.
 // It also handles any errors returned by the inscribe function.
@@ -47,75 +120,45 @@ func inscribe() error {
 		return err
 	}
 
-	// Get the database
-	db, err := dao.NewDB(
-		dao.WithAddr(config.MysqlAddr),
-		dao.WithUser(config.MysqlUser),
-		dao.WithPassword(config.MysqlPassword),
-		dao.WithDBName(config.MysqlDBName),
-		dao.WithLogger(log.Gorm),
-		dao.WithDataDir(config.DataDir),
-		dao.WithNoEmbedDB(config.NoEmbedDB),
-		dao.WithServerPort(config.DBListenPort),
-		dao.WithStatusPort(config.DBStatusListenPort),
-		dao.WithAutoMigrateTables(
-			&tables.BlockInfo{},
-			&tables.Inscriptions{},
-			&tables.OutpointSatRange{},
-			&tables.OutpointValue{},
-			&tables.Sat{},
-			&tables.SatPoint{},
-			&tables.SatSatPoint{},
-			&tables.Statistic{},
-		),
-	)
-	if err != nil {
-		return err
-	}
-
 	// Create a new wallet client
-	walletCli, err := wallet.NewWalletClient(
-		config.RpcConnect,
-		config.Username,
-		config.Password,
+	walletCli, err := btcd.NewClient(
+		rpcConnect,
+		username,
+		password,
 		true,
 	)
 	if err != nil {
 		return err
 	}
-	batchCli, err := wallet.NewBatchClient(
-		config.RpcConnect,
-		config.Username,
-		config.Password,
-		true,
-	)
 	if err != nil {
 		return err
 	}
 	signal.AddInterruptHandler(func() {
 		walletCli.Shutdown()
-		batchCli.Shutdown()
 	})
 
-	// indexer is an instance of the Indexer struct from the index package.
-	// The NewIndexer function is used to create this instance.
-	// The WithDB method is used to set the database for the indexer, taking the db variable as an argument.
-	// The WithClient method is used to set the wallet client for the indexer, taking the walletCli variable as an argument.
-	indexer := index.NewIndexer(
-		index.WithDB(db),
-		index.WithClient(walletCli),
-		index.WithFlushNum(constants.DefaultWithFlushNum),
+	// Get the database
+	db, err := dao.NewDB(
+		dao.WithAddr(mysqlAddr),
+		dao.WithUser(mysqlUser),
+		dao.WithPassword(mysqlPass),
+		dao.WithDBName(constants.DefaultDBName),
+		dao.WithLogger(log.Gorm),
+		dao.WithNoEmbedDB(true),
 	)
+	if err != nil {
+		return err
+	}
 
 	// Create a new inscription from the file path
-	inscription, err := NewFromPath(config.FilePath,
+	inscription, err := NewFromPath(inscriptionsFilePath,
+		WithDB(db),
 		WithWalletClient(walletCli),
-		WithIndexer(indexer),
-		WithPostage(config.Postage),
-		WithDstChain(config.DstChain),
-		WithWalletPass(config.WalletPass),
-		WithCborMetadata(config.CborMetadata),
-		WithJsonMetadata(config.JsonMetadata),
+		WithPostage(postage),
+		WithDstChain(dstChain),
+		WithWalletPass(walletPass),
+		WithCborMetadata(cborMetadata),
+		WithJsonMetadata(jsonMetadata),
 	)
 	if err != nil {
 		return err
@@ -132,7 +175,7 @@ func inscribe() error {
 	}
 
 	// If it's a dry run, log the success and the transaction IDs and return
-	if config.DryRun {
+	if dryRun {
 		log.Log.Info("dry run success")
 		log.Log.Info("commitTx: ", inscription.CommitTxId())
 		log.Log.Info("revealTx: ", inscription.RevealTxId())

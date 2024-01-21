@@ -4,7 +4,6 @@ import (
 	"errors"
 	"fmt"
 	"github.com/inscription-c/insc/btcd"
-	"github.com/inscription-c/insc/config"
 	"github.com/inscription-c/insc/internal/signal"
 	"github.com/spf13/cobra"
 	"net"
@@ -19,15 +18,29 @@ import (
 )
 
 var (
-	cfg *Config
+	cfg        *Config
+	username   string
+	password   string
+	walletPass string
+	testnet    bool
+	rpcConnect string
 )
 
 var Cmd = &cobra.Command{
 	Use:   "wallet",
 	Short: "wallet embed btcd endpoint",
 	Run: func(cmd *cobra.Command, args []string) {
-		if config.RpcConnect == "" {
-			if err := btcd.Btcd(nil); err != nil {
+		if rpcConnect == "" {
+			btcdRpcListen := "127.0.0.1:8334"
+			if testnet {
+				btcdRpcListen = "127.0.0.1:18334"
+			}
+			rpcConnect = btcdRpcListen
+			if err := btcd.Btcd(nil,
+				btcd.WithUser(username),
+				btcd.WithPassword(password),
+				btcd.WithTestnet(testnet),
+				btcd.WithRpcListen(btcdRpcListen)); err != nil {
 				fmt.Println(err)
 				os.Exit(1)
 			}
@@ -41,11 +54,11 @@ var Cmd = &cobra.Command{
 }
 
 func init() {
-	Cmd.Flags().StringVarP(&config.Username, "user", "u", "", "btcd rpc server username")
-	Cmd.Flags().StringVarP(&config.Password, "password", "P", "", "btcd rpc server password")
-	Cmd.Flags().StringVarP(&config.WalletPass, "walletpass", "", "", "wallet password")
-	Cmd.Flags().BoolVarP(&config.Testnet, "testnet", "t", false, "bitcoin testnet3")
-	Cmd.Flags().StringVarP(&config.RpcConnect, "rpcconnect", "", "", "Hostname/IP and port of btcd RPC server to connect to (default localhost:8334, testnet: localhost:18334)")
+	Cmd.Flags().StringVarP(&username, "user", "u", "", "btcd rpc server username")
+	Cmd.Flags().StringVarP(&password, "password", "P", "", "btcd rpc server password")
+	Cmd.Flags().StringVarP(&walletPass, "walletpass", "", "", "wallet password")
+	Cmd.Flags().BoolVarP(&testnet, "testnet", "t", false, "bitcoin testnet3")
+	Cmd.Flags().StringVarP(&rpcConnect, "rpcconnect", "", "", "Hostname/IP and port of btcd RPC server to connect to (default localhost:8334, testnet: localhost:18334)")
 	if err := Cmd.MarkFlagRequired("user"); err != nil {
 		fmt.Println(err)
 		os.Exit(1)

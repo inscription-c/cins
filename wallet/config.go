@@ -3,7 +3,6 @@ package wallet
 import (
 	"encoding/hex"
 	"fmt"
-	"github.com/inscription-c/insc/config"
 	"github.com/inscription-c/insc/constants"
 	"github.com/inscription-c/insc/internal/cfgutil"
 	"github.com/inscription-c/insc/internal/legacy/keystore"
@@ -283,14 +282,14 @@ func loadConfig() (*Config, []string, error) {
 		"::1":       {},
 	}
 
-	cfg.Username = config.Username
-	cfg.Password = config.Password
-	cfg.WalletPass = strings.TrimSpace(config.WalletPass)
-	cfg.TestNet3 = config.Testnet
-	cfg.RPCConnect = config.RpcConnect
+	cfg.Username = username
+	cfg.Password = password
+	cfg.WalletPass = strings.TrimSpace(walletPass)
+	cfg.TestNet3 = testnet
+	cfg.RPCConnect = rpcConnect
 
 	if cfg.RPCConnect != "" {
-		rpcConnect, err := cfgutil.NormalizeAddress(cfg.RPCConnect, activeNet.RPCClientPort)
+		rpcConnect, err := cfgutil.NormalizeAddress(rpcConnect, activeNet.RPCClientPort)
 		if err != nil {
 			return nil, nil, err
 		}

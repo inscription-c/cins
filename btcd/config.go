@@ -7,7 +7,6 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
-	"github.com/inscription-c/insc/config"
 	"github.com/inscription-c/insc/constants"
 	"io"
 	"net"
@@ -421,9 +420,9 @@ func loadConfig() (*Config, []string, error) {
 		MaxPeers:             defaultMaxPeers,
 		BanDuration:          defaultBanDuration,
 		BanThreshold:         defaultBanThreshold,
-		RPCUser:              config.Username,
-		RPCPass:              config.Password,
-		TestNet3:             config.Testnet,
+		RPCUser:              options.user,
+		RPCPass:              options.password,
+		TestNet3:             options.testnet,
 		RPCMaxClients:        defaultMaxRPCClients,
 		RPCMaxWebsockets:     defaultMaxRPCWebsockets,
 		RPCMaxConcurrentReqs: defaultMaxRPCConcurrentReqs,
@@ -449,8 +448,8 @@ func loadConfig() (*Config, []string, error) {
 		DisableTLS:           true,
 		RPCListeners:         []string{},
 	}
-	if config.Rpclisten != "" {
-		cfg.RPCListeners = append(cfg.RPCListeners, config.Rpclisten)
+	if options.rpcListen != "" {
+		cfg.RPCListeners = append(cfg.RPCListeners, options.rpcListen)
 	}
 
 	// Create the home directory if it doesn't already exist.
