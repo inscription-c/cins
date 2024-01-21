@@ -30,22 +30,21 @@ var Cmd = &cobra.Command{
 			fmt.Println(err)
 			os.Exit(1)
 		}
-		signal.SimulateInterrupt()
 		<-signal.InterruptHandlersDone
 	},
 }
 
 func init() {
-	datadir := btcutil.AppDataDir(filepath.Join(constants.AppName, "inscription", "index"), false)
+	dataDir := btcutil.AppDataDir(filepath.Join(constants.AppName, "inscription", "index"), false)
 	Cmd.Flags().StringVarP(&config.Username, "user", "u", "", "btcd rpc server username")
 	Cmd.Flags().StringVarP(&config.Password, "password", "P", "", "btcd rpc server password")
 	Cmd.Flags().StringVarP(&config.Rpclisten, "rpclisten", "l", ":8335", "rpc server listen address. Default `mainnet :8335, testnet :18335`")
 	Cmd.Flags().BoolVarP(&config.Testnet, "testnet", "t", false, "bitcoin testnet3")
 	Cmd.Flags().StringVarP(&config.RpcConnect, "rpcconnect", "s", "localhost:8334", "the URL of wallet RPC server to connect to (default localhost:8334, testnet: localhost:18334)")
 	Cmd.Flags().BoolVarP(&config.NoEmbedDB, "noembeddb", "", false, "don't embed db")
-	Cmd.Flags().StringVarP(&config.DataDir, "datadir", "", datadir, "embed database data dir")
+	Cmd.Flags().StringVarP(&config.DataDir, "datadir", "", dataDir, "embed database data dir")
 	Cmd.Flags().StringVarP(&config.MysqlAddr, "mysqladdr", "d", "127.0.0.1:4000", "inscription index mysql database addr")
-	Cmd.Flags().StringVarP(&config.MysqlUser, "mysqluser", "", "", "inscription index mysql database user")
+	Cmd.Flags().StringVarP(&config.MysqlUser, "mysqluser", "", "root", "inscription index mysql database user")
 	Cmd.Flags().StringVarP(&config.MysqlPassword, "mysqlpass", "", "", "inscription index mysql database password")
 	Cmd.Flags().StringVarP(&config.MysqlDBName, "dbname", "", constants.DefaultDBName, "inscription index mysql database name")
 	Cmd.Flags().StringVarP(&config.DBListenPort, "dblisten", "", "4000", "inscription index database server listen port")
@@ -55,7 +54,12 @@ func init() {
 func srv() error {
 	if config.Testnet {
 		activeNet = &netparams.TestNet3Params
+		config.RpcConnect = "localhost:18332"
 	}
+	// Initialize log rotation.  After log rotation has been initialized, the
+	// logger variables may be used.
+	logFile := btcutil.AppDataDir(filepath.Join(constants.AppName, "inscription", "logs", "index.log"), false)
+	log.InitLogRotator(logFile)
 
 	disableTls := false
 	if config.RpcConnect != "" {

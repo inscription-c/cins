@@ -20,7 +20,7 @@ type Sat uint64
 
 func (a Amount) Sat() Sat {
 	return Sat(decimal.NewFromFloat(float64(a)).
-		Mul(decimal.NewFromInt(constants.OneBtc)).IntPart())
+		Mul(decimal.NewFromInt(int64(constants.OneBtc))).IntPart())
 }
 
 func (s *Sat) Degree() *Degree {

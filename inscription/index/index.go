@@ -257,17 +257,27 @@ func (idx *Indexer) indexBlock(
 	if err != nil {
 		return err
 	}
+	cursedInscriptions, err := wtx.GetStatisticCountByName(tables.StatisticCursedInscriptions)
+	if err != nil {
+		return err
+	}
+	blessedInscriptions, err := wtx.GetStatisticCountByName(tables.StatisticBlessedInscriptions)
+	if err != nil {
+		return err
+	}
 	nextSequenceNumber, err := wtx.NextSequenceNumber()
 	if err != nil {
 		return err
 	}
 	inscriptionUpdater := &InscriptionUpdater{
-		wtx:                 wtx,
-		height:              idx.height,
-		valueCache:          valueCache,
-		nextSequenceNumber:  &nextSequenceNumber,
-		unboundInscriptions: &unboundInscriptions,
-		timestamp:           block.Header.Timestamp.UnixMilli(),
+		wtx:                     wtx,
+		idx:                     idx,
+		valueCache:              valueCache,
+		nextSequenceNumber:      &nextSequenceNumber,
+		unboundInscriptions:     &unboundInscriptions,
+		cursedInscriptionCount:  &cursedInscriptions,
+		blessedInscriptionCount: &blessedInscriptions,
+		timestamp:               block.Header.Timestamp.UnixMilli(),
 	}
 
 	if idx.opts.indexSats {

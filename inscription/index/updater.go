@@ -52,11 +52,9 @@ type InscriptionUpdater struct {
 	idx                     *Indexer
 	wtx                     *dao.DB
 	flotsam                 []*Flotsam
-	height                  uint32
 	lostSats                uint64
 	reward                  uint64
 	valueCache              map[string]int64
-	valueCh                 chan uint64
 	timestamp               int64
 	nextSequenceNumber      *uint64
 	unboundInscriptions     *uint32
@@ -95,7 +93,7 @@ func (u *InscriptionUpdater) indexEnvelopers(
 		txIn := tx.TxIn[inputIndex]
 		// is coin base
 		if IsEmptyHash(txIn.PreviousOutPoint.Hash) {
-			totalInputValue += int64(NewHeight(u.height).Subsidy())
+			totalInputValue += int64(NewHeight(u.idx.height).Subsidy())
 			continue
 		}
 
@@ -424,7 +422,7 @@ func (u *InscriptionUpdater) updateInscriptionLocation(
 			InscriptionNum:  inscriptionNumber,
 			Charms:          charms,
 			Fee:             uint64(flotsam.Origin.New.Fee),
-			Height:          u.height,
+			Height:          u.idx.height,
 			Timestamp:       u.timestamp,
 			Body:            ins.payload.Body,
 			ContentEncoding: ins.payload.ContentEncoding,

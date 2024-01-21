@@ -1,8 +1,8 @@
 package constants
 
 const (
-	OneBtc    = 1e8
-	DustLimit = 546
+	OneBtc    uint64 = 1e8
+	DustLimit        = 546
 
 	SegWitSignSize = 72
 	SegWitPkSize   = 33

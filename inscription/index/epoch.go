@@ -129,7 +129,7 @@ func NewEpochFromSat(sat Sat) *Epoch {
 	return e
 }
 
-func (e *Epoch) Subsidy() uint32 {
+func (e *Epoch) Subsidy() uint64 {
 	if e.epoch < FirstPostSubsidy.epoch {
 		return (50 * constants.OneBtc) >> e.epoch
 	}

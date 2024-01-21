@@ -84,6 +84,7 @@ import (
 
 type DB struct {
 	*gorm.DB
+	db *gorm.DB
 }
 
 type DBOptions struct {
@@ -169,7 +170,9 @@ func NewDB(opts ...DBOption) (*DB, error) {
 		opt(options)
 	}
 	if !options.noEmbedDB {
-		TIDB(options)
+		go func() {
+			TIDB(options)
+		}()
 		time.Sleep(time.Second * 3)
 	}
 
@@ -205,12 +208,12 @@ func NewDB(opts ...DBOption) (*DB, error) {
 	sqlDB.SetMaxIdleConns(50)
 
 	return &DB{
-		DB: db,
+		db: db,
 	}, nil
 }
 
 func (d *DB) Begin() *DB {
-	d.DB = d.DB.Begin()
+	d.DB = d.db.Begin()
 	return d
 }
 
@@ -426,13 +429,17 @@ func initFlagSet() *flag.FlagSet {
 
 func TIDB(options *DBOptions) {
 	fset := initFlagSet()
-	fset.String(nmStorePath, options.dataDir, "storage path")
-	fset.String(nmSocket, filepath.Join(options.dataDir, "db.sock"), "storage sock path")
-	fset.String(nmStatusPort, options.serverStatusPort, "storage status port")
-	fset.String(nmPort, options.serverPort, "storage server port")
+	err := fset.Set(nmStorePath, options.dataDir)
+	terror.MustNil(err)
+	err = fset.Set(nmSocket, filepath.Join(options.dataDir, "db.sock"))
+	terror.MustNil(err)
+	err = fset.Set(nmStatusPort, options.serverStatusPort)
+	terror.MustNil(err)
+	err = fset.Set(nmPort, options.serverPort)
+	terror.MustNil(err)
 	config.InitializeConfig(*configPath, *configCheck, *configStrict, overrideConfig, fset)
 	registerStores()
-	err := metricsutil.RegisterMetrics()
+	err = metricsutil.RegisterMetrics()
 	terror.MustNil(err)
 
 	if variable.EnableTmpStorageOnOOM.Load() {

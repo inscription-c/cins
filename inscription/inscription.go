@@ -467,7 +467,7 @@ func (i *Inscription) BuildCommitTx() error {
 			Index: v.Vout,
 		}, script, nil)
 		commitTx.AddTxIn(txIn)
-		inTotal += decimal.NewFromFloat(v.Amount).Mul(decimal.NewFromInt(constants.OneBtc)).IntPart()
+		inTotal += decimal.NewFromFloat(v.Amount).Mul(decimal.NewFromInt(int64(constants.OneBtc))).IntPart()
 	}
 	// input end
 
@@ -846,10 +846,11 @@ func (i *Inscription) getUtxo() error {
 	}
 
 	// Get wallet inscriptions UTXOs
-	walletInscriptions, err := i.options.index.GetInscriptionByOutPoints(utoxTotal)
-	if err != nil {
-		return err
-	}
+	//walletInscriptions, err := i.options.index.GetInscriptionByOutPoints(utoxTotal)
+	//if err != nil {
+	//	return err
+	//}
+	walletInscriptions := make(map[string]string)
 
 	// Filter out UTXOs that are already used in inscriptions
 	utxo := make([]btcjson.ListUnspentResult, 0)
