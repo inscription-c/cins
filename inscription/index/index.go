@@ -93,69 +93,74 @@ func (idx *Indexer) UpdateIndex() error {
 	}
 
 	for {
-		// latest block height
-		startingHeight, err := idx.opts.cli.GetBlockCount()
-		if err != nil {
-			return err
-		}
-		blocks, err := idx.fetchBlockFrom(idx.height, uint32(startingHeight))
-		if err != nil {
-			return err
-		}
-		if len(blocks) == 0 {
-			time.Sleep(time.Second * 5)
-			continue
-		}
-
-		if err := idx.DB().Transaction(func(wtx *dao.DB) error {
-			valueCache := make(map[string]int64)
-			for _, block := range blocks {
-				if err = idx.indexBlock(wtx, block, valueCache); err != nil {
-					return err
-				}
+		select {
+		case <-signal.InterruptChannel:
+			return ErrInterrupted
+		default:
+			// latest block height
+			startingHeight, err := idx.opts.cli.GetBlockCount()
+			if err != nil {
+				return err
+			}
+			blocks, err := idx.fetchBlockFrom(idx.height, uint32(startingHeight))
+			if err != nil {
+				return err
+			}
+			if len(blocks) == 0 {
+				time.Sleep(time.Second * 5)
+				continue
 			}
 
-			log.Srv.Infof(
-				"Committing at block %d, %d outputs traversed, %d in map, %d cached",
-				idx.height-1, idx.outputsTraversed, len(valueCache), idx.outputsCached,
-			)
-
-			if idx.opts.indexSats {
-				log.Srv.Infof(
-					"Flushing %d entries (%.1f%% resulting from %d insertions) from memory to database",
-					len(idx.rangeCache),
-					float64(len(idx.rangeCache))/float64(idx.outputsInsertedSinceFlush)*100,
-					idx.outputsInsertedSinceFlush,
-				)
-
-				for outpoint, satRange := range idx.rangeCache {
-					if err := wtx.SetOutpointToSatRange(outpoint, satRange); err != nil {
+			if err := idx.DB().Transaction(func(wtx *dao.DB) error {
+				valueCache := make(map[string]int64)
+				for _, block := range blocks {
+					if err = idx.indexBlock(wtx, block, valueCache); err != nil {
 						return err
 					}
 				}
-				idx.outputsInsertedSinceFlush = 0
-			}
 
-			for outpoint, value := range valueCache {
-				if err := wtx.SetOutpointToValue(outpoint, value); err != nil {
+				log.Srv.Infof(
+					"Committing at block %d, %d outputs traversed, %d in map, %d cached",
+					idx.height-1, idx.outputsTraversed, len(valueCache), idx.outputsCached,
+				)
+
+				if idx.opts.indexSats {
+					log.Srv.Infof(
+						"Flushing %d entries (%.1f%% resulting from %d insertions) from memory to database",
+						len(idx.rangeCache),
+						float64(len(idx.rangeCache))/float64(idx.outputsInsertedSinceFlush)*100,
+						idx.outputsInsertedSinceFlush,
+					)
+
+					for outpoint, satRange := range idx.rangeCache {
+						if err := wtx.SetOutpointToSatRange(outpoint, satRange); err != nil {
+							return err
+						}
+					}
+					idx.outputsInsertedSinceFlush = 0
+				}
+
+				for outpoint, value := range valueCache {
+					if err := wtx.SetOutpointToValue(outpoint, value); err != nil {
+						return err
+					}
+				}
+
+				if err := wtx.IncrementStatistic(tables.StatisticOutputsTraversed, idx.outputsTraversed); err != nil {
 					return err
 				}
-			}
-
-			if err := wtx.IncrementStatistic(tables.StatisticOutputsTraversed, idx.outputsTraversed); err != nil {
+				idx.outputsTraversed = 0
+				if err := wtx.IncrementStatistic(tables.StatisticSatRanges, idx.satRangesSinceFlush); err != nil {
+					return err
+				}
+				idx.satRangesSinceFlush = 0
+				if err := wtx.IncrementStatistic(tables.StatisticCommits, 1); err != nil {
+					return err
+				}
+				return nil
+			}); err != nil {
 				return err
 			}
-			idx.outputsTraversed = 0
-			if err := wtx.IncrementStatistic(tables.StatisticSatRanges, idx.satRangesSinceFlush); err != nil {
-				return err
-			}
-			idx.satRangesSinceFlush = 0
-			if err := wtx.IncrementStatistic(tables.StatisticCommits, 1); err != nil {
-				return err
-			}
-			return nil
-		}); err != nil {
-			return err
 		}
 	}
 }

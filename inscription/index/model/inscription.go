@@ -11,11 +11,11 @@ import (
 
 type Inscription struct {
 	Body            []byte
-	ContentEncoding string
-	ContentType     constants.ContentType
-	DstChain        string
+	ContentEncoding []byte
+	ContentType     []byte
+	DstChain        []byte
 	Metadata        []byte
-	Pointer         int32
+	Pointer         []byte
 
 	UnRecognizedEvenField bool
 	DuplicateField        bool

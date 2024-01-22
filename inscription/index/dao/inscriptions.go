@@ -17,11 +17,10 @@ func (d *DB) NextSequenceNumber() (num uint64, err error) {
 	if err = d.DB.Last(&ins).Error; err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			err = nil
-			num = 1
 		}
-		return 0, err
+		return
 	}
-	return ins.Id + 1, nil
+	return ins.SequenceNum + 1, nil
 }
 
 func (d *DB) GetInscriptionById(inscriptionId string) (ins tables.Inscriptions, err error) {
@@ -38,7 +37,7 @@ func (d *DB) DeleteInscriptionById(inscriptionId string) (sequenceNum uint64, er
 	if err != nil {
 		return
 	}
-	sequenceNum = ins.Id
+	sequenceNum = ins.SequenceNum
 	return
 }
 

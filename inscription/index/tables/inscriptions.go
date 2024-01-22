@@ -8,6 +8,7 @@ type Inscriptions struct {
 	Id             uint64 `gorm:"column:id;primary_key;AUTO_INCREMENT;NOT NULL"` // this is sequence_num
 	Outpoint       string `gorm:"column:outpoint;type:varchar(255);index:idx_outpoint;default:;NOT NULL"`
 	Offset         uint32 `gorm:"column:offset;type:int unsigned;default:0;NOT NULL"`
+	SequenceNum    uint64 `gorm:"column:sequence_num;type:bigint unsigned;index:idx_sequence_num;default:0;NOT NULL"`
 	InscriptionNum int64  `gorm:"column:inscription_num;type:bigint;index:idx_inscription_num;default:0;NOT NULL"`
 
 	Charms    uint16 `gorm:"column:charms;type:tinyint unsigned;default:0;NOT NULL"`

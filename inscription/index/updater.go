@@ -5,12 +5,15 @@ import (
 	"fmt"
 	"github.com/btcsuite/btcd/rpcclient"
 	"github.com/btcsuite/btcd/wire"
+	"github.com/gogf/gf/v2/util/gconv"
 	"github.com/inscription-c/insc/inscription/index/dao"
 	"github.com/inscription-c/insc/inscription/index/model"
 	"github.com/inscription-c/insc/inscription/index/tables"
+	"github.com/inscription-c/insc/internal/signal"
 	"golang.org/x/sync/errgroup"
 	"gorm.io/gorm"
 	"sort"
+	"sync/atomic"
 )
 
 var ErrInterrupted = errors.New("interrupted")
@@ -87,7 +90,7 @@ func (u *InscriptionUpdater) indexEnvelopers(
 	floatingInscriptions := make([]*Flotsam, 0)
 	inscribedOffsets := make(map[uint64]*inscribedOffsetEntity)
 
-	envelopes := ParsedEnvelopeFromTransaction(tx)
+	envelopes := ParsedEnvelopFromTransaction(tx)
 	//inscriptions := len(envelopes) > 0
 
 	totalOutputValue := int64(0)
@@ -95,97 +98,9 @@ func (u *InscriptionUpdater) indexEnvelopers(
 		totalOutputValue += v.Value
 	}
 
-	latestOutpoint := ""
-	needFetchOutpoints := make([]string, 0)
-	needFetchOutpointsMap := make(map[string]string)
-
-	for inputIndex := range tx.TxIn {
-		txIn := tx.TxIn[inputIndex]
-		if IsEmptyHash(txIn.PreviousOutPoint.Hash) {
-			totalInputValue += int64(NewHeight(u.idx.height).Subsidy())
-			continue
-		}
-
-		if _, ok := u.valueCache[txIn.PreviousOutPoint.String()]; ok {
-			continue
-		}
-
-		_, err := u.wtx.GetValueByOutpoint(txIn.PreviousOutPoint.String())
-		if err != nil && !errors.Is(err, gorm.ErrRecordNotFound) {
-			return err
-		}
-		if errors.Is(err, gorm.ErrRecordNotFound) {
-			preOutpoint := txIn.PreviousOutPoint.String()
-			needFetchOutpoints = append(needFetchOutpoints, preOutpoint)
-			if latestOutpoint != "" {
-				needFetchOutpointsMap[preOutpoint] = latestOutpoint
-			} else {
-				needFetchOutpointsMap[preOutpoint] = ""
-			}
-			latestOutpoint = preOutpoint
-		}
-	}
-
-	var errCh chan error
-	var valueCh chan int64
-
-	if len(needFetchOutpoints) > 0 {
-		currentNum := len(needFetchOutpoints)/2 + 1
-		if currentNum > 32 {
-			currentNum = 32
-		}
-		errCh = make(chan error)
-		valueCh = make(chan int64, currentNum)
-
-		errWg := &errgroup.Group{}
-		errWg.Go(func() error {
-			batchResult := make([]rpcclient.FutureGetRawTransactionResult, 0)
-			for i := 0; i < len(needFetchOutpoints); i++ {
-				outpoint, err := wire.NewOutPointFromString(needFetchOutpoints[i])
-				if err != nil {
-					return err
-				}
-				res := u.idx.BatchRpcClient().GetRawTransactionAsync(&outpoint.Hash)
-				batchResult = append(batchResult, res)
-				if i > 0 && i%currentNum == 0 {
-					if err := u.idx.BatchRpcClient().Send(); err != nil {
-						return err
-					}
-					for _, v := range batchResult {
-						tx, err := v.Receive()
-						if err != nil {
-							return err
-						}
-						for _, txOut := range tx.MsgTx().TxOut {
-							valueCh <- txOut.Value
-						}
-					}
-					batchResult = make([]rpcclient.FutureGetRawTransactionResult, 0)
-				}
-			}
-
-			if len(batchResult) > 0 {
-				if err := u.idx.BatchRpcClient().Send(); err != nil {
-					return err
-				}
-				for _, v := range batchResult {
-					tx, err := v.Receive()
-					if err != nil {
-						return err
-					}
-					for _, txOut := range tx.MsgTx().TxOut {
-						valueCh <- txOut.Value
-					}
-				}
-			}
-			return nil
-		})
-
-		go func() {
-			if err := errWg.Wait(); err != nil {
-				errCh <- err
-			}
-		}()
+	valueCh, errCh, err := u.fetchOutputValues(tx)
+	if err != nil {
+		return err
 	}
 
 	for inputIndex := range tx.TxIn {
@@ -275,7 +190,7 @@ func (u *InscriptionUpdater) indexEnvelopers(
 				curse = CurseNotInFirstInput
 			} else if inscription.offset != 0 {
 				curse = CurseNotAtOffsetZero
-			} else if inscription.payload.Pointer >= 0 {
+			} else if len(inscription.payload.Pointer) > 0 {
 				curse = CursePointer
 			} else if inscription.pushNum {
 				curse = CursePushNum
@@ -305,9 +220,9 @@ func (u *InscriptionUpdater) indexEnvelopers(
 				curse == CurseUnrecognizedEvenField ||
 				inscription.payload.UnRecognizedEvenField
 
-			pointer := int64(inscription.payload.Pointer)
+			pointer := gconv.Int64(string(inscription.payload.Pointer))
 			if pointer > 0 && pointer < totalOutputValue {
-				offset = uint64(inscription.payload.Pointer)
+				offset = uint64(pointer)
 			}
 			_, reInscription := inscribedOffsets[offset]
 
@@ -319,7 +234,7 @@ func (u *InscriptionUpdater) indexEnvelopers(
 						Cursed:        curse > 0,
 						Fee:           0,
 						Hidden:        false,
-						Pointer:       inscription.payload.Pointer,
+						Pointer:       int32(pointer),
 						ReInscription: reInscription,
 						Unbound:       unbound,
 						Inscription:   inscription,
@@ -461,17 +376,23 @@ func (u *InscriptionUpdater) updateInscriptionLocation(
 
 		if flotsam.Origin.New.Cursed {
 			number := *u.cursedInscriptionCount
-			*u.cursedInscriptionCount++
+			if !atomic.CompareAndSwapUint32(u.cursedInscriptionCount, number, number+1) {
+				return errors.New("cursedInscriptionCount compare and swap failed")
+			}
 			// because cursed numbers start at -1
 			inscriptionNumber = -(int64(number) + 1)
 		} else {
 			number := *u.blessedInscriptionCount
-			*u.blessedInscriptionCount++
-			inscriptionNumber = int64(number)
+			if !atomic.CompareAndSwapUint32(u.blessedInscriptionCount, number, number+1) {
+				return errors.New("blessedInscriptionCount compare and swap failed")
+			}
+			inscriptionNumber = int64(number) + 1
 		}
-
 		sequenceNumber = *u.nextSequenceNumber
-		*u.nextSequenceNumber++
+		if !atomic.CompareAndSwapUint64(u.nextSequenceNumber, sequenceNumber, sequenceNumber+1) {
+			return errors.New("nextSequenceNumber compare and swap failed")
+		}
+		sequenceNumber++
 
 		var sat *Sat
 		if !unbound {
@@ -525,17 +446,18 @@ func (u *InscriptionUpdater) updateInscriptionLocation(
 		ins := flotsam.Origin.New.Inscription
 		entry := &tables.Inscriptions{
 			Outpoint:        inscriptionId.OutPoint.String(),
+			SequenceNum:     sequenceNumber,
 			InscriptionNum:  inscriptionNumber,
 			Charms:          charms,
 			Fee:             uint64(flotsam.Origin.New.Fee),
 			Height:          u.idx.height,
 			Timestamp:       u.timestamp,
 			Body:            ins.payload.Body,
-			ContentEncoding: ins.payload.ContentEncoding,
+			ContentEncoding: string(ins.payload.ContentEncoding),
 			ContentType:     string(ins.payload.ContentType),
-			DstChain:        ins.payload.DstChain,
+			DstChain:        string(ins.payload.DstChain),
 			Metadata:        ins.payload.Metadata,
-			Pointer:         ins.payload.Pointer,
+			Pointer:         gconv.Int32(string(ins.payload.Pointer)),
 		}
 		if sat != nil {
 			entry.Sat = uint64(*sat)
@@ -543,9 +465,6 @@ func (u *InscriptionUpdater) updateInscriptionLocation(
 		}
 		if err := u.wtx.CreateInscription(entry); err != nil {
 			return err
-		}
-		if entry.Id != sequenceNumber {
-			return fmt.Errorf("sequence number mismatch")
 		}
 	}
 
@@ -576,4 +495,107 @@ func (u *InscriptionUpdater) calculateSat(
 		offset += size
 	}
 	return nil
+}
+
+func (u *InscriptionUpdater) fetchOutputValues(tx *wire.MsgTx) (valueCh chan int64, errCh chan error, err error) {
+	latestOutpoint := ""
+	needFetchOutpoints := make([]string, 0)
+	needFetchOutpointsMap := make(map[string]string)
+
+	for inputIndex := range tx.TxIn {
+		txIn := tx.TxIn[inputIndex]
+		if IsEmptyHash(txIn.PreviousOutPoint.Hash) {
+			continue
+		}
+		if _, ok := u.valueCache[txIn.PreviousOutPoint.String()]; ok {
+			continue
+		}
+		_, err = u.wtx.GetValueByOutpoint(txIn.PreviousOutPoint.String())
+		if err != nil && !errors.Is(err, gorm.ErrRecordNotFound) {
+			return
+		}
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			err = nil
+			preOutpoint := txIn.PreviousOutPoint.String()
+			needFetchOutpoints = append(needFetchOutpoints, preOutpoint)
+			if latestOutpoint != "" {
+				needFetchOutpointsMap[preOutpoint] = latestOutpoint
+			} else {
+				needFetchOutpointsMap[preOutpoint] = ""
+			}
+			latestOutpoint = preOutpoint
+		}
+	}
+
+	if len(needFetchOutpoints) > 0 {
+		currentNum := len(needFetchOutpoints)/2 + 1
+		if currentNum > 32 {
+			currentNum = 32
+		}
+		valueCh = make(chan int64, currentNum)
+
+		errWg := &errgroup.Group{}
+		errWg.Go(func() error {
+			batchResult := make([]rpcclient.FutureGetRawTransactionResult, 0)
+			for i := 1; i <= len(needFetchOutpoints); i++ {
+				select {
+				case <-signal.InterruptChannel:
+					return ErrInterrupted
+				default:
+					outpoint, err := wire.NewOutPointFromString(needFetchOutpoints[i-1])
+					if err != nil {
+						return err
+					}
+					res := u.idx.BatchRpcClient().GetRawTransactionAsync(&outpoint.Hash)
+					batchResult = append(batchResult, res)
+					if i%currentNum == 0 {
+						if err := u.idx.BatchRpcClient().Send(); err != nil {
+							return err
+						}
+						for idx, v := range batchResult {
+							tx, err := v.Receive()
+							if err != nil {
+								return err
+							}
+							outpointStr := needFetchOutpoints[i-currentNum+idx]
+							outpoint, err := wire.NewOutPointFromString(outpointStr)
+							if err != nil {
+								return err
+							}
+							valueCh <- tx.MsgTx().TxOut[outpoint.Index].Value
+						}
+						batchResult = make([]rpcclient.FutureGetRawTransactionResult, 0)
+					}
+				}
+			}
+
+			if len(batchResult) > 0 {
+				if err := u.idx.BatchRpcClient().Send(); err != nil {
+					return err
+				}
+				for idx, v := range batchResult {
+					tx, err := v.Receive()
+					if err != nil {
+						return err
+					}
+					outpointStr := needFetchOutpoints[len(needFetchOutpoints)-len(batchResult)+idx]
+					outpoint, err := wire.NewOutPointFromString(outpointStr)
+					if err != nil {
+						return err
+					}
+					valueCh <- tx.MsgTx().TxOut[outpoint.Index].Value
+				}
+			}
+			close(valueCh)
+			return nil
+		})
+
+		errCh = make(chan error)
+		go func() {
+			if err := errWg.Wait(); err != nil {
+				errCh <- err
+			}
+		}()
+	}
+	return
 }

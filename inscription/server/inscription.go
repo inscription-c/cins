@@ -5,6 +5,7 @@ import (
 	"github.com/btcsuite/btcd/rpcclient"
 	"github.com/inscription-c/insc/inscription/index"
 	"github.com/inscription-c/insc/inscription/log"
+	"github.com/inscription-c/insc/internal/signal"
 	"time"
 )
 
@@ -64,7 +65,7 @@ func (r *Runner) Start() {
 				if errors.Is(err, index.ErrInterrupted) {
 					return
 				}
-			case <-r.exist:
+			case <-signal.InterruptChannel:
 				return
 			}
 		}
@@ -72,5 +73,4 @@ func (r *Runner) Start() {
 }
 
 func (r *Runner) Stop() {
-	close(r.exist)
 }
