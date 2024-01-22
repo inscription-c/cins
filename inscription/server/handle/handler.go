@@ -81,6 +81,11 @@ func (h *Handler) RpcClient() *rpcclient.Client {
 	return h.options.cli
 }
 
+// Engine is a method that returns the gin engine from the options of a Handler.
+func (h *Handler) Engine() *gin.Engine {
+	return h.options.engin
+}
+
 // GetChainParams is a method that returns the chain parameters based on the testnet option of a Handler.
 // If the testnet option is set to true, it returns the TestNet3Params. Otherwise, it returns the MainNetParams.
 func (h *Handler) GetChainParams() *chaincfg.Params {
