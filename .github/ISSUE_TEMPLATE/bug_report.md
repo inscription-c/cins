@@ -1,38 +1,38 @@
 ---
 name: Bug report
-about: Create a report to help us improve
-title: ''
-labels: ''
+about: Create a report to help us fix bugs
+title: "[BUG] name the bug"
+labels: bug
 assignees: ''
 
 ---
 
-**Describe the bug**
+## Description
 A clear and concise description of what the bug is.
 
-**To Reproduce**
-Steps to reproduce the behavior:
-1. Go to '...'
-2. Click on '....'
-3. Scroll down to '....'
-4. See error
+## To Reproduce
 
-**Expected behavior**
+> WARNING! Please remove all sensitive data before submitting!
+
+Steps to reproduce the behavior.
+- step 1
+- step 2
+- step 3
+
+## Expected behavior
 A clear and concise description of what you expected to happen.
 
-**Screenshots**
+## Screenshots
+
+> WARNING! Please remove all sensitive data before submitting!
+
 If applicable, add screenshots to help explain your problem.
 
-**Desktop (please complete the following information):**
- - OS: [e.g. iOS]
- - Browser [e.g. chrome, safari]
- - Version [e.g. 22]
+## INS-C node version
+Both git tags and commit hashes are acceptable.
 
-**Smartphone (please complete the following information):**
- - Device: [e.g. iPhone6]
- - OS: [e.g. iOS8.1]
- - Browser [e.g. stock browser, safari]
- - Version [e.g. 22]
+v1.0.0 or ga1b2c3d
 
-**Additional context**
+## Additional context
 Add any other context about the problem here.
+- OS: [e.g. Ubuntu 18.04]
