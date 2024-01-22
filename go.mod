@@ -35,7 +35,7 @@ require (
 	github.com/shopspring/decimal v1.3.1
 	github.com/spf13/cobra v1.7.0
 	github.com/tikv/client-go/v2 v2.0.8-0.20231227070846-61c486af13a5
-	github.com/tikv/pd/client v0.0.0-20240122035848-6929c15e3793
+	github.com/tikv/pd/client v0.0.0-20240109100024-dd8df25316e9
 	github.com/ugorji/go/codec v1.2.12
 	go.uber.org/automaxprocs v1.5.3
 	go.uber.org/zap v1.26.0
