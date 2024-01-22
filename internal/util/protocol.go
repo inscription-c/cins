@@ -1,4 +1,4 @@
-package inscription
+package util
 
 import (
 	"bytes"
@@ -10,6 +10,7 @@ import (
 type Protocol interface {
 	Name() string
 	Check() error
+	Reset([]byte)
 	Len() int
 	Chunks(size uint64) ([]byte, error)
 }

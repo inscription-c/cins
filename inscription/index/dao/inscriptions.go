@@ -44,3 +44,11 @@ func (d *DB) DeleteInscriptionById(inscriptionId string) (sequenceNum uint64, er
 func (d *DB) CreateInscription(ins *tables.Inscriptions) error {
 	return d.DB.Create(ins).Error
 }
+
+func (d *DB) GetInscriptionBySequenceNum(sequenceNum uint64) (ins tables.Inscriptions, err error) {
+	err = d.DB.Where("sequence_num = ?", sequenceNum).First(&ins).Error
+	if errors.Is(err, gorm.ErrRecordNotFound) {
+		err = nil
+	}
+	return
+}

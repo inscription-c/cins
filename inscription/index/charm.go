@@ -4,6 +4,39 @@ package index
 // Charm is a type that represents a charm in the blockchain.
 type Charm uint16
 
+type Charms []Charm
+
+// CharmsAll is a slice of Charm.
+var CharmsAll = Charms{
+	CharmCoin,
+	CharmCursed,
+	CharmEpic,
+	CharmLegendary,
+	CharmLost,
+	CharmNineBall,
+	CharmRare,
+	CharmReInscription,
+	CharmUnbound,
+	CharmUncommon,
+	CharmVindicated,
+}
+
+// Titles is a method that generates a list of titles for a given set of charms.
+// It takes an uint16 representing a set of charms as a parameter.
+// The method iterates over the Charms slice and checks if each charm is set in the given set of charms.
+// If a charm is set, its title is appended to the list of titles.
+// The method returns a slice of strings representing the titles of the set charms.
+func (cs Charms) Titles(charms uint16) []string {
+	titles := make([]string, 0, len(cs)) // Initialize a slice of strings to hold the titles
+	for _, c := range cs {
+		if !c.IsSet(charms) {
+			continue
+		}
+		titles = append(titles, c.Title())
+	}
+	return titles
+}
+
 // Define various types of charms as constants of type Charm.
 var (
 	CharmCoin          Charm = 0  // Represents a coin charm
@@ -32,4 +65,65 @@ func (c *Charm) Set(charms *uint16) {
 // If the bit is set, it returns true. Otherwise, it returns false.
 func (c *Charm) IsSet(charms uint16) bool {
 	return charms&uint16(*c) != 0 // Check if the bit at the position of the charm in the set of charms is set
+}
+
+// Icon is a method that returns the corresponding icon for a charm.
+// It uses a switch statement to determine the charm type and returns a string representing the icon.
+// If the charm type is not recognized, it returns an empty string.
+func (c *Charm) Icon() string {
+	switch *c {
+	case CharmCoin:
+		return "🪙"
+	case CharmCursed:
+		return "👹"
+	case CharmEpic:
+		return "\U0001FABB"
+	case CharmLegendary:
+		return "🌝"
+	case CharmLost:
+		return "🤔"
+	case CharmNineBall:
+		return "9️⃣"
+	case CharmRare:
+		return "🧿"
+	case CharmReInscription:
+		return "♻️"
+	case CharmUnbound:
+		return "🔓"
+	case CharmUncommon:
+		return "🌱"
+	case CharmVindicated:
+		return "️‍❤️‍🔥"
+	}
+	return ""
+}
+
+// Title is a method that returns the titles of all charms in the Charms slice.
+// It returns a slice of strings.
+func (c *Charm) Title() string {
+	switch *c {
+	case CharmCoin:
+		return "coin"
+	case CharmCursed:
+		return "cursed"
+	case CharmEpic:
+		return "epic"
+	case CharmLegendary:
+		return "legendary"
+	case CharmLost:
+		return "lost"
+	case CharmNineBall:
+		return "nineball"
+	case CharmRare:
+		return "rare"
+	case CharmReInscription:
+		return "reinscription"
+	case CharmUnbound:
+		return "unbound"
+	case CharmUncommon:
+		return "uncommon"
+	case CharmVindicated:
+		return "vindicated"
+	}
+	return ""
 }

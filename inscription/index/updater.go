@@ -10,6 +10,7 @@ import (
 	"github.com/inscription-c/insc/inscription/index/model"
 	"github.com/inscription-c/insc/inscription/index/tables"
 	"github.com/inscription-c/insc/internal/signal"
+	"github.com/inscription-c/insc/internal/util"
 	"golang.org/x/sync/errgroup"
 	"gorm.io/gorm"
 	"sort"
@@ -174,7 +175,7 @@ func (u *InscriptionUpdater) indexEnvelopers(
 
 		// Check if the input is a coinbase transaction.
 		// If it is, add the subsidy for the current block height to the total input value and skip to the next iteration.
-		if IsEmptyHash(txIn.PreviousOutPoint.Hash) {
+		if util.IsEmptyHash(txIn.PreviousOutPoint.Hash) {
 			totalInputValue += int64(NewHeight(u.idx.height).Subsidy())
 			continue
 		}
@@ -363,7 +364,7 @@ func (u *InscriptionUpdater) indexEnvelopers(
 	// Check if the transaction is a coinbase transaction.
 	// A coinbase transaction is a unique type of bitcoin transaction that can only be created by a miner.
 	// This is done by checking if the hash of the previous outpoint of the first input in the transaction is empty.
-	isCoinBase := IsEmptyHash(tx.TxIn[0].PreviousOutPoint.Hash)
+	isCoinBase := util.IsEmptyHash(tx.TxIn[0].PreviousOutPoint.Hash)
 
 	// If the transaction is a coinbase transaction, append all the floating inscriptions from the updater to the current floating inscriptions.
 	// Floating inscriptions are inscriptions that are not yet bound to a specific location in the blockchain.
@@ -579,7 +580,7 @@ func (u *InscriptionUpdater) updateInscriptionLocation(
 		}
 
 		// If the new Satpoint is empty, set the lost charm.
-		if IsEmptyHash(newSatpoint.Outpoint.Hash) {
+		if util.IsEmptyHash(newSatpoint.Outpoint.Hash) {
 			CharmLost.Set(&charms)
 		}
 
@@ -692,7 +693,7 @@ func (u *InscriptionUpdater) fetchOutputValues(tx *wire.MsgTx, maxCurrentNum int
 		txIn := tx.TxIn[inputIndex]
 
 		// If the input is a coinbase, skip it.
-		if IsEmptyHash(txIn.PreviousOutPoint.Hash) {
+		if util.IsEmptyHash(txIn.PreviousOutPoint.Hash) {
 			continue
 		}
 
@@ -704,7 +705,7 @@ func (u *InscriptionUpdater) fetchOutputValues(tx *wire.MsgTx, maxCurrentNum int
 		// Try to get the value of the input from the database.
 		_, err = u.wtx.GetValueByOutpoint(txIn.PreviousOutPoint.String())
 
-		// If the value is not found in the database, add the outpoint to the list of outpoints that need to be fetched.
+		// If the value is not found in the database, add to outpoint to the list of outpoints that need to be fetched.
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			err = nil
 			preOutpoint := txIn.PreviousOutPoint.String()
@@ -748,13 +749,13 @@ func (u *InscriptionUpdater) fetchOutputValues(tx *wire.MsgTx, maxCurrentNum int
 				case <-signal.InterruptChannel:
 					return signal.ErrInterrupted
 				default:
-					// Parse the outpoint from the string.
+					// Parse to outpoint from the string.
 					outpoint, err := wire.NewOutPointFromString(needFetchOutpoints[i-1])
 					if err != nil {
 						return err
 					}
 
-					// Start an asynchronous fetch operation for the outpoint.
+					// Start an asynchronous fetch operation for to outpoint.
 					res := u.idx.BatchRpcClient().GetRawTransactionAsync(&outpoint.Hash)
 					batchResult = append(batchResult, res)
 

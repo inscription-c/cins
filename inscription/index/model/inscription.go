@@ -31,7 +31,7 @@ func (i *InscriptionId) String() string {
 }
 
 func StringToInscriptionId(s string) *InscriptionId {
-	s = strings.ToLower(s)
+	s = strings.ToLower(strings.TrimSpace(s))
 	if !constants.InscriptionIdRegexp.MatchString(s) {
 		return nil
 	}

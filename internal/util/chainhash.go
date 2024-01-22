@@ -1,4 +1,4 @@
-package index
+package util
 
 import (
 	"github.com/btcsuite/btcd/chaincfg/chainhash"

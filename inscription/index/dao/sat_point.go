@@ -93,3 +93,11 @@ func (d *DB) InscriptionsByOutpoint(outpoint string) (res []*Inscription, err er
 	}
 	return
 }
+
+func (d *DB) GetSatPointBySat(sat uint64) (res tables.SatSatPoint, err error) {
+	err = d.DB.Where("sat = ?", sat).First(&res).Error
+	if errors.Is(err, gorm.ErrRecordNotFound) {
+		err = nil
+	}
+	return
+}

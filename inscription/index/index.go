@@ -264,7 +264,7 @@ func (idx *Indexer) indexBlock(
 		unboundInscriptions:     &unboundInscriptions,
 		cursedInscriptionCount:  &cursedInscriptions,
 		blessedInscriptionCount: &blessedInscriptions,
-		timestamp:               block.Header.Timestamp.UnixMilli(),
+		timestamp:               block.Header.Timestamp.Unix(),
 	}
 
 	if idx.opts.indexSats {

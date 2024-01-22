@@ -24,6 +24,7 @@ import (
 	"github.com/inscription-c/insc/inscription/index/dao"
 	"github.com/inscription-c/insc/inscription/index/model"
 	"github.com/inscription-c/insc/inscription/log"
+	"github.com/inscription-c/insc/internal/util"
 	"github.com/shopspring/decimal"
 	"github.com/ugorji/go/codec"
 	"io"
@@ -49,7 +50,7 @@ type Inscription struct {
 	Header Header
 
 	// Body is the protocol of the body of the inscription.
-	Body Protocol
+	Body util.Protocol
 
 	// options are the options for the inscription.
 	options *options
@@ -110,7 +111,7 @@ type Header struct {
 	Pointer string `json:"pointer"`
 
 	// Metadata is the metadata of the inscription.
-	Metadata Reader `json:"metadata"`
+	Metadata *util.Reader `json:"metadata"`
 }
 
 // options is a struct that represents the options for an inscription.
@@ -196,6 +197,9 @@ func WithWalletClient(cli *rpcclient.Client) func(*options) {
 	}
 }
 
+// WithDB is a function that sets the database option for an Inscription.
+// It takes a pointer to a dao.DB representing the database and returns a function that sets
+// the database in the options of an Inscription.
 func WithDB(db *dao.DB) Option {
 	return func(o *options) {
 		o.db = db
@@ -248,6 +252,7 @@ func NewFromPath(path string, inputOpts ...Option) (*Inscription, error) {
 	inscription := &Inscription{
 		Header: Header{
 			DstChain: opts.dstChain,
+			Metadata: &util.Reader{},
 		},
 		options: opts,
 	}
@@ -262,7 +267,7 @@ func NewFromPath(path string, inputOpts ...Option) (*Inscription, error) {
 	}
 
 	// Determine the content type of the file at the provided path
-	media, err := ContentTypeForPath(path)
+	media, err := util.ContentTypeForPath(path)
 	if err != nil {
 		return nil, err
 	}
@@ -307,23 +312,14 @@ func NewFromPath(path string, inputOpts ...Option) (*Inscription, error) {
 	inscription.Header.ContentEncoding = contentEncoding
 
 	// Initialize the body protocol of the Inscription
-	var incBody Protocol
+	var incBody util.Protocol
 	if brc20c {
-		incBody = &BRC20C{
-			DefaultProtocol: DefaultProtocol{
-				Reader{
-					data: body,
-				},
-			},
-		}
+		incBody = &util.BRC20C{}
+	} else {
+		incBody = &util.DefaultProtocol{}
 	}
-	if incBody == nil {
-		incBody = &DefaultProtocol{
-			Reader{
-				data: body,
-			},
-		}
-	}
+	incBody.Reset(body)
+
 	// Set the body protocol of the Inscription
 	inscription.Body = incBody
 	return inscription, nil
@@ -350,7 +346,7 @@ func (i *Inscription) parseCborMetadata(cborMetadata string) error {
 	if err := codec.NewDecoderBytes(data, &codec.CborHandle{}).Decode(&metadata); err != nil {
 		return err
 	}
-	i.Header.Metadata.data = data
+	i.Header.Metadata.Reset(data)
 	return nil
 }
 
@@ -370,7 +366,7 @@ func (i *Inscription) parseJsonMetadata(jsonMetadata string) error {
 	if err := json.Unmarshal(data, &metadata); err != nil {
 		return err
 	}
-	i.Header.Metadata.data = data
+	i.Header.Metadata.Reset(data)
 	return nil
 }
 
@@ -449,7 +445,7 @@ func (i *Inscription) BuildCommitTx() error {
 
 	// input begin
 	for _, v := range i.utxo {
-		script, err := addressScript(v.Address)
+		script, err := util.AddressScript(v.Address, getNetParams())
 		if err != nil {
 			return err
 		}
@@ -467,7 +463,7 @@ func (i *Inscription) BuildCommitTx() error {
 	// input end
 
 	// output begin
-	recipientScript, err := addressScript(i.revealTxAddress.String())
+	recipientScript, err := util.AddressScript(i.revealTxAddress.String(), getNetParams())
 	if err != nil {
 		return err
 	}
@@ -486,7 +482,7 @@ func (i *Inscription) BuildCommitTx() error {
 	if err != nil {
 		return err
 	}
-	changeScript, err := addressScript(commitTxChangeAddr.String())
+	changeScript, err := util.AddressScript(commitTxChangeAddr.String(), getNetParams())
 	if err != nil {
 		return err
 	}
@@ -557,7 +553,7 @@ func (i *Inscription) BuildRevealTx() error {
 	}
 
 	// Create the transaction output
-	destAddrScript, err := addressScript(strings.TrimSpace(destination))
+	destAddrScript, err := util.AddressScript(strings.TrimSpace(destination), getNetParams())
 	if err != nil {
 		return err
 	}
@@ -646,7 +642,7 @@ func (i *Inscription) SignCommitTx() error {
 		wif := priKeyMap[outpoint.String()]
 
 		// It converts the address of the UTXO to a script.
-		pkScript, err := addressScript(utxo.Address)
+		pkScript, err := util.AddressScript(utxo.Address, getNetParams())
 		if err != nil {
 			return err
 		}
@@ -880,17 +876,6 @@ func calculateTxFee(tx *wire.MsgTx, feeRate int64) int64 {
 		fee = constants.DustLimit
 	}
 	return fee
-}
-
-// addressScript is a function that converts a given address to a script.
-// It first decodes the address, then generates a pay-to-address script from the decoded address.
-// It returns the generated script and any error that occurred during the process.
-func addressScript(address string) ([]byte, error) {
-	decodeAddress, err := btcutil.DecodeAddress(address, getNetParams())
-	if err != nil {
-		return nil, err
-	}
-	return txscript.PayToAddrScript(decodeAddress)
 }
 
 // getNetParams is a function that returns the network parameters based on the configuration.
