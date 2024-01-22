@@ -57,16 +57,16 @@ func (r *Runner) Start() {
 		defer ticker.Stop()
 		for {
 			select {
-			case <-ticker.C:
-				err := r.opts.idx.UpdateIndex()
-				if err != nil && !errors.Is(err, index.ErrInterrupted) {
-					log.Srv.Error("UpdateIndex", "err", err)
-				}
-				if errors.Is(err, index.ErrInterrupted) {
-					return
-				}
 			case <-signal.InterruptChannel:
 				return
+			case <-ticker.C:
+				err := r.opts.idx.UpdateIndex()
+				if err != nil && !errors.Is(err, signal.ErrInterrupted) {
+					log.Srv.Error("UpdateIndex", "err", err)
+				}
+				if errors.Is(err, signal.ErrInterrupted) {
+					return
+				}
 			}
 		}
 	}()

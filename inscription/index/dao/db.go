@@ -176,10 +176,8 @@ func NewDB(opts ...DBOption) (*DB, error) {
 		opt(options)
 	}
 	if !options.noEmbedDB {
-		go func() {
-			TIDB(options)
-		}()
-		time.Sleep(time.Second * 3)
+		go TIDB(options)
+		time.Sleep(3 * time.Second)
 	}
 
 	gormLogger := &GormLogger{Logger: inscLog.Gorm}
@@ -430,7 +428,7 @@ func TIDB(options *DBOptions) {
 	terror.MustNil(err)
 	err = fset.Set(nmPort, options.serverPort)
 	terror.MustNil(err)
-	err = fset.Set(nmLogLevel, "warn")
+	err = fset.Set(nmLogLevel, "info")
 	terror.MustNil(err)
 	logDir := btcutil.AppDataDir(filepath.Join(constants.AppName, "inscription", "logs"), false)
 	err = fset.Set(nmLogFile, filepath.Join(logDir, "tidb.log"))

@@ -2,16 +2,20 @@ package index
 
 import "github.com/inscription-c/insc/constants"
 
+// SubsidyHalvingInterval is the interval at which the subsidy halves.
 const SubsidyHalvingInterval uint32 = 210_000
 
+// Epoch represents a period in the blockchain.
 type Epoch struct {
 	epoch uint32
 }
 
+// FirstPostSubsidy is the first epoch after the subsidy.
 var FirstPostSubsidy = Epoch{
 	epoch: 33,
 }
 
+// EpochStartingStats is the starting statistics for each epoch.
 var EpochStartingStats = []Sat{
 	0,
 	1050000000000000,
@@ -49,12 +53,14 @@ var EpochStartingStats = []Sat{
 	SupplySat,
 }
 
+// NewEpochFrom creates a new epoch from a given height.
 func NewEpochFrom(height *Height) *Epoch {
 	return &Epoch{
-		epoch: uint32(height.N() / SubsidyHalvingInterval),
+		epoch: height.N() / SubsidyHalvingInterval,
 	}
 }
 
+// NewEpochFromSat creates a new epoch from a given sat.
 func NewEpochFromSat(sat Sat) *Epoch {
 	e := &Epoch{}
 	if sat < EpochStartingStats[1] {
@@ -129,6 +135,7 @@ func NewEpochFromSat(sat Sat) *Epoch {
 	return e
 }
 
+// Subsidy returns the subsidy for the epoch.
 func (e *Epoch) Subsidy() uint64 {
 	if e.epoch < FirstPostSubsidy.epoch {
 		return (50 * constants.OneBtc) >> e.epoch
@@ -136,10 +143,12 @@ func (e *Epoch) Subsidy() uint64 {
 	return 0
 }
 
+// StartingHeight returns the starting height of the epoch.
 func (e *Epoch) StartingHeight() Height {
 	return Height{height: e.epoch * SubsidyHalvingInterval}
 }
 
+// StartingSat returns the starting sat of the epoch.
 func (e *Epoch) StartingSat() Sat {
 	if e.epoch > 33 {
 		return SupplySat

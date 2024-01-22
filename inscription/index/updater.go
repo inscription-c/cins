@@ -16,10 +16,10 @@ import (
 	"sync/atomic"
 )
 
-var ErrInterrupted = errors.New("interrupted")
-
+// Curse represents the type of curse that can be applied to an inscription.
 type Curse int
 
+// These constants represent the different types of curses that can be applied to an inscription.
 const (
 	CurseDuplicateField        Curse = 1
 	CurseIncompleteField       Curse = 2
@@ -32,93 +32,168 @@ const (
 	CurseUnrecognizedEvenField Curse = 9
 )
 
+// Flotsam represents a floating inscription.
 type Flotsam struct {
+	// InscriptionId is a pointer to the unique identifier of the inscription.
 	InscriptionId *model.InscriptionId
-	Offset        uint64
-	Origin        Origin
+
+	// Offset is the position of the inscription within the transaction.
+	Offset uint64
+
+	// Origin is the source of the inscription. It can be either new or old.
+	Origin Origin
 }
 
+// Origin represents the origin of an inscription.
+//
+// It is a struct that contains two pointers, one to an OriginNew and one to an OriginOld.
+// These pointers represent the new and old origins of an inscription respectively.
+// Only one of these pointers should be non-nil at a time, depending on whether the inscription is new or old.
+//
+// Fields:
+//
+//	New (*OriginNew): A pointer to an OriginNew struct, representing a new origin of an inscription.
+//	Old (*OriginOld): A pointer to an OriginOld struct, representing an old origin of an inscription.
 type Origin struct {
 	New *OriginNew
 	Old *OriginOld
 }
 
+// OriginNew represents a new origin of an inscription.
 type OriginNew struct {
-	Cursed        bool
-	Fee           int64
-	Hidden        bool
-	Pointer       int32
+	// Cursed is a boolean flag indicating whether the inscription is cursed.
+	Cursed bool
+
+	// Fee is the fee associated with the inscription. It is represented as an int64.
+	Fee int64
+
+	// Hidden is a boolean flag indicating whether the inscription is hidden.
+	Hidden bool
+
+	// Pointer is an int32 that points to the location of the inscription.
+	Pointer int32
+
+	// ReInscription is a boolean flag indicating whether the inscription is a re-inscription.
 	ReInscription bool
-	Unbound       bool
-	Inscription   *Envelope
+
+	// Unbound is a boolean flag indicating whether the inscription is unbound.
+	Unbound bool
+
+	// Inscription is a pointer to the Envelope struct that contains the inscription.
+	Inscription *Envelope
 }
 
+// OriginOld represents an old origin of an inscription.
 type OriginOld struct {
 	OldSatPoint dao.SatPoint
 }
 
+// InscriptionUpdater is responsible for updating inscriptions.
 type InscriptionUpdater struct {
-	idx                     *Indexer
-	wtx                     *dao.DB
-	flotsam                 []*Flotsam
-	lostSats                uint64
-	reward                  uint64
-	valueCache              map[string]int64
-	timestamp               int64
-	nextSequenceNumber      *uint64
-	unboundInscriptions     *uint32
-	cursedInscriptionCount  *uint32
+	// idx is a pointer to the Indexer struct that is used for indexing inscriptions.
+	idx *Indexer
+
+	// wtx is a pointer to the DB struct that is used for database operations.
+	wtx *dao.DB
+
+	// flotsam is a slice of pointers to Flotsam structs. Each Flotsam represents a floating inscription.
+	flotsam []*Flotsam
+
+	// lostSats is a uint64 that represents the total number of lost Satoshis.
+	lostSats uint64
+
+	// reward is a uint64 that represents the total reward for mining a block.
+	reward uint64
+
+	// valueCache is a map where the key is a string and the value is an int64. It is used for caching the values of transactions.
+	valueCache map[string]int64
+
+	// timestamp is an int64 that represents the timestamp of the last block.
+	timestamp int64
+
+	// nextSequenceNumber is a pointer to a uint64 that represents the next sequence number to be used for a transaction.
+	nextSequenceNumber *uint64
+
+	// unboundInscriptions is a pointer to a uint32 that represents the total number of unbound inscriptions.
+	unboundInscriptions *uint32
+
+	// cursedInscriptionCount is a pointer to a uint32 that represents the total number of cursed inscriptions.
+	cursedInscriptionCount *uint32
+
+	// blessedInscriptionCount is a pointer to a uint32 that represents the total number of blessed inscriptions.
 	blessedInscriptionCount *uint32
 }
 
+// inscribedOffsetEntity represents an entity with an inscribed offset.
 type inscribedOffsetEntity struct {
 	inscriptionId *model.InscriptionId
 	count         int64
 }
 
+// locationsInscription represents the location of an inscription.
 type locationsInscription struct {
 	satpoint *dao.SatPoint
 	flotsam  *Flotsam
 }
 
+// indexEnvelopers indexes the envelopers of a transaction.
 func (u *InscriptionUpdater) indexEnvelopers(
 	tx *wire.MsgTx,
 	inputSatRange []*model.SatRange) error {
 
+	// Initialize an integer counter for the inscriptions' IDs.
 	idCounter := int64(0)
+
+	// Initialize the total value of the inputs in the transaction.
 	totalInputValue := int64(0)
+
+	// Create a slice of pointers to Flotsam structs. Each Flotsam represents a floating inscription.
 	floatingInscriptions := make([]*Flotsam, 0)
+
+	// Create a map where the key is the offset of an inscription and the value is a pointer to an inscribedOffsetEntity.
 	inscribedOffsets := make(map[uint64]*inscribedOffsetEntity)
 
+	// Parse the Envelopes from the transaction.
 	envelopes := ParsedEnvelopFromTransaction(tx)
-	//inscriptions := len(envelopes) > 0
 
+	// Initialize the total value of the outputs in the transaction.
 	totalOutputValue := int64(0)
 	for _, v := range tx.TxOut {
 		totalOutputValue += v.Value
 	}
 
-	valueCh, errCh, err := u.fetchOutputValues(tx)
+	// Fetch the output values of the transaction.
+	valueCh, errCh, err := u.fetchOutputValues(tx, 64)
 	if err != nil {
 		return err
 	}
 
+	// Loop over each input in the transaction.
 	for inputIndex := range tx.TxIn {
 		txIn := tx.TxIn[inputIndex]
-		// is coin base
+
+		// Check if the input is a coinbase transaction.
+		// If it is, add the subsidy for the current block height to the total input value and skip to the next iteration.
 		if IsEmptyHash(txIn.PreviousOutPoint.Hash) {
 			totalInputValue += int64(NewHeight(u.idx.height).Subsidy())
 			continue
 		}
 
-		// find existing inscriptions on input (transfers of inscriptions)
+		// Fetch existing inscriptions on the input (transfers of inscriptions).
 		inscriptions, err := u.wtx.InscriptionsByOutpoint(txIn.PreviousOutPoint.String())
 		if err != nil {
 			return err
 		}
+
+		// Loop over each fetched inscription.
 		for _, v := range inscriptions {
+			// Calculate the offset of the inscription by adding the total input value to the offset of the SatPoint.
 			offset := uint64(totalInputValue) + uint64(v.SatPoint.Offset)
+
+			// Get the ID of the inscription.
 			insId := model.StringToOutpoint(v.Inscriptions.Outpoint).InscriptionId()
+
+			// Create a new Flotsam with the inscription ID, offset, and old origin, and append it to the floating inscriptions.
 			floatingInscriptions = append(floatingInscriptions, &Flotsam{
 				InscriptionId: insId,
 				Offset:        offset,
@@ -127,31 +202,41 @@ func (u *InscriptionUpdater) indexEnvelopers(
 				},
 			})
 
+			// Check if the offset already exists in the inscribed offsets map.
 			offsetEntity, ok := inscribedOffsets[offset]
 			if !ok {
+				// If it doesn't exist, create a new inscribed offset entity with the inscription ID and add it to the map.
 				offsetEntity = &inscribedOffsetEntity{
 					inscriptionId: insId,
 				}
 				inscribedOffsets[offset] = offsetEntity
 			}
+			// Increment the count of the inscribed offset entity.
 			offsetEntity.count++
 		}
 
+		// Initialize the offset as the total input value.
 		offset := uint64(totalInputValue)
 		preOutpoint := txIn.PreviousOutPoint.String()
+
+		// Try to get the current input value from the value cache.
 		currentInputValue, ok := u.valueCache[txIn.PreviousOutPoint.String()]
 		if ok {
+			// If the value is in the cache, delete it from the cache.
 			delete(u.valueCache, preOutpoint)
 		} else {
+			// If the value is not in the cache, try to get it from the database.
 			currentInputValue, err = u.wtx.GetValueByOutpoint(preOutpoint)
 			if err != nil && !errors.Is(err, gorm.ErrRecordNotFound) {
 				return err
 			}
 			if err == nil {
+				// If the value is in the database, delete it from the database.
 				if err := u.wtx.DeleteValueByOutpoint(preOutpoint); err != nil {
 					return err
 				}
 			} else {
+				// If the value is not in the database, fetch it asynchronously.
 				select {
 				case err := <-errCh:
 					return err
@@ -162,14 +247,16 @@ func (u *InscriptionUpdater) indexEnvelopers(
 				}
 			}
 		}
+		// Add the current input value to the total input value.
 		totalInputValue += currentInputValue
 
-		// go through all inscriptions in this input
+		// Loop over each inscription in the input.
 		for _, inscription := range envelopes {
 			if inscription.input != inputIndex {
 				break
 			}
 
+			// Create a new inscription ID for the current inscription.
 			inscriptionId := model.InscriptionId{
 				OutPoint: model.OutPoint{
 					OutPoint: wire.OutPoint{
@@ -179,7 +266,9 @@ func (u *InscriptionUpdater) indexEnvelopers(
 				},
 			}
 
+			// Initialize a variable to store the type of curse, if any, that applies to the inscription.
 			var curse Curse
+			// Check each possible curse condition and set the curse variable accordingly.
 			if inscription.payload.UnRecognizedEvenField {
 				curse = CurseUnrecognizedEvenField
 			} else if inscription.payload.DuplicateField {
@@ -197,6 +286,7 @@ func (u *InscriptionUpdater) indexEnvelopers(
 			} else if inscription.stutter {
 				curse = CurseStutter
 			} else {
+				// If none of the above conditions are met, check if the inscription is a re-inscription.
 				offsetEntity, ok := inscribedOffsets[offset]
 				if ok {
 					if offsetEntity.count > 1 {
@@ -216,16 +306,21 @@ func (u *InscriptionUpdater) indexEnvelopers(
 				}
 			}
 
+			// Determine if the inscription is unbound.
 			unbound := currentInputValue == 0 ||
 				curse == CurseUnrecognizedEvenField ||
 				inscription.payload.UnRecognizedEvenField
 
+			// Get the pointer from the inscription payload.
 			pointer := gconv.Int64(string(inscription.payload.Pointer))
 			if pointer > 0 && pointer < totalOutputValue {
+				// If the pointer is valid, set the offset to the pointer value.
 				offset = uint64(pointer)
 			}
+			// Check if the offset is a re-inscription.
 			_, reInscription := inscribedOffsets[offset]
 
+			// Create a new Flotsam with the new inscription ID, offset, and new origin, and append it to the floating inscriptions.
 			floatingInscriptions = append(floatingInscriptions, &Flotsam{
 				InscriptionId: &inscriptionId,
 				Offset:        offset,
@@ -242,13 +337,16 @@ func (u *InscriptionUpdater) indexEnvelopers(
 				},
 			})
 
+			// Check if the offset already exists in the inscribed offsets map.
 			inscribedOffset, ok := inscribedOffsets[offset]
 			if !ok {
+				// If it doesn't exist, create a new inscribed offset entity with the inscription ID and add it to the map.
 				inscribedOffset = &inscribedOffsetEntity{
 					inscriptionId: &inscriptionId,
 				}
 				inscribedOffsets[offset] = inscribedOffset
 			}
+			// Increment the count of the inscribed offset entity.
 			inscribedOffset.count++
 			idCounter++
 		}
@@ -262,25 +360,46 @@ func (u *InscriptionUpdater) indexEnvelopers(
 		flotsam.Origin.New.Fee = (totalInputValue - totalOutputValue) / idCounter
 	}
 
+	// Check if the transaction is a coinbase transaction.
+	// A coinbase transaction is a unique type of bitcoin transaction that can only be created by a miner.
+	// This is done by checking if the hash of the previous outpoint of the first input in the transaction is empty.
 	isCoinBase := IsEmptyHash(tx.TxIn[0].PreviousOutPoint.Hash)
+
+	// If the transaction is a coinbase transaction, append all the floating inscriptions from the updater to the current floating inscriptions.
+	// Floating inscriptions are inscriptions that are not yet bound to a specific location in the blockchain.
+	// They are stored in the updater and are bound to a location when a new block is mined.
 	if isCoinBase {
 		floatingInscriptions = append(floatingInscriptions, u.flotsam...)
 	}
+
+	// Sort the floating inscriptions by their offset.
+	// The offset is the position of the inscription within the transaction.
+	// Sorting is done in ascending order, so inscriptions with a lower offset will come before inscriptions with a higher offset.
 	sort.Slice(floatingInscriptions, func(i, j int) bool {
 		return floatingInscriptions[i].Offset < floatingInscriptions[j].Offset
 	})
 
+	// Initialize outputValue as zero. This will be used to keep track of the total value of the outputs processed so far.
 	outputValue := uint64(0)
+
+	// Initialize a map to associate each range of Satoshis in the transaction outputs with the corresponding output index (vout).
 	rangeToVoutMap := make(map[model.SatRange]int)
+
+	// Initialize a slice to store the new locations of the inscriptions.
 	newLocations := make([]*locationsInscription, 0)
 
+	// Loop over each output in the transaction.
 	for vout, txOut := range tx.TxOut {
+		// Calculate the end of the current range by adding the value of the current output to the total value of the outputs processed so far.
 		end := outputValue + uint64(txOut.Value)
 
+		// Loop over each floating inscription.
 		for _, flotsam := range floatingInscriptions {
+			// If the offset of the inscription is greater than or equal to the end of the current range, break the loop.
 			if flotsam.Offset >= end {
 				break
 			}
+			// Create a new SatPoint for the inscription at the current output and offset.
 			newSatpoint := &dao.SatPoint{
 				Outpoint: wire.OutPoint{
 					Hash:  tx.TxHash(),
@@ -288,27 +407,37 @@ func (u *InscriptionUpdater) indexEnvelopers(
 				},
 				Offset: uint32(flotsam.Offset - outputValue),
 			}
+			// Add the new location to the list of new locations.
 			newLocations = append(newLocations, &locationsInscription{
 				satpoint: newSatpoint,
 				flotsam:  flotsam,
 			})
 		}
 
+		// Add the current range and its corresponding output index to the map.
 		rangeToVoutMap[model.SatRange{
 			Start: outputValue,
 			End:   end,
 		}] = vout
 
+		// Update the total value of the outputs processed so far.
 		outputValue = end
 
+		// Cache the value of the current output.
 		outpoint := model.NewOutPoint(tx.TxHash().String(), uint32(vout)).String()
 		u.valueCache[outpoint] = txOut.Value
 	}
 
+	// Loop over each new location.
 	for _, location := range newLocations {
+		// Get the flotsam and the new SatPoint from the location.
 		flotsam := location.flotsam
 		newSatpoint := location.satpoint
+
+		// Get the pointer from the new origin of the flotsam.
 		pointer := uint64(flotsam.Origin.New.Pointer)
+
+		// If the pointer is valid and points to a location within the total value of the outputs, update the offset and SatPoint of the flotsam.
 		if pointer >= 0 && pointer < outputValue {
 			for rangeEntity, vout := range rangeToVoutMap {
 				if pointer < rangeEntity.Start || pointer >= rangeEntity.End {
@@ -324,11 +453,14 @@ func (u *InscriptionUpdater) indexEnvelopers(
 				}
 			}
 		}
+
+		// Update the location of the inscription in the database.
 		if err := u.updateInscriptionLocation(inputSatRange, flotsam, newSatpoint); err != nil {
 			return err
 		}
 	}
 
+	// If the transaction is a coinbase transaction, update the location of each floating inscription to a lost SatPoint and update the total number of lost Satoshis.
 	if isCoinBase {
 		for _, flotsam := range floatingInscriptions {
 			newSatpoint := &dao.SatPoint{
@@ -342,38 +474,48 @@ func (u *InscriptionUpdater) indexEnvelopers(
 		return nil
 	}
 
+	// If the transaction is not a coinbase transaction, update the offset of each floating inscription and add them to the list of floating inscriptions in the updater.
 	for _, inscriptions := range floatingInscriptions {
 		inscriptions.Offset = u.reward + inscriptions.Offset - outputValue
 	}
 	u.flotsam = append(u.flotsam, floatingInscriptions...)
+
+	// Update the total reward by subtracting the total value of the outputs from the total value of the inputs.
 	u.reward += uint64(totalInputValue) - outputValue
 
 	return nil
 }
 
+// updateInscriptionLocation updates the location of an inscription.
 func (u *InscriptionUpdater) updateInscriptionLocation(
 	inputSatRanges []*model.SatRange,
 	flotsam *Flotsam,
 	newSatpoint *dao.SatPoint,
 ) error {
 
+	// Initialize error, unbound flag, and sequence number.
 	var err error
 	var unbound bool
 	var sequenceNumber uint64
+	// Get the inscription ID from the flotsam.
 	inscriptionId := flotsam.InscriptionId
 
+	// If the origin of the flotsam is old, delete all by SatPoint and delete the inscription by ID.
 	if flotsam.Origin.Old != nil {
+		// Delete all by SatPoint from the database.
 		if err := u.wtx.DeleteAllBySatPoint(&flotsam.Origin.Old.OldSatPoint); err != nil {
 			return err
 		}
+		// Delete the inscription by ID from the database.
 		sequenceNumber, err = u.wtx.DeleteInscriptionById(inscriptionId.String())
 		if err != nil {
 			return err
 		}
-	} else if flotsam.Origin.New != nil {
+	} else if flotsam.Origin.New != nil { // If the origin of the flotsam is new, process it.
 		unbound = flotsam.Origin.New.Unbound
 		inscriptionNumber := int64(0)
 
+		// If the flotsam is cursed, increment the cursed inscription count.
 		if flotsam.Origin.New.Cursed {
 			number := *u.cursedInscriptionCount
 			if !atomic.CompareAndSwapUint32(u.cursedInscriptionCount, number, number+1) {
@@ -381,33 +523,39 @@ func (u *InscriptionUpdater) updateInscriptionLocation(
 			}
 			// because cursed numbers start at -1
 			inscriptionNumber = -(int64(number) + 1)
-		} else {
+		} else { // If the flotsam is not cursed, increment the blessed inscription count.
 			number := *u.blessedInscriptionCount
 			if !atomic.CompareAndSwapUint32(u.blessedInscriptionCount, number, number+1) {
 				return errors.New("blessedInscriptionCount compare and swap failed")
 			}
 			inscriptionNumber = int64(number) + 1
 		}
+		// Increment the sequence number.
 		sequenceNumber = *u.nextSequenceNumber
 		if !atomic.CompareAndSwapUint64(u.nextSequenceNumber, sequenceNumber, sequenceNumber+1) {
 			return errors.New("nextSequenceNumber compare and swap failed")
 		}
 		sequenceNumber++
 
+		// If the flotsam is not unbound, calculate its Sat.
 		var sat *Sat
 		if !unbound {
 			sat = u.calculateSat(inputSatRanges, flotsam.Offset)
 		}
 
+		// Initialize the charms.
 		charms := uint16(0)
+		// If the flotsam is cursed, set the cursed charm.
 		if flotsam.Origin.New.Cursed {
 			CharmCursed.Set(&charms)
 		}
 
+		// If the flotsam is a re-inscription, set the re-inscription charm.
 		if flotsam.Origin.New.ReInscription {
 			CharmReInscription.Set(&charms)
 		}
 
+		// If the Sat is not nil, set the appropriate charms based on its properties.
 		if sat != nil {
 			if sat.NineBall() {
 				CharmNineBall.Set(&charms)
@@ -416,6 +564,7 @@ func (u *InscriptionUpdater) updateInscriptionLocation(
 				CharmCoin.Set(&charms)
 			}
 
+			// Set the charm based on the rarity of the Sat.
 			switch sat.Rarity() {
 			case RarityCommon, RarityMythic:
 			case RarityUncommon:
@@ -429,21 +578,26 @@ func (u *InscriptionUpdater) updateInscriptionLocation(
 			}
 		}
 
+		// If the new Satpoint is empty, set the lost charm.
 		if IsEmptyHash(newSatpoint.Outpoint.Hash) {
 			CharmLost.Set(&charms)
 		}
 
+		// If the flotsam is unbound, set the unbound charm.
 		if unbound {
 			CharmUnbound.Set(&charms)
 		}
 
+		// If the Sat is not nil, save it to the sequence number in the database.
 		if sat != nil {
 			if err := u.wtx.SaveSatToSequenceNumber(uint64(*sat), sequenceNumber); err != nil {
 				return err
 			}
 		}
 
+		// Get the inscription from the flotsam.
 		ins := flotsam.Origin.New.Inscription
+		// Create a new inscription entry.
 		entry := &tables.Inscriptions{
 			Outpoint:        inscriptionId.OutPoint.String(),
 			SequenceNum:     sequenceNumber,
@@ -459,138 +613,221 @@ func (u *InscriptionUpdater) updateInscriptionLocation(
 			Metadata:        ins.payload.Metadata,
 			Pointer:         gconv.Int32(string(ins.payload.Pointer)),
 		}
+		// If the Sat is not nil, set the Sat and offset in the entry.
 		if sat != nil {
 			entry.Sat = uint64(*sat)
 			entry.Offset = uint32(flotsam.Offset)
 		}
+		// Create the inscription in the database.
 		if err := u.wtx.CreateInscription(entry); err != nil {
 			return err
 		}
 	}
 
+	// Set the Satpoint to the sequence number in the database.
 	satPoint := newSatpoint
 	if unbound {
-		satPoint = &dao.SatPoint{
-			Offset: *u.unboundInscriptions,
+		unboundNum := *u.unboundInscriptions
+		if !atomic.CompareAndSwapUint32(u.unboundInscriptions, unboundNum, unboundNum+1) {
+			return errors.New("unboundInscriptions compare and swap failed")
 		}
-		*u.unboundInscriptions++
+		satPoint = &dao.SatPoint{
+			Offset: unboundNum,
+		}
 	}
 	if err := u.wtx.SetSatPointToSequenceNum(satPoint, sequenceNumber); err != nil {
 		return err
 	}
+	// Return nil if no errors occurred.
 	return nil
 }
 
+// calculateSat calculates the Sat of an inscription.
 func (u *InscriptionUpdater) calculateSat(
 	inputSatRanges []*model.SatRange,
 	inputOffset uint64,
 ) *Sat {
+	// Initialize an offset counter starting from 0.
 	offset := uint64(0)
+
+	// Loop over each range in the inputSatRanges slice.
 	for _, v := range inputSatRanges {
+		// Calculate the size of the current range by subtracting the start from the end.
 		size := v.End - v.Start
+
+		// If the offset plus the size of the current range is greater than the inputOffset,
+		// calculate the Sat of the inscription and return a pointer to it.
 		if offset+size > inputOffset {
+			// Calculate the Sat by adding the start of the current range to the inputOffset,
+			// and subtracting the current offset.
 			n := Sat(v.Start + inputOffset - offset)
+
+			// Return a pointer to the calculated Sat.
 			return &n
 		}
+
+		// If the offset plus the size of the current range is not greater than the inputOffset,
+		// increment the offset by the size of the current range.
 		offset += size
 	}
+
+	// If no Sat could be calculated for any of the ranges in the inputSatRanges slice,
+	// return nil.
 	return nil
 }
 
-func (u *InscriptionUpdater) fetchOutputValues(tx *wire.MsgTx) (valueCh chan int64, errCh chan error, err error) {
+// fetchOutputValues fetches the output values of a transaction.
+func (u *InscriptionUpdater) fetchOutputValues(tx *wire.MsgTx, maxCurrentNum int) (valueCh chan int64, errCh chan error, err error) {
+	// Initialize an empty string for the latest outpoint.
 	latestOutpoint := ""
+
+	// Create a slice to store the outpoints that need to be fetched.
 	needFetchOutpoints := make([]string, 0)
+
+	// Create a map to store the latest outpoint for each outpoint that needs to be fetched.
 	needFetchOutpointsMap := make(map[string]string)
 
+	// Loop over each input in the transaction.
 	for inputIndex := range tx.TxIn {
 		txIn := tx.TxIn[inputIndex]
+
+		// If the input is a coinbase, skip it.
 		if IsEmptyHash(txIn.PreviousOutPoint.Hash) {
 			continue
 		}
+
+		// If the value of the input is already cached, skip it.
 		if _, ok := u.valueCache[txIn.PreviousOutPoint.String()]; ok {
 			continue
 		}
+
+		// Try to get the value of the input from the database.
 		_, err = u.wtx.GetValueByOutpoint(txIn.PreviousOutPoint.String())
-		if err != nil && !errors.Is(err, gorm.ErrRecordNotFound) {
-			return
-		}
+
+		// If the value is not found in the database, add the outpoint to the list of outpoints that need to be fetched.
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			err = nil
 			preOutpoint := txIn.PreviousOutPoint.String()
 			needFetchOutpoints = append(needFetchOutpoints, preOutpoint)
+
+			// If there is a latest outpoint, map the current outpoint to it.
 			if latestOutpoint != "" {
 				needFetchOutpointsMap[preOutpoint] = latestOutpoint
 			} else {
 				needFetchOutpointsMap[preOutpoint] = ""
 			}
+
+			// Update the latest outpoint.
 			latestOutpoint = preOutpoint
 		}
 	}
 
+	// If there are outpoints that need to be fetched, fetch them in batches.
 	if len(needFetchOutpoints) > 0 {
+		// Determine the size of the batches.
 		currentNum := len(needFetchOutpoints)/2 + 1
-		if currentNum > 32 {
-			currentNum = 32
+		if currentNum > maxCurrentNum {
+			currentNum = maxCurrentNum
 		}
+
+		// Create a channel to receive the fetched values.
 		valueCh = make(chan int64, currentNum)
 
+		// Create an error group to handle errors from the fetching goroutines.
 		errWg := &errgroup.Group{}
+
+		// Start a goroutine to fetch the values in batches.
 		errWg.Go(func() error {
+			// Create a slice to store the results of the asynchronous fetch operations.
 			batchResult := make([]rpcclient.FutureGetRawTransactionResult, 0)
+
+			// Loop over the outpoints that need to be fetched.
 			for i := 1; i <= len(needFetchOutpoints); i++ {
 				select {
+				// If an interrupt signal is received, return an error.
 				case <-signal.InterruptChannel:
-					return ErrInterrupted
+					return signal.ErrInterrupted
 				default:
+					// Parse the outpoint from the string.
 					outpoint, err := wire.NewOutPointFromString(needFetchOutpoints[i-1])
 					if err != nil {
 						return err
 					}
+
+					// Start an asynchronous fetch operation for the outpoint.
 					res := u.idx.BatchRpcClient().GetRawTransactionAsync(&outpoint.Hash)
 					batchResult = append(batchResult, res)
+
+					// If the current batch is full, send the batch and process the results.
 					if i%currentNum == 0 {
 						if err := u.idx.BatchRpcClient().Send(); err != nil {
 							return err
 						}
+
+						// Loop over the results of the batch.
 						for idx, v := range batchResult {
+							// Receive the result of the fetch operation.
 							tx, err := v.Receive()
 							if err != nil {
 								return err
 							}
+
+							// Get the outpoint string from the list of outpoints that need to be fetched.
 							outpointStr := needFetchOutpoints[i-currentNum+idx]
+
+							// Parse to outpoint from the string.
 							outpoint, err := wire.NewOutPointFromString(outpointStr)
 							if err != nil {
 								return err
 							}
+
+							// Send the value of the output to the value channel.
 							valueCh <- tx.MsgTx().TxOut[outpoint.Index].Value
 						}
+
+						// Clear the batch results.
 						batchResult = make([]rpcclient.FutureGetRawTransactionResult, 0)
 					}
 				}
 			}
 
+			// If there are remaining results in the batch, send the batch and process the results.
 			if len(batchResult) > 0 {
 				if err := u.idx.BatchRpcClient().Send(); err != nil {
 					return err
 				}
+
+				// Loop over the remaining results in the batch.
 				for idx, v := range batchResult {
+					// Receive the result of the fetch operation.
 					tx, err := v.Receive()
 					if err != nil {
 						return err
 					}
+
+					// Get the outpoint string from the list of outpoints that need to be fetched.
 					outpointStr := needFetchOutpoints[len(needFetchOutpoints)-len(batchResult)+idx]
+
+					// Parse the outpoint from the string.
 					outpoint, err := wire.NewOutPointFromString(outpointStr)
 					if err != nil {
 						return err
 					}
+
+					// Send the value of the output to the value channel.
 					valueCh <- tx.MsgTx().TxOut[outpoint.Index].Value
 				}
 			}
+
+			// Close the value channel to signal that all values have been fetched.
 			close(valueCh)
 			return nil
 		})
 
+		// Create a channel to receive errors from the fetching goroutines.
 		errCh = make(chan error)
+
+		// Start a goroutine to wait for all fetching goroutines to finish and send any errors to the error channel.
 		go func() {
 			if err := errWg.Wait(); err != nil {
 				errCh <- err

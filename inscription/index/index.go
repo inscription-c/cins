@@ -95,7 +95,7 @@ func (idx *Indexer) UpdateIndex() error {
 	for {
 		select {
 		case <-signal.InterruptChannel:
-			return ErrInterrupted
+			return signal.ErrInterrupted
 		default:
 			// latest block height
 			startingHeight, err := idx.opts.cli.GetBlockCount()
@@ -274,7 +274,7 @@ func (idx *Indexer) indexBlock(
 		//
 		//}
 	} else if indexInscriptions {
-		txs := append([]*wire.MsgTx{block.Transactions[len(block.Transactions)-1]}, block.Transactions[1:]...)
+		txs := append(block.Transactions[1:], block.Transactions[0])
 		for i := range txs {
 			tx := txs[i]
 			if err := inscriptionUpdater.indexEnvelopers(tx, nil); err != nil {

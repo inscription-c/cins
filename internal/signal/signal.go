@@ -1,10 +1,13 @@
 package signal
 
 import (
+	"errors"
 	"os"
 	"os/signal"
 	"syscall"
 )
+
+var ErrInterrupted = errors.New("interrupted")
 
 // InterruptChannel is used to receive SIGINT (Ctrl+C) signals.
 var InterruptChannel chan os.Signal
