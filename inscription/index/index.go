@@ -10,237 +10,215 @@ import (
 	"github.com/inscription-c/insc/inscription/index/tables"
 	"github.com/inscription-c/insc/inscription/log"
 	"github.com/inscription-c/insc/internal/signal"
-	"golang.org/x/sync/errgroup"
 	"sync/atomic"
 	"time"
 )
 
+// Options is a struct that holds configuration options for the Indexer.
 type Options struct {
-	db       *dao.DB
-	cli      *rpcclient.Client
+	// db is a pointer to a dao.DB instance which represents the database connection.
+	db *dao.DB
+	// cli is a pointer to a rpcclient.Client instance which represents the RPC client.
+	cli *rpcclient.Client
+	// batchCli is a pointer to a rpcclient.Client instance which represents the batch RPC client.
 	batchCli *rpcclient.Client
 
-	indexSats           bool
-	indexTransaction    bool
+	// indexSats is a boolean that indicates whether to index satoshis or not.
+	indexSats bool
+	// indexTransaction is a boolean that indicates whether to index transactions or not.
+	indexTransaction bool
+	// noIndexInscriptions is a boolean that indicates whether to index inscriptions or not.
 	noIndexInscriptions bool
-	flushNum            uint64
-	startHeight         uint32
+	// startHeight is an uint32 that represents the starting height of the blockchain to index from.
+	firstInscriptionHeight uint32
 }
 
+// Option is a function type that takes a pointer to an Options struct.
 type Option func(*Options)
 
+// WithDB is a function that returns an Option.
+// This Option sets the db field of the Options struct to the provided dao.DB instance.
 func WithDB(db *dao.DB) func(*Options) {
 	return func(options *Options) {
 		options.db = db
 	}
 }
 
+// WithClient is a function that returns an Option.
+// This Option sets the cli field of the Options struct to the provided rpcclient.Client instance.
 func WithClient(cli *rpcclient.Client) func(*Options) {
 	return func(options *Options) {
 		options.cli = cli
 	}
 }
 
+// WithBatchClient is a function that returns an Option.
+// This Option sets the batchCli field of the Options struct to the provided rpcclient.Client instance.
 func WithBatchClient(cli *rpcclient.Client) func(*Options) {
 	return func(options *Options) {
 		options.batchCli = cli
 	}
 }
 
-func WithFlushNum(flushNum uint64) func(*Options) {
-	return func(options *Options) {
-		options.flushNum = flushNum
-	}
-}
-
-func WithStartHeight(height uint32) func(*Options) {
-	return func(options *Options) {
-		options.startHeight = height
-	}
-}
-
+// Indexer is a struct that holds the configuration options and state for the Indexer.
 type Indexer struct {
-	opts                      *Options
-	rangeCache                map[string]model.SatRange
-	height                    uint32
-	satRangesSinceFlush       uint32
-	outputsCached             uint64
+	// opts is a pointer to an Options struct which holds the configuration options for the Indexer.
+	opts *Options
+	// rangeCache is a map that caches the range of satoshis for each transaction.
+	rangeCache map[string]model.SatRange
+	// height is an uint32 that represents the current height of the blockchain being indexed.
+	height uint32
+	// satRangesSinceFlush is a uint32 that represents the number of satoshi ranges since the last flush.
+	satRangesSinceFlush uint32
+	// outputsCached is a uint64 that represents the number of outputs cached.
+	outputsCached uint64
+	// outputsInsertedSinceFlush is a uint64 that represents the number of outputs inserted since the last flush.
 	outputsInsertedSinceFlush uint64
-	outputsTraversed          uint32
+	// outputsTraversed is a uint32 that represents the number of outputs traversed.
+	outputsTraversed uint32
 }
 
+// NewIndexer is a function that returns a pointer to a new Indexer instance.
+// It takes a variadic number of Option functions as arguments, which are used to set the configuration options for the Indexer.
 func NewIndexer(opts ...Option) *Indexer {
+	// Create a new Indexer instance with default options.
 	idx := &Indexer{
 		opts: &Options{},
 	}
+	// Apply each Option function to the Indexer's options.
 	for _, v := range opts {
 		v(idx.opts)
 	}
+	// Initialize the rangeCache map.
 	idx.rangeCache = make(map[string]model.SatRange)
+	// Return the pointer to the new Indexer instance.
 	return idx
 }
 
+// DB is a method that returns a pointer to the dao.DB instance associated with the Indexer.
 func (idx *Indexer) DB() *dao.DB {
 	return idx.opts.db
 }
 
+// Begin is a method that starts a new transaction and returns a pointer to the dao.DB instance associated with the transaction.
 func (idx *Indexer) Begin() *dao.DB {
 	return &dao.DB{DB: idx.opts.db.DB.Begin()}
 }
 
+// RpcClient is a method that returns a pointer to the rpcclient.Client instance associated with the Indexer.
+// This client is used for making RPC calls to the Bitcoin node.
 func (idx *Indexer) RpcClient() *rpcclient.Client {
 	return idx.opts.cli
 }
 
+// BatchRpcClient is a method that returns a pointer to the rpcclient.Client instance associated with the Indexer.
+// This client is used for making batch RPC calls to the Bitcoin node.
 func (idx *Indexer) BatchRpcClient() *rpcclient.Client {
 	return idx.opts.batchCli
 }
 
+// UpdateIndex is a method that updates the index of the blockchain.
+// It fetches blocks from the blockchain, starting from the current height of the indexer, and indexes them.
+// If the indexer is configured to index satoshis, it flushes the satoshi range cache to the database.
+// It also updates various statistics related to the indexing process.
+// The method returns an error if there is any issue during the indexing process.
 func (idx *Indexer) UpdateIndex() error {
 	var err error
+	// Get the current block count from the database.
 	idx.height, err = idx.opts.db.BlockCount()
 	if err != nil {
 		return err
 	}
 
-	for {
-		select {
-		case <-signal.InterruptChannel:
-			return signal.ErrInterrupted
-		default:
-			// latest block height
-			startingHeight, err := idx.opts.cli.GetBlockCount()
-			if err != nil {
+	// Get the latest block height from the Bitcoin node.
+	endHeight, err := idx.opts.cli.GetBlockCount()
+	if err != nil {
+		return err
+	}
+
+	// Fetch blocks from the blockchain, starting from the current height of the indexer.
+	blocksCh, err := idx.fetchBlockFrom(idx.height, uint32(endHeight), 1)
+	if err != nil {
+		return err
+	}
+	if blocksCh == nil {
+		return nil
+	}
+
+	// Iterate over the fetched blocks.
+	for block := range blocksCh {
+		valueCache := make(map[string]int64)
+
+		// Start a new transaction and index the block.
+		if err := idx.DB().Transaction(func(tx *dao.DB) error {
+
+			// Index the block.
+			if err = idx.indexBlock(tx, block, valueCache); err != nil {
 				return err
 			}
-			blocks, err := idx.fetchBlockFrom(idx.height, uint32(startingHeight))
-			if err != nil {
-				return err
-			}
-			if len(blocks) == 0 {
-				time.Sleep(time.Second * 5)
-				continue
-			}
 
-			if err := idx.DB().Transaction(func(wtx *dao.DB) error {
-				valueCache := make(map[string]int64)
-				for _, block := range blocks {
-					if err = idx.indexBlock(wtx, block, valueCache); err != nil {
-						return err
-					}
-				}
-
+			// If the indexer is configured to index satoshis, flush the satoshi range cache to the database.
+			if idx.opts.indexSats {
 				log.Srv.Infof(
-					"Committing at block %d, %d outputs traversed, %d in map, %d cached",
-					idx.height-1, idx.outputsTraversed, len(valueCache), idx.outputsCached,
+					"Flushing %d entries (%.1f%% resulting from %d insertions) from memory to database",
+					len(idx.rangeCache),
+					float64(len(idx.rangeCache))/float64(idx.outputsInsertedSinceFlush)*100,
+					idx.outputsInsertedSinceFlush,
 				)
 
-				if idx.opts.indexSats {
-					log.Srv.Infof(
-						"Flushing %d entries (%.1f%% resulting from %d insertions) from memory to database",
-						len(idx.rangeCache),
-						float64(len(idx.rangeCache))/float64(idx.outputsInsertedSinceFlush)*100,
-						idx.outputsInsertedSinceFlush,
-					)
-
-					for outpoint, satRange := range idx.rangeCache {
-						if err := wtx.SetOutpointToSatRange(outpoint, satRange); err != nil {
-							return err
-						}
-					}
-					idx.outputsInsertedSinceFlush = 0
-				}
-
-				for outpoint, value := range valueCache {
-					if err := wtx.SetOutpointToValue(outpoint, value); err != nil {
+				for outpoint, satRange := range idx.rangeCache {
+					if err = tx.SetOutpointToSatRange(outpoint, satRange); err != nil {
 						return err
 					}
 				}
+				idx.outputsInsertedSinceFlush = 0
+			}
 
-				if err := wtx.IncrementStatistic(tables.StatisticOutputsTraversed, idx.outputsTraversed); err != nil {
+			// Update the value cache.
+			for outpoint, value := range valueCache {
+				if err = tx.SetOutpointToValue(outpoint, value); err != nil {
 					return err
 				}
-				idx.outputsTraversed = 0
-				if err := wtx.IncrementStatistic(tables.StatisticSatRanges, idx.satRangesSinceFlush); err != nil {
-					return err
-				}
-				idx.satRangesSinceFlush = 0
-				if err := wtx.IncrementStatistic(tables.StatisticCommits, 1); err != nil {
-					return err
-				}
-				return nil
-			}); err != nil {
+			}
+
+			// Update various statistics related to the indexing process.
+			if err = tx.IncrementStatistic(tables.StatisticOutputsTraversed, idx.outputsTraversed); err != nil {
 				return err
 			}
-		}
-	}
-}
+			idx.outputsTraversed = 0
+			if err = tx.IncrementStatistic(tables.StatisticSatRanges, idx.satRangesSinceFlush); err != nil {
+				return err
+			}
+			idx.satRangesSinceFlush = 0
+			if err = tx.IncrementStatistic(tables.StatisticCommits, 1); err != nil {
+				return err
+			}
 
-func (idx *Indexer) fetchBlockFrom(start, end uint32) ([]*wire.MsgBlock, error) {
-	if start > end {
-		return nil, nil
-	}
-
-	maxFetch := uint32(32)
-	if end-start+1 < maxFetch {
-		maxFetch = end - start + 1
-	}
-
-	errWg := errgroup.Group{}
-	blocks := make([]*wire.MsgBlock, maxFetch)
-	for i := start; i < start+maxFetch; i++ {
-		height := i
-		errWg.Go(func() error {
-			block, err := idx.getBlockWithRetries(height)
+			// Check if the block count in the database matches the current height of the indexer.
+			height, err := tx.BlockCount()
 			if err != nil {
 				return err
 			}
-			blocks[height-start] = block
+			if height != idx.height {
+				return errors.New("height mismatch")
+			}
 			return nil
-		})
-	}
-	if err := errWg.Wait(); err != nil {
-		return nil, err
-	}
-	return blocks, nil
-}
-
-func (idx *Indexer) getBlockWithRetries(height uint32) (*wire.MsgBlock, error) {
-	errs := -1
-	for {
-		select {
-		case <-signal.InterruptChannel:
-			return nil, errors.New("interrupted")
-		default:
-			errs++
-			if errs > 0 {
-				seconds := 1 << errs
-				if seconds > 120 {
-					err := errors.New("would sleep for more than 120s, giving up")
-					log.Srv.Error(err)
-				}
-				time.Sleep(time.Second * time.Duration(seconds))
-			}
-			hash, err := idx.RpcClient().GetBlockHash(int64(height))
-			if err != nil {
-				log.Srv.Warn("GetBlockHash", err)
-				continue
-			}
-			block, err := idx.opts.cli.GetBlock(hash)
-			if err != nil {
-				log.Srv.Warn("GetBlock", err)
-				continue
-			}
-			return block, nil
+		}); err != nil {
+			return err
 		}
 	}
+	return nil
 }
 
+// indexBlock is a method that indexes a block from the blockchain.
+// It updates various statistics related to the indexing process.
+// The method returns an error if there is any issue during the indexing process.
 func (idx *Indexer) indexBlock(
 	wtx *dao.DB,
 	block *wire.MsgBlock,
 	valueCache map[string]int64) error {
 
+	// Detect if there is a reorganization in the blockchain.
 	if err := detectReorg(wtx, block, idx.height); err != nil {
 		return err
 	}
@@ -251,6 +229,7 @@ func (idx *Indexer) indexBlock(
 	indexInscriptions :=
 		/*idx.height >= index.first_inscription_height && */ !idx.opts.noIndexInscriptions
 
+	// Get various statistics related to the indexing process.
 	unboundInscriptions, err := wtx.GetStatisticCountByName(tables.StatisticUnboundInscriptions)
 	if err != nil {
 		return err
@@ -278,6 +257,7 @@ func (idx *Indexer) indexBlock(
 		timestamp:               block.Header.Timestamp.Unix(),
 	}
 
+	// If the indexer is configured to index satoshis, index the satoshis in the block.
 	if idx.opts.indexSats {
 		//coinbaseInputs := make([]byte, 0)
 		//h := Height{Height: idx.height}
@@ -285,6 +265,7 @@ func (idx *Indexer) indexBlock(
 		//
 		//}
 	} else if indexInscriptions {
+		// If the indexer is configured to index inscriptions, index the inscriptions in the block.
 		txs := append(block.Transactions[1:], block.Transactions[0])
 		for i := range txs {
 			tx := txs[i]
@@ -295,6 +276,7 @@ func (idx *Indexer) indexBlock(
 	}
 
 	if indexInscriptions {
+		// If the indexer is configured to index inscriptions, save the block information into the database.
 		buf := bytes.NewBufferString("")
 		if err := block.Header.Serialize(buf); err != nil {
 			return err
@@ -308,6 +290,7 @@ func (idx *Indexer) indexBlock(
 		}
 	}
 
+	// Update various statistics related to the indexing process.
 	if err := wtx.IncrementStatistic(tables.StatisticCursedInscriptions, *inscriptionUpdater.cursedInscriptionCount); err != nil {
 		return err
 	}
@@ -318,8 +301,74 @@ func (idx *Indexer) indexBlock(
 		return err
 	}
 
+	// Increment the height of the indexer and the number of outputs traversed.
 	atomic.AddUint32(&idx.height, 1)
 	atomic.AddUint32(&idx.outputsTraversed, outputsInBlock)
 	log.Srv.Infof("Block Height %d Wrote %d sat ranges from %d outputs in %d ms", idx.height-1, satRangesWritten, outputsInBlock, time.Since(start).Milliseconds())
 	return nil
+}
+
+// fetchBlockFrom is a method that fetches blocks from the blockchain, starting from a specified start height and ending at a specified end height.
+// It returns a channel that emits the fetched blocks.
+// The method returns an error if there is any issue during the fetching process.
+func (idx *Indexer) fetchBlockFrom(start, end, current uint32) (chan *wire.MsgBlock, error) {
+	if start > end {
+		return nil, nil
+	}
+	blockCh := make(chan *wire.MsgBlock, current)
+
+	// Start a goroutine to fetch the blocks and emit them to the channel.
+	go func() {
+		defer close(blockCh)
+		for i := start; i <= end; i++ {
+			block, err := idx.getBlockWithRetries(i)
+			if err != nil {
+				log.Srv.Warn("getBlockWithRetries", err)
+				return
+			}
+			blockCh <- block
+		}
+	}()
+	return blockCh, nil
+}
+
+// getBlockWithRetries is a method that fetches a block from the blockchain at a specified height.
+// It retries the fetching process if there is any issue, with an exponential backoff.
+// The method returns an error if there is any issue during the fetching process.
+func (idx *Indexer) getBlockWithRetries(height uint32) (*wire.MsgBlock, error) {
+	errs := -1
+	for {
+		select {
+		case <-signal.InterruptChannel:
+			return nil, errors.New("interrupted")
+		default:
+			errs++
+			if errs > 0 {
+				seconds := 1 << errs
+				if seconds > 120 {
+					err := errors.New("would sleep for more than 120s, giving up")
+					log.Srv.Error(err)
+				}
+				time.Sleep(time.Second * time.Duration(seconds))
+			}
+			// Get the hash of the block at the specified height.
+			hash, err := idx.RpcClient().GetBlockHash(int64(height))
+			if err != nil {
+				log.Srv.Warn("GetBlockHash", err)
+				continue
+			}
+			// Get the block with the obtained hash.
+			block, err := idx.opts.cli.GetBlock(hash)
+			if err != nil {
+				log.Srv.Warn("GetBlock", err)
+				continue
+			}
+			for _, tx := range block.Transactions {
+				for _, txIn := range tx.TxIn {
+					txIn.Witness = nil
+				}
+			}
+			return block, nil
+		}
+	}
 }

@@ -38,5 +38,13 @@ func (d *DB) BlockCount() (count uint32, err error) {
 }
 
 func (d *DB) SaveBlockInfo(block *tables.BlockInfo) error {
+	old := &tables.BlockInfo{}
+	err := d.DB.Where("height=?", block.Height).First(old).Error
+	if err != nil && !errors.Is(err, gorm.ErrRecordNotFound) {
+		return err
+	}
+	if err == nil {
+		block.Id = old.Id
+	}
 	return d.DB.Save(block).Error
 }

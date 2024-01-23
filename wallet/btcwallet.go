@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"github.com/inscription-c/insc/btcd"
 	"github.com/inscription-c/insc/internal/signal"
+	"github.com/inscription-c/insc/wallet/log"
 	"github.com/spf13/cobra"
 	"net"
 	"net/http"
@@ -88,22 +89,22 @@ func Wallet(walletCh chan<- *wallet.Wallet) error {
 	cfg = tcfg
 
 	signal.AddInterruptHandler(func() {
-		if logRotator != nil {
-			logRotator.Close()
+		if log.LogRotator != nil {
+			log.LogRotator.Close()
 		}
 	})
 
 	// Show version at startup.
-	log.Infof("Version %s", version())
+	log.Log.Infof("Version %s", version())
 
 	if cfg.Profile != "" {
 		go func() {
 			listenAddr := net.JoinHostPort("", cfg.Profile)
-			log.Infof("Profile server listening on %s", listenAddr)
+			log.Log.Infof("Profile server listening on %s", listenAddr)
 			profileRedirect := http.RedirectHandler("/debug/pprof",
 				http.StatusSeeOther)
 			http.Handle("/", profileRedirect)
-			log.Errorf("%v", http.ListenAndServe(listenAddr, nil))
+			log.Log.Errorf("%v", http.ListenAndServe(listenAddr, nil))
 		}()
 	}
 
@@ -117,7 +118,7 @@ func Wallet(walletCh chan<- *wallet.Wallet) error {
 	// created below after each is created.
 	legacyRPCServer, err := startRPCServers(loader)
 	if err != nil {
-		log.Errorf("Unable to create RPC servers: %v", err)
+		log.Log.Errorf("Unable to create RPC servers: %v", err)
 		return err
 	}
 
@@ -141,7 +142,7 @@ func Wallet(walletCh chan<- *wallet.Wallet) error {
 		// or this will return an appropriate error.
 		_, err = loader.OpenExistingWallet([]byte(cfg.WalletPass), true)
 		if err != nil {
-			log.Error(err)
+			log.Log.Error(err)
 			return err
 		}
 	}
@@ -152,14 +153,14 @@ func Wallet(walletCh chan<- *wallet.Wallet) error {
 	signal.AddInterruptHandler(func() {
 		err := loader.UnloadWallet()
 		if err != nil && !errors.Is(err, wallet.ErrNotLoaded) {
-			log.Errorf("Failed to close wallet: %v", err)
+			log.Log.Errorf("Failed to close wallet: %v", err)
 		}
 	})
 	if legacyRPCServer != nil {
 		signal.AddInterruptHandler(func() {
-			log.Warn("Stopping legacy RPC server...")
+			log.Log.Warn("Stopping legacy RPC server...")
 			legacyRPCServer.Stop()
-			log.Info("Legacy RPC server shutdown")
+			log.Log.Info("Legacy RPC server shutdown")
 		})
 		go func() {
 			<-legacyRPCServer.RequestProcessShutdown()
@@ -185,7 +186,7 @@ func rpcClientConnectLoop(legacyRPCServer *legacyrpc.Server, loader *wallet.Load
 
 		chainClient, err = startChainRPC(nil)
 		if err != nil {
-			log.Errorf("Unable to open connection to consensus RPC server: %v", err)
+			log.Log.Errorf("Unable to open connection to consensus RPC server: %v", err)
 			continue
 		}
 
@@ -239,7 +240,7 @@ func rpcClientConnectLoop(legacyRPCServer *legacyrpc.Server, loader *wallet.Load
 // there is no recovery in case the server is not available or if there is an
 // authentication error.  Instead, all requests to the client will simply error.
 func startChainRPC(certs []byte) (*chain.RPCClient, error) {
-	log.Infof("Attempting RPC client connection to %v", cfg.RPCConnect)
+	log.Log.Infof("Attempting RPC client connection to %v", cfg.RPCConnect)
 	rpcc, err := chain.NewRPCClient(activeNet.Params, cfg.RPCConnect, cfg.BtcdUsername, cfg.BtcdPassword, certs, cfg.DisableClientTLS, 0)
 	if err != nil {
 		return nil, err

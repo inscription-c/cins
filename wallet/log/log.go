@@ -1,4 +1,4 @@
-package wallet
+package log
 
 import (
 	"fmt"
@@ -39,15 +39,15 @@ var (
 	// or data races and/or nil pointer dereferences will occur.
 	backendLog = btclog.NewBackend(logWriter{})
 
-	// logRotator is one of the logging outputs.  It should be closed on
+	// LogRotator is one of the logging outputs.  It should be closed on
 	// application shutdown.
-	logRotator *rotator.Rotator
+	LogRotator *rotator.Rotator
 
 	// logRotatorPipe is the write-end pipe for writing to the log rotator.  It
 	// is written to by the Write method of the logWriter type.
 	logRotatorPipe *io.PipeWriter
 
-	log          = backendLog.Logger("BTCW")
+	Log          = backendLog.Logger("BTCW")
 	walletLog    = backendLog.Logger("WLLT")
 	txmgrLog     = backendLog.Logger("TMGR")
 	chainLog     = backendLog.Logger("CHNS")
@@ -67,9 +67,9 @@ func init() {
 	//neutrino.UseLogger(btcnLog)
 }
 
-// subsystemLoggers maps each subsystem identifier to its associated logger.
-var subsystemLoggers = map[string]btclog.Logger{
-	"BTCW": log,
+// SubsystemLoggers maps each subsystem identifier to its associated logger.
+var SubsystemLoggers = map[string]btclog.Logger{
+	"BTCW": Log,
 	"WLLT": walletLog,
 	"TMGR": txmgrLog,
 	"CHNS": chainLog,
@@ -78,10 +78,10 @@ var subsystemLoggers = map[string]btclog.Logger{
 	"BTCN": btcnLog,
 }
 
-// initLogRotator initializes the logging rotater to write logs to logFile and
+// InitLogRotator initializes the logging rotater to write logs to logFile and
 // create roll files in the same directory.  It must be called before the
 // package-global log rotater variables are used.
-func initLogRotator(logFile string) {
+func InitLogRotator(logFile string) {
 	logDir, _ := filepath.Split(logFile)
 	err := os.MkdirAll(logDir, 0700)
 	if err != nil {
@@ -97,16 +97,16 @@ func initLogRotator(logFile string) {
 	pr, pw := io.Pipe()
 	go func() { _ = r.Run(pr) }()
 
-	logRotator = r
+	LogRotator = r
 	logRotatorPipe = pw
 }
 
-// setLogLevel sets the logging level for provided subsystem.  Invalid
+// SetLogLevel sets the logging level for provided subsystem.  Invalid
 // subsystems are ignored.  Uninitialized subsystems are dynamically created as
 // needed.
-func setLogLevel(subsystemID string, logLevel string) {
+func SetLogLevel(subsystemID string, logLevel string) {
 	// Ignore invalid subsystems.
-	logger, ok := subsystemLoggers[subsystemID]
+	logger, ok := SubsystemLoggers[subsystemID]
 	if !ok {
 		return
 	}
@@ -116,13 +116,13 @@ func setLogLevel(subsystemID string, logLevel string) {
 	logger.SetLevel(level)
 }
 
-// setLogLevels sets the log level for all subsystem loggers to the passed
+// SetLogLevels sets the log level for all subsystem loggers to the passed
 // level.  It also dynamically creates the subsystem loggers as needed, so it
 // can be used to initialize the logging system.
-func setLogLevels(logLevel string) {
+func SetLogLevels(logLevel string) {
 	// Configure all sub-systems with the new logging level.  Dynamically
 	// create loggers as needed.
-	for subsystemID := range subsystemLoggers {
-		setLogLevel(subsystemID, logLevel)
+	for subsystemID := range SubsystemLoggers {
+		SetLogLevel(subsystemID, logLevel)
 	}
 }

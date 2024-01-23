@@ -6,7 +6,6 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/inscription-c/insc/constants"
 	"github.com/inscription-c/insc/inscription/index"
-	"github.com/inscription-c/insc/inscription/index/model"
 	"github.com/inscription-c/insc/inscription/index/tables"
 	"github.com/inscription-c/insc/internal/util"
 	"gorm.io/gorm"
@@ -48,7 +47,7 @@ func (h *Handler) Inscription(ctx *gin.Context) {
 
 func (h *Handler) doInscription(ctx *gin.Context, query string) error {
 	query = strings.TrimSpace(query)
-	inscriptionId := model.StringToInscriptionId(query)
+	inscriptionId := util.StringToInscriptionId(query)
 	var err error
 	var inscription tables.Inscriptions
 	if inscriptionId != nil {
@@ -73,6 +72,7 @@ func (h *Handler) doInscription(ctx *gin.Context, query string) error {
 		ctx.Status(http.StatusNotFound)
 		return nil
 	}
+
 	preInscription, err := h.DB().GetInscriptionBySequenceNum(inscription.SequenceNum - 1)
 	if err != nil && !errors.Is(err, gorm.ErrRecordNotFound) {
 		return err
@@ -111,9 +111,9 @@ func (h *Handler) doInscription(ctx *gin.Context, query string) error {
 	if err != nil {
 		return err
 	}
-	satPointStr := util.NewSatPoint(wire.OutPoint{}.String(), 0)
+	satPointStr := util.FormatSatPoint(wire.OutPoint{}.String(), 0)
 	if satPoint.Id == 0 {
-		satPointStr = util.NewSatPoint(satPoint.Outpoint, satPoint.Offset)
+		satPointStr = util.FormatSatPoint(satPoint.Outpoint, satPoint.Offset)
 	}
 
 	brc20c := &util.BRC20C{}
@@ -123,7 +123,7 @@ func (h *Handler) doInscription(ctx *gin.Context, query string) error {
 		contentProtocol = constants.ProtocolBRC20C
 	}
 
-	insc := &RespInscription{
+	resp := &RespInscription{
 		InscriptionId:   inscriptionId.String(),
 		InscriptionNum:  inscription.InscriptionNum,
 		Charms:          index.CharmsAll.Titles(inscription.Charms),
@@ -141,6 +141,6 @@ func (h *Handler) doInscription(ctx *gin.Context, query string) error {
 		Previous:        preInscriptionId,
 		Next:            nextInscriptionId,
 	}
-	ctx.JSON(http.StatusOK, insc)
+	ctx.JSON(http.StatusOK, resp)
 	return nil
 }

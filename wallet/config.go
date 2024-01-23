@@ -6,6 +6,7 @@ import (
 	"github.com/inscription-c/insc/constants"
 	"github.com/inscription-c/insc/internal/cfgutil"
 	"github.com/inscription-c/insc/internal/legacy/keystore"
+	"github.com/inscription-c/insc/wallet/log"
 	"net"
 	"os"
 	"os/user"
@@ -180,8 +181,8 @@ func validLogLevel(logLevel string) bool {
 // logging purposes.
 func supportedSubsystems() []string {
 	// Convert the subsystemLoggers map keys to a slice.
-	subsystems := make([]string, 0, len(subsystemLoggers))
-	for subsysID := range subsystemLoggers {
+	subsystems := make([]string, 0, len(log.SubsystemLoggers))
+	for subsysID := range log.SubsystemLoggers {
 		subsystems = append(subsystems, subsysID)
 	}
 
@@ -204,7 +205,7 @@ func parseAndSetDebugLevels(debugLevel string) error {
 		}
 
 		// Change the logging level for all subsystems.
-		setLogLevels(debugLevel)
+		log.SetLogLevels(debugLevel)
 
 		return nil
 	}
@@ -223,7 +224,7 @@ func parseAndSetDebugLevels(debugLevel string) error {
 		subsysID, logLevel := fields[0], fields[1]
 
 		// Validate subsystem.
-		if _, exists := subsystemLoggers[subsysID]; !exists {
+		if _, exists := log.SubsystemLoggers[subsysID]; !exists {
 			str := "the specified subsystem [%v] is invalid -- " +
 				"supported subsytems %v"
 			return fmt.Errorf(str, subsysID, supportedSubsystems())
@@ -235,7 +236,7 @@ func parseAndSetDebugLevels(debugLevel string) error {
 			return fmt.Errorf(str, logLevel)
 		}
 
-		setLogLevel(subsysID, logLevel)
+		log.SetLogLevel(subsysID, logLevel)
 	}
 
 	return nil
@@ -400,7 +401,7 @@ func loadConfig() (*Config, []string, error) {
 
 	// Initialize log rotation.  After log rotation has been initialized, the
 	// logger variables may be used.
-	initLogRotator(filepath.Join(cfg.LogDir, defaultLogFilename))
+	log.InitLogRotator(filepath.Join(cfg.LogDir, defaultLogFilename))
 
 	// Parse, validate, and set debug log level(s).
 	if err := parseAndSetDebugLevels(cfg.DebugLevel); err != nil {

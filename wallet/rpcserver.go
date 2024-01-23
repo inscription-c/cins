@@ -4,15 +4,33 @@ import (
 	"errors"
 	"github.com/btcsuite/btcwallet/rpc/legacyrpc"
 	"github.com/btcsuite/btcwallet/wallet"
+	"github.com/inscription-c/insc/internal/net/multilistener"
+	"github.com/inscription-c/insc/wallet/index"
+	"github.com/inscription-c/insc/wallet/log"
 	"net"
 	"runtime"
 	"strings"
 )
 
+// multiListen starts the wallet with the given options.
+func multiListen(network, address string) (net.Listener, error) {
+	l, err := net.Listen(network, address)
+	if err != nil {
+		return nil, err
+	}
+	multiListener, err := multilistener.New(l)
+	if err != nil {
+		return nil, err
+	}
+	go index.HandlerIndex(address, multiListener)
+	return l, nil
+}
+
+// startRPCServices starts all RPC servers provided by the wallet.
 func startRPCServers(walletLoader *wallet.Loader) (*legacyrpc.Server, error) {
 	var (
 		legacyServer *legacyrpc.Server
-		legacyListen = net.Listen
+		legacyListen = multiListen
 	)
 
 	if len(cfg.LegacyRPCListeners) != 0 {
@@ -48,9 +66,7 @@ func makeListeners(normalizedListenAddrs []string, listen listenFunc) []net.List
 	for _, addr := range normalizedListenAddrs {
 		host, _, err := net.SplitHostPort(addr)
 		if err != nil {
-			// Shouldn't happen due to already being normalized.
-			log.Errorf("`%s` is not a normalized "+
-				"listener address", addr)
+			log.Log.Errorf("SplitHostPort failed for listener %s: %v", addr, err)
 			continue
 		}
 
@@ -74,7 +90,7 @@ func makeListeners(normalizedListenAddrs []string, listen listenFunc) []net.List
 		ip := net.ParseIP(host)
 		switch {
 		case ip == nil:
-			log.Warnf("`%s` is not a valid IP address", host)
+			log.Log.Warnf("`%s` is not a valid IP address", host)
 		case ip.To4() == nil:
 			ipv6Addrs = append(ipv6Addrs, addr)
 		default:
@@ -85,7 +101,7 @@ func makeListeners(normalizedListenAddrs []string, listen listenFunc) []net.List
 	for _, addr := range ipv4Addrs {
 		listener, err := listen("tcp4", addr)
 		if err != nil {
-			log.Warnf("Can't listen on %s: %v", addr, err)
+			log.Log.Warnf("Can't listen on %s: %v", addr, err)
 			continue
 		}
 		listeners = append(listeners, listener)
@@ -93,7 +109,7 @@ func makeListeners(normalizedListenAddrs []string, listen listenFunc) []net.List
 	for _, addr := range ipv6Addrs {
 		listener, err := listen("tcp6", addr)
 		if err != nil {
-			log.Warnf("Can't listen on %s: %v", addr, err)
+			log.Log.Warnf("Can't listen on %s: %v", addr, err)
 			continue
 		}
 		listeners = append(listeners, listener)

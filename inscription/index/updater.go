@@ -8,7 +8,9 @@ import (
 	"github.com/inscription-c/insc/inscription/index/dao"
 	"github.com/inscription-c/insc/inscription/index/model"
 	"github.com/inscription-c/insc/inscription/index/tables"
+	"github.com/inscription-c/insc/internal/signal"
 	"github.com/inscription-c/insc/internal/util"
+	"golang.org/x/sync/errgroup"
 	"gorm.io/gorm"
 	"sort"
 	"sync/atomic"
@@ -33,7 +35,7 @@ const (
 // Flotsam represents a floating inscription.
 type Flotsam struct {
 	// InscriptionId is a pointer to the unique identifier of the inscription.
-	InscriptionId *model.InscriptionId
+	InscriptionId *util.InscriptionId
 
 	// Offset is the position of the inscription within the transaction.
 	Offset uint64
@@ -83,7 +85,7 @@ type OriginNew struct {
 
 // OriginOld represents an old origin of an inscription.
 type OriginOld struct {
-	OldSatPoint dao.SatPoint
+	OldSatPoint util.SatPoint
 }
 
 // InscriptionUpdater is responsible for updating inscriptions.
@@ -124,13 +126,13 @@ type InscriptionUpdater struct {
 
 // inscribedOffsetEntity represents an entity with an inscribed offset.
 type inscribedOffsetEntity struct {
-	inscriptionId *model.InscriptionId
+	inscriptionId *util.InscriptionId
 	count         int64
 }
 
 // locationsInscription represents the location of an inscription.
 type locationsInscription struct {
-	satpoint *dao.SatPoint
+	satpoint *util.SatPoint
 	flotsam  *Flotsam
 }
 
@@ -160,10 +162,11 @@ func (u *InscriptionUpdater) indexEnvelopers(
 		totalOutputValue += v.Value
 	}
 
-	currentNum := 32
-	totalNeedGetValNum := 0
-	batchOutIndex := make([]uint32, currentNum)
-	batchTxRes := make([]*rpcclient.FutureGetRawTransactionResult, currentNum)
+	// Initialize a channel for the output values and a channel for errors.
+	valueCh, errCh, err := u.fetchOutputValues(tx, 12)
+	if err != nil {
+		return err
+	}
 
 	// Loop over each input in the transaction.
 	for inputIndex := range tx.TxIn {
@@ -188,7 +191,7 @@ func (u *InscriptionUpdater) indexEnvelopers(
 			offset := uint64(totalInputValue) + uint64(v.SatPoint.Offset)
 
 			// Get the ID of the inscription.
-			insId := model.StringToOutpoint(v.Inscriptions.Outpoint).InscriptionId()
+			insId := util.StringToOutpoint(v.Inscriptions.Outpoint).InscriptionId()
 
 			// Create a new Flotsam with the inscription ID, offset, and old origin, and append it to the floating inscriptions.
 			floatingInscriptions = append(floatingInscriptions, &Flotsam{
@@ -233,30 +236,13 @@ func (u *InscriptionUpdater) indexEnvelopers(
 					return err
 				}
 			} else {
-				totalNeedGetValNum++
-				outpoint, err := wire.NewOutPointFromString(preOutpoint)
-				if err != nil {
+				select {
+				case currentInputValue, ok = <-valueCh:
+					if !ok {
+						return errors.New("valueCh closed")
+					}
+				case err = <-errCh:
 					return err
-				}
-				batchIdx := (totalNeedGetValNum - 1) % currentNum
-				if totalNeedGetValNum > 1 && batchIdx == 0 {
-					if err := u.idx.BatchRpcClient().Send(); err != nil {
-						return err
-					}
-					for idx, v := range batchTxRes {
-						txRes, err := v.Receive()
-						if err != nil {
-							return err
-						}
-						totalInputValue += txRes.MsgTx().TxOut[batchOutIndex[idx]].Value
-					}
-					batchOutIndex[batchIdx] = outpoint.Index
-					asyncTxRes := u.idx.BatchRpcClient().GetRawTransactionAsync(&outpoint.Hash)
-					batchTxRes[batchIdx] = &asyncTxRes
-				} else {
-					batchOutIndex[batchIdx] = outpoint.Index
-					asyncTxRes := u.idx.BatchRpcClient().GetRawTransactionAsync(&outpoint.Hash)
-					batchTxRes[batchIdx] = &asyncTxRes
 				}
 			}
 		}
@@ -270,8 +256,8 @@ func (u *InscriptionUpdater) indexEnvelopers(
 			}
 
 			// Create a new inscription ID for the current inscription.
-			inscriptionId := model.InscriptionId{
-				OutPoint: model.OutPoint{
+			inscriptionId := util.InscriptionId{
+				OutPoint: util.OutPoint{
 					OutPoint: wire.OutPoint{
 						Hash:  tx.TxHash(),
 						Index: uint32(idCounter),
@@ -365,22 +351,6 @@ func (u *InscriptionUpdater) indexEnvelopers(
 		}
 	}
 
-	lastNum := totalNeedGetValNum % currentNum
-	if lastNum > 0 {
-		if err := u.idx.BatchRpcClient().Send(); err != nil {
-			return err
-		}
-		for i := 0; i < lastNum; i++ {
-			txRes, err := batchTxRes[i].Receive()
-			if err != nil {
-				return err
-			}
-			totalInputValue += txRes.MsgTx().TxOut[batchOutIndex[i]].Value
-		}
-	}
-	batchTxRes = nil
-	batchOutIndex = nil
-
 	// TODO index transaction
 	// TODO potential_parents
 
@@ -429,7 +399,7 @@ func (u *InscriptionUpdater) indexEnvelopers(
 				break
 			}
 			// Create a new SatPoint for the inscription at the current output and offset.
-			newSatpoint := &dao.SatPoint{
+			newSatpoint := &util.SatPoint{
 				Outpoint: wire.OutPoint{
 					Hash:  tx.TxHash(),
 					Index: uint32(vout),
@@ -453,7 +423,7 @@ func (u *InscriptionUpdater) indexEnvelopers(
 		outputValue = end
 
 		// Cache the value of the current output.
-		outpoint := model.NewOutPoint(tx.TxHash().String(), uint32(vout)).String()
+		outpoint := util.NewOutPoint(tx.TxHash().String(), uint32(vout)).String()
 		u.valueCache[outpoint] = txOut.Value
 	}
 
@@ -473,7 +443,7 @@ func (u *InscriptionUpdater) indexEnvelopers(
 					continue
 				}
 				flotsam.Offset = pointer
-				newSatpoint = &dao.SatPoint{
+				newSatpoint = &util.SatPoint{
 					Outpoint: wire.OutPoint{
 						Hash:  tx.TxHash(),
 						Index: uint32(vout),
@@ -492,7 +462,7 @@ func (u *InscriptionUpdater) indexEnvelopers(
 	// If the transaction is a coinbase transaction, update the location of each floating inscription to a lost SatPoint and update the total number of lost Satoshis.
 	if isCoinBase {
 		for _, flotsam := range floatingInscriptions {
-			newSatpoint := &dao.SatPoint{
+			newSatpoint := &util.SatPoint{
 				Offset: uint32(u.lostSats + flotsam.Offset - outputValue),
 			}
 			if err := u.updateInscriptionLocation(inputSatRange, flotsam, newSatpoint); err != nil {
@@ -519,7 +489,7 @@ func (u *InscriptionUpdater) indexEnvelopers(
 func (u *InscriptionUpdater) updateInscriptionLocation(
 	inputSatRanges []*model.SatRange,
 	flotsam *Flotsam,
-	newSatpoint *dao.SatPoint,
+	newSatpoint *util.SatPoint,
 ) error {
 
 	// Initialize error, unbound flag, and sequence number.
@@ -660,7 +630,7 @@ func (u *InscriptionUpdater) updateInscriptionLocation(
 		if !atomic.CompareAndSwapUint32(u.unboundInscriptions, unboundNum, unboundNum+1) {
 			return errors.New("unboundInscriptions compare and swap failed")
 		}
-		satPoint = &dao.SatPoint{
+		satPoint = &util.SatPoint{
 			Offset: unboundNum,
 		}
 	}
@@ -702,4 +672,124 @@ func (u *InscriptionUpdater) calculateSat(
 	// If no Sat could be calculated for any of the ranges in the inputSatRanges slice,
 	// return nil.
 	return nil
+}
+
+// fetchOutputValues fetches the output values of a transaction.
+func (u *InscriptionUpdater) fetchOutputValues(tx *wire.MsgTx, maxCurrentNum int) (valueCh chan int64, errCh chan error, err error) {
+	// Create a slice to store the outpoints that need to be fetched.
+	needFetchOutpoints := make([]*wire.OutPoint, 0)
+
+	// Loop over each input in the transaction.
+	for inputIndex := range tx.TxIn {
+		txIn := tx.TxIn[inputIndex]
+
+		// If the input is a coinbase, skip it.
+		if util.IsEmptyHash(txIn.PreviousOutPoint.Hash) {
+			continue
+		}
+
+		// If the value of the input is already cached, skip it.
+		if _, ok := u.valueCache[txIn.PreviousOutPoint.String()]; ok {
+			continue
+		}
+
+		// Try to get the value of the input from the database.
+		_, err = u.wtx.GetValueByOutpoint(txIn.PreviousOutPoint.String())
+		if err != nil && !errors.Is(err, gorm.ErrRecordNotFound) {
+			return
+		}
+		// If the value is not found in the database, add to outpoint to the list of outpoints that need to be fetched.
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			err = nil
+			needFetchOutpoints = append(needFetchOutpoints, &txIn.PreviousOutPoint)
+		}
+	}
+
+	if len(needFetchOutpoints) == 0 {
+		return
+	}
+
+	// Determine the size of the batches.
+	currentNum := len(needFetchOutpoints)/2 + 2
+	if currentNum > maxCurrentNum {
+		currentNum = maxCurrentNum
+	}
+
+	// Create an error group to handle errors from the fetching goroutines.
+	errWg := &errgroup.Group{}
+
+	// Create a channel to receive the fetched values.
+	valueCh = make(chan int64, currentNum)
+
+	// Start a goroutine to fetch the values in batches.
+	errWg.Go(func() error {
+		commitNum := 0
+		// Create a slice to store the results of the asynchronous fetch operations.
+		batchResult := make([]*rpcclient.FutureGetRawTransactionResult, currentNum)
+
+		// Loop over the outpoints that need to be fetched.
+		for i := 0; i < len(needFetchOutpoints); i++ {
+			select {
+			// If an interrupt signal is received, return an error.
+			case <-signal.InterruptChannel:
+				return signal.ErrInterrupted
+			default:
+				// Start an asynchronous fetch operation for to outpoint.
+				res := u.idx.BatchRpcClient().GetRawTransactionAsync(&needFetchOutpoints[i].Hash)
+				batchResult[i%currentNum] = &res
+
+				if (i+1)%currentNum == 0 {
+					if err := u.idx.BatchRpcClient().Send(); err != nil {
+						return err
+					}
+					// Loop over the results of the batch.
+					for ii := 0; ii < currentNum; ii++ {
+						// Receive the result of the fetch operation.
+						tx, err := batchResult[ii].Receive()
+						if err != nil {
+							return err
+						}
+						outpoint := needFetchOutpoints[commitNum*currentNum+ii]
+						// Send the value of the output to the value channel.
+						valueCh <- tx.MsgTx().TxOut[outpoint.Index].Value
+						batchResult[ii] = nil
+					}
+					commitNum++
+				}
+			}
+		}
+
+		lastNum := len(needFetchOutpoints) % currentNum
+		if lastNum > 0 {
+			if err := u.idx.BatchRpcClient().Send(); err != nil {
+				return err
+			}
+			for i := 0; i < lastNum; i++ {
+				// Receive the result of the fetch operation.
+				tx, err := batchResult[i].Receive()
+				if err != nil {
+					return err
+				}
+				outpoint := needFetchOutpoints[commitNum*currentNum+i]
+				// Send the value of the output to the value channel.
+				valueCh <- tx.MsgTx().TxOut[outpoint.Index].Value
+				batchResult[i] = nil
+			}
+		}
+		close(valueCh)
+		batchResult = nil
+		needFetchOutpoints = nil
+		return nil
+	})
+
+	errCh = make(chan error)
+
+	// Start a goroutine to wait for all fetching goroutines to finish and send any errors to the error channel.
+	go func() {
+		if err := errWg.Wait(); err != nil {
+			errCh <- err
+		}
+		close(errCh)
+	}()
+	return
 }

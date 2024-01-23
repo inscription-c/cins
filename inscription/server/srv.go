@@ -39,7 +39,6 @@ type SrvOptions struct {
 	dbListenPort       string
 	dbStatusListenPort string
 	enablePProf        bool
-	startHeight        uint32
 }
 
 type SrvOption func(*SrvOptions)
@@ -155,7 +154,6 @@ func init() {
 	Cmd.Flags().StringVarP(&srvOptions.dbListenPort, "dblisten", "", "4000", "inscription index database server listen port")
 	Cmd.Flags().StringVarP(&srvOptions.dbStatusListenPort, "dbstatuslisten", "", "10080", "inscription index database server status listen port")
 	Cmd.Flags().BoolVarP(&srvOptions.enablePProf, "enablepprof", "", false, "enable pprof")
-	Cmd.Flags().Uint32VarP(&srvOptions.startHeight, "startheight", "", 0, "start height")
 }
 
 func datDir() string {
@@ -254,7 +252,6 @@ func IndexSrv(opts ...SrvOption) error {
 		index.WithDB(db),
 		index.WithClient(cli),
 		index.WithBatchClient(batchCli),
-		index.WithStartHeight(srvOptions.startHeight),
 	)
 	runner := NewRunner(
 		WithClient(cli),
