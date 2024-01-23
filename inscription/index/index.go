@@ -124,20 +124,29 @@ func (idx *Indexer) BatchRpcClient() *rpcclient.Client {
 // The method returns an error if there is any issue during the indexing process.
 func (idx *Indexer) UpdateIndex() error {
 	var err error
+	wtx := idx.Begin()
+	defer func() {
+		if err != nil {
+			wtx.Rollback()
+			return
+		}
+	}()
 	// Get the current block count from the database.
-	idx.height, err = idx.opts.db.BlockCount()
+	idx.height, err = wtx.BlockCount()
 	if err != nil {
 		return err
 	}
 
 	// Get the latest block height from the Bitcoin node.
-	endHeight, err := idx.opts.cli.GetBlockCount()
+	var endHeight int64
+	endHeight, err = idx.RpcClient().GetBlockCount()
 	if err != nil {
 		return err
 	}
 
 	// Fetch blocks from the blockchain, starting from the current height of the indexer.
-	blocksCh, err := idx.fetchBlockFrom(idx.height, uint32(endHeight), 1)
+	var blocksCh chan *wire.MsgBlock
+	blocksCh, err = idx.fetchBlockFrom(idx.height, uint32(endHeight), 5)
 	if err != nil {
 		return err
 	}
@@ -145,65 +154,30 @@ func (idx *Indexer) UpdateIndex() error {
 		return nil
 	}
 
+	unCommit := 0
+	flushNum := 5000
+	valueCache := make(map[string]int64)
+
 	// Iterate over the fetched blocks.
 	for block := range blocksCh {
-		valueCache := make(map[string]int64)
+		unCommit++
 
-		// Start a new transaction and index the block.
-		if err := idx.DB().Transaction(func(tx *dao.DB) error {
+		// Index the block.
+		if err = idx.indexBlock(wtx, block, valueCache); err != nil {
+			return err
+		}
 
-			// Index the block.
-			if err = idx.indexBlock(tx, block, valueCache); err != nil {
+		if unCommit == flushNum {
+			unCommit = 0
+			if err := idx.commit(wtx, valueCache); err != nil {
 				return err
 			}
+			valueCache = make(map[string]int64)
+		}
+	}
 
-			// If the indexer is configured to index satoshis, flush the satoshi range cache to the database.
-			if idx.opts.indexSats {
-				log.Srv.Infof(
-					"Flushing %d entries (%.1f%% resulting from %d insertions) from memory to database",
-					len(idx.rangeCache),
-					float64(len(idx.rangeCache))/float64(idx.outputsInsertedSinceFlush)*100,
-					idx.outputsInsertedSinceFlush,
-				)
-
-				for outpoint, satRange := range idx.rangeCache {
-					if err = tx.SetOutpointToSatRange(outpoint, satRange); err != nil {
-						return err
-					}
-				}
-				idx.outputsInsertedSinceFlush = 0
-			}
-
-			// Update the value cache.
-			for outpoint, value := range valueCache {
-				if err = tx.SetOutpointToValue(outpoint, value); err != nil {
-					return err
-				}
-			}
-
-			// Update various statistics related to the indexing process.
-			if err = tx.IncrementStatistic(tables.StatisticOutputsTraversed, idx.outputsTraversed); err != nil {
-				return err
-			}
-			idx.outputsTraversed = 0
-			if err = tx.IncrementStatistic(tables.StatisticSatRanges, idx.satRangesSinceFlush); err != nil {
-				return err
-			}
-			idx.satRangesSinceFlush = 0
-			if err = tx.IncrementStatistic(tables.StatisticCommits, 1); err != nil {
-				return err
-			}
-
-			// Check if the block count in the database matches the current height of the indexer.
-			height, err := tx.BlockCount()
-			if err != nil {
-				return err
-			}
-			if height != idx.height {
-				return errors.New("height mismatch")
-			}
-			return nil
-		}); err != nil {
+	if unCommit > 0 {
+		if err = idx.commit(wtx, valueCache); err != nil {
 			return err
 		}
 	}
@@ -308,6 +282,65 @@ func (idx *Indexer) indexBlock(
 	return nil
 }
 
+// detectReorg is a method that detects if there is a reorganization in the blockchain.
+func (idx *Indexer) commit(wtx *dao.DB, valueCache map[string]int64) (err error) {
+	// If the indexer is configured to index satoshis, flush the satoshi range cache to the database.
+	if idx.opts.indexSats {
+		log.Srv.Infof(
+			"Flushing %d entries (%.1f%% resulting from %d insertions) from memory to database",
+			len(idx.rangeCache),
+			float64(len(idx.rangeCache))/float64(idx.outputsInsertedSinceFlush)*100,
+			idx.outputsInsertedSinceFlush,
+		)
+
+		for outpoint, satRange := range idx.rangeCache {
+			if err = wtx.SetOutpointToSatRange(outpoint, satRange); err != nil {
+				return err
+			}
+		}
+		idx.outputsInsertedSinceFlush = 0
+	}
+
+	// Update the value cache.
+	for outpoint, value := range valueCache {
+		if err = wtx.SetOutpointToValue(outpoint, value); err != nil {
+			return err
+		}
+	}
+
+	// Update various statistics related to the indexing process.
+	if err = wtx.IncrementStatistic(tables.StatisticOutputsTraversed, idx.outputsTraversed); err != nil {
+		return err
+	}
+	idx.outputsTraversed = 0
+	if err = wtx.IncrementStatistic(tables.StatisticSatRanges, idx.satRangesSinceFlush); err != nil {
+		return err
+	}
+	idx.satRangesSinceFlush = 0
+	if err = wtx.IncrementStatistic(tables.StatisticCommits, 1); err != nil {
+		return err
+	}
+
+	wtx.Commit()
+
+	log.Srv.Infof(
+		"Committing at block %d, %d outputs traversed, %d in map, %d cached",
+		idx.height-1, idx.outputsTraversed, len(valueCache), idx.outputsCached,
+	)
+
+	wtx = idx.Begin()
+
+	// Check if the block count in the database matches the current height of the indexer.
+	height, err := wtx.BlockCount()
+	if err != nil {
+		return err
+	}
+	if height != idx.height {
+		return errors.New("height mismatch")
+	}
+	return nil
+}
+
 // fetchBlockFrom is a method that fetches blocks from the blockchain, starting from a specified start height and ending at a specified end height.
 // It returns a channel that emits the fetched blocks.
 // The method returns an error if there is any issue during the fetching process.
@@ -321,7 +354,9 @@ func (idx *Indexer) fetchBlockFrom(start, end, current uint32) (chan *wire.MsgBl
 	go func() {
 		defer close(blockCh)
 		for i := start; i <= end; i++ {
-			block, err := idx.getBlockWithRetries(i)
+			var err error
+			var block *wire.MsgBlock
+			block, err = idx.getBlockWithRetries(i)
 			if err != nil {
 				log.Srv.Warn("getBlockWithRetries", err)
 				return
@@ -340,7 +375,7 @@ func (idx *Indexer) getBlockWithRetries(height uint32) (*wire.MsgBlock, error) {
 	for {
 		select {
 		case <-signal.InterruptChannel:
-			return nil, errors.New("interrupted")
+			return nil, signal.ErrInterrupted
 		default:
 			errs++
 			if errs > 0 {
@@ -353,15 +388,22 @@ func (idx *Indexer) getBlockWithRetries(height uint32) (*wire.MsgBlock, error) {
 			}
 			// Get the hash of the block at the specified height.
 			hash, err := idx.RpcClient().GetBlockHash(int64(height))
-			if err != nil {
+			if err != nil && !errors.Is(err, rpcclient.ErrClientShutdown) {
 				log.Srv.Warn("GetBlockHash", err)
 				continue
 			}
+			if errors.Is(err, rpcclient.ErrClientShutdown) {
+				return nil, signal.ErrInterrupted
+			}
+
 			// Get the block with the obtained hash.
 			block, err := idx.opts.cli.GetBlock(hash)
-			if err != nil {
+			if err != nil && !errors.Is(err, rpcclient.ErrClientShutdown) {
 				log.Srv.Warn("GetBlock", err)
 				continue
+			}
+			if errors.Is(err, rpcclient.ErrClientShutdown) {
+				return nil, signal.ErrInterrupted
 			}
 			for _, tx := range block.Transactions {
 				for _, txIn := range tx.TxIn {
