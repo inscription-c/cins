@@ -9,6 +9,7 @@ import (
 	"github.com/btcsuite/btclog"
 	"github.com/inscription-c/insc/constants"
 	"github.com/inscription-c/insc/internal/signal"
+	"github.com/pingcap/tidb/pkg/store/driver"
 	gormMysqlDriver "gorm.io/driver/mysql"
 	"gorm.io/gorm"
 	"gorm.io/gorm/logger"
@@ -87,15 +88,15 @@ type DB struct {
 }
 
 type DBOptions struct {
-	addr     string
-	user     string
-	password string
-	dbName   string
-
+	addr             string
+	user             string
+	password         string
+	dbName           string
 	noEmbedDB        bool
 	dataDir          string
 	serverPort       string
 	serverStatusPort string
+	startHeight      uint32
 
 	log               btclog.Logger
 	autoMigrateTables []interface{}
@@ -541,7 +542,11 @@ func setCPUAffinity() {
 }
 
 func registerStores() {
-	err := kvstore.Register("unistore", mockstore.EmbedUnistoreDriver{})
+	err := kvstore.Register("tikv", driver.TiKVDriver{})
+	terror.MustNil(err)
+	err = kvstore.Register("mocktikv", mockstore.MockTiKVDriver{})
+	terror.MustNil(err)
+	err = kvstore.Register("unistore", mockstore.EmbedUnistoreDriver{})
 	terror.MustNil(err)
 }
 

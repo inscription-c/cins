@@ -16,11 +16,12 @@ import (
 
 // Options is a struct that holds the configuration options for a Handler.
 type Options struct {
-	addr    string            // The address to bind the server to
-	testnet bool              // Whether to use the testnet or not
-	engin   *gin.Engine       // The gin engine for handling HTTP requests
-	db      *dao.DB           // The database for storing data
-	cli     *rpcclient.Client // The RPC client for interacting with the Bitcoin network
+	addr        string            // The address to bind the server to
+	testnet     bool              // Whether to use the testnet or not
+	engin       *gin.Engine       // The gin engine for handling HTTP requests
+	db          *dao.DB           // The database for storing data
+	cli         *rpcclient.Client // The RPC client for interacting with the Bitcoin network
+	enablePProf bool              // Whether to enable pprof or not
 }
 
 // Option is a function type that sets a specific option in an Options struct.
@@ -66,6 +67,15 @@ func WithClient(cli *rpcclient.Client) func(*Options) {
 	}
 }
 
+// WithEnablePProf is a function that sets the enablePProf option for an Options struct.
+func WithEnablePProf(pprof bool) func(*Options) {
+	return func(options *Options) {
+		if pprof {
+			options.enablePProf = pprof
+		}
+	}
+}
+
 // Handler is a struct that holds the options for handling requests.
 type Handler struct {
 	options *Options
@@ -104,12 +114,6 @@ func New(opts ...Option) (*Handler, error) {
 	h.options = &Options{}
 	for _, opt := range opts {
 		opt(h.options)
-	}
-	if h.options.addr == "" {
-		h.options.addr = ":8335"
-		if h.options.testnet {
-			h.options.addr = ":18335"
-		}
 	}
 	if h.options.db == nil {
 		return nil, fmt.Errorf("db is nil")

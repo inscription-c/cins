@@ -19,14 +19,14 @@ import (
 func detectReorg(wtx *dao.DB, block *wire.MsgBlock, height uint32) error {
 	bitcoindPrevBlockHash := block.Header.PrevBlock.String() // Get the previous block hash from the block header
 	if height == 0 {
-		return nil // Return nil if there is no previous block to compare with
+		return nil
 	}
-	indexPreBlockHash, err := wtx.BlockHash(height - 1) // Get the block hash of the block at the height minus one from the DB
+	indexPreBlockHash, err := wtx.BlockHash(height - 1)
 	if err != nil {
-		return err // Return the error if there is an error getting the block hash
+		return err
 	}
 	if indexPreBlockHash == bitcoindPrevBlockHash {
-		return nil // Return nil if there is no reorganization
+		return nil
 	}
-	return errors.New("unrecoverable reorg detected") // Return an error if a reorganization is detected
+	return errors.New("unrecoverable reorg detected")
 }

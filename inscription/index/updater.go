@@ -2,16 +2,13 @@ package index
 
 import (
 	"errors"
-	"fmt"
 	"github.com/btcsuite/btcd/rpcclient"
 	"github.com/btcsuite/btcd/wire"
 	"github.com/gogf/gf/v2/util/gconv"
 	"github.com/inscription-c/insc/inscription/index/dao"
 	"github.com/inscription-c/insc/inscription/index/model"
 	"github.com/inscription-c/insc/inscription/index/tables"
-	"github.com/inscription-c/insc/internal/signal"
 	"github.com/inscription-c/insc/internal/util"
-	"golang.org/x/sync/errgroup"
 	"gorm.io/gorm"
 	"sort"
 	"sync/atomic"
@@ -163,11 +160,10 @@ func (u *InscriptionUpdater) indexEnvelopers(
 		totalOutputValue += v.Value
 	}
 
-	// Fetch the output values of the transaction.
-	valueCh, errCh, err := u.fetchOutputValues(tx, 64)
-	if err != nil {
-		return err
-	}
+	currentNum := 32
+	totalNeedGetValNum := 0
+	batchOutIndex := make([]uint32, currentNum)
+	batchTxRes := make([]*rpcclient.FutureGetRawTransactionResult, currentNum)
 
 	// Loop over each input in the transaction.
 	for inputIndex := range tx.TxIn {
@@ -237,14 +233,30 @@ func (u *InscriptionUpdater) indexEnvelopers(
 					return err
 				}
 			} else {
-				// If the value is not in the database, fetch it asynchronously.
-				select {
-				case err := <-errCh:
+				totalNeedGetValNum++
+				outpoint, err := wire.NewOutPointFromString(preOutpoint)
+				if err != nil {
 					return err
-				case currentInputValue, ok = <-valueCh:
-					if !ok {
-						return fmt.Errorf("valueCh closed")
+				}
+				batchIdx := (totalNeedGetValNum - 1) % currentNum
+				if totalNeedGetValNum > 1 && batchIdx == 0 {
+					if err := u.idx.BatchRpcClient().Send(); err != nil {
+						return err
 					}
+					for idx, v := range batchTxRes {
+						txRes, err := v.Receive()
+						if err != nil {
+							return err
+						}
+						totalInputValue += txRes.MsgTx().TxOut[batchOutIndex[idx]].Value
+					}
+					batchOutIndex[batchIdx] = outpoint.Index
+					asyncTxRes := u.idx.BatchRpcClient().GetRawTransactionAsync(&outpoint.Hash)
+					batchTxRes[batchIdx] = &asyncTxRes
+				} else {
+					batchOutIndex[batchIdx] = outpoint.Index
+					asyncTxRes := u.idx.BatchRpcClient().GetRawTransactionAsync(&outpoint.Hash)
+					batchTxRes[batchIdx] = &asyncTxRes
 				}
 			}
 		}
@@ -352,6 +364,22 @@ func (u *InscriptionUpdater) indexEnvelopers(
 			idCounter++
 		}
 	}
+
+	lastNum := totalNeedGetValNum % currentNum
+	if lastNum > 0 {
+		if err := u.idx.BatchRpcClient().Send(); err != nil {
+			return err
+		}
+		for i := 0; i < lastNum; i++ {
+			txRes, err := batchTxRes[i].Receive()
+			if err != nil {
+				return err
+			}
+			totalInputValue += txRes.MsgTx().TxOut[batchOutIndex[i]].Value
+		}
+	}
+	batchTxRes = nil
+	batchOutIndex = nil
 
 	// TODO index transaction
 	// TODO potential_parents
@@ -639,7 +667,6 @@ func (u *InscriptionUpdater) updateInscriptionLocation(
 	if err := u.wtx.SetSatPointToSequenceNum(satPoint, sequenceNumber); err != nil {
 		return err
 	}
-	// Return nil if no errors occurred.
 	return nil
 }
 
@@ -675,165 +702,4 @@ func (u *InscriptionUpdater) calculateSat(
 	// If no Sat could be calculated for any of the ranges in the inputSatRanges slice,
 	// return nil.
 	return nil
-}
-
-// fetchOutputValues fetches the output values of a transaction.
-func (u *InscriptionUpdater) fetchOutputValues(tx *wire.MsgTx, maxCurrentNum int) (valueCh chan int64, errCh chan error, err error) {
-	// Initialize an empty string for the latest outpoint.
-	latestOutpoint := ""
-
-	// Create a slice to store the outpoints that need to be fetched.
-	needFetchOutpoints := make([]string, 0)
-
-	// Create a map to store the latest outpoint for each outpoint that needs to be fetched.
-	needFetchOutpointsMap := make(map[string]string)
-
-	// Loop over each input in the transaction.
-	for inputIndex := range tx.TxIn {
-		txIn := tx.TxIn[inputIndex]
-
-		// If the input is a coinbase, skip it.
-		if util.IsEmptyHash(txIn.PreviousOutPoint.Hash) {
-			continue
-		}
-
-		// If the value of the input is already cached, skip it.
-		if _, ok := u.valueCache[txIn.PreviousOutPoint.String()]; ok {
-			continue
-		}
-
-		// Try to get the value of the input from the database.
-		_, err = u.wtx.GetValueByOutpoint(txIn.PreviousOutPoint.String())
-
-		// If the value is not found in the database, add to outpoint to the list of outpoints that need to be fetched.
-		if errors.Is(err, gorm.ErrRecordNotFound) {
-			err = nil
-			preOutpoint := txIn.PreviousOutPoint.String()
-			needFetchOutpoints = append(needFetchOutpoints, preOutpoint)
-
-			// If there is a latest outpoint, map the current outpoint to it.
-			if latestOutpoint != "" {
-				needFetchOutpointsMap[preOutpoint] = latestOutpoint
-			} else {
-				needFetchOutpointsMap[preOutpoint] = ""
-			}
-
-			// Update the latest outpoint.
-			latestOutpoint = preOutpoint
-		}
-	}
-
-	// If there are outpoints that need to be fetched, fetch them in batches.
-	if len(needFetchOutpoints) > 0 {
-		// Determine the size of the batches.
-		currentNum := len(needFetchOutpoints)/2 + 1
-		if currentNum > maxCurrentNum {
-			currentNum = maxCurrentNum
-		}
-
-		// Create a channel to receive the fetched values.
-		valueCh = make(chan int64, currentNum)
-
-		// Create an error group to handle errors from the fetching goroutines.
-		errWg := &errgroup.Group{}
-
-		// Start a goroutine to fetch the values in batches.
-		errWg.Go(func() error {
-			// Create a slice to store the results of the asynchronous fetch operations.
-			batchResult := make([]rpcclient.FutureGetRawTransactionResult, 0)
-
-			// Loop over the outpoints that need to be fetched.
-			for i := 1; i <= len(needFetchOutpoints); i++ {
-				select {
-				// If an interrupt signal is received, return an error.
-				case <-signal.InterruptChannel:
-					return signal.ErrInterrupted
-				default:
-					// Parse to outpoint from the string.
-					outpoint, err := wire.NewOutPointFromString(needFetchOutpoints[i-1])
-					if err != nil {
-						return err
-					}
-
-					// Start an asynchronous fetch operation for to outpoint.
-					res := u.idx.BatchRpcClient().GetRawTransactionAsync(&outpoint.Hash)
-					batchResult = append(batchResult, res)
-
-					// If the current batch is full, send the batch and process the results.
-					if i%currentNum == 0 {
-						if err := u.idx.BatchRpcClient().Send(); err != nil {
-							return err
-						}
-
-						// Loop over the results of the batch.
-						for idx, v := range batchResult {
-							// Receive the result of the fetch operation.
-							tx, err := v.Receive()
-							if err != nil {
-								return err
-							}
-
-							// Get the outpoint string from the list of outpoints that need to be fetched.
-							outpointStr := needFetchOutpoints[i-currentNum+idx]
-
-							// Parse to outpoint from the string.
-							outpoint, err := wire.NewOutPointFromString(outpointStr)
-							if err != nil {
-								return err
-							}
-
-							// Send the value of the output to the value channel.
-							valueCh <- tx.MsgTx().TxOut[outpoint.Index].Value
-						}
-
-						// Clear the batch results.
-						batchResult = make([]rpcclient.FutureGetRawTransactionResult, 0)
-					}
-				}
-			}
-
-			// If there are remaining results in the batch, send the batch and process the results.
-			if len(batchResult) > 0 {
-				if err := u.idx.BatchRpcClient().Send(); err != nil {
-					return err
-				}
-
-				// Loop over the remaining results in the batch.
-				for idx, v := range batchResult {
-					// Receive the result of the fetch operation.
-					tx, err := v.Receive()
-					if err != nil {
-						return err
-					}
-
-					// Get the outpoint string from the list of outpoints that need to be fetched.
-					outpointStr := needFetchOutpoints[len(needFetchOutpoints)-len(batchResult)+idx]
-
-					// Parse the outpoint from the string.
-					outpoint, err := wire.NewOutPointFromString(outpointStr)
-					if err != nil {
-						return err
-					}
-
-					// Send the value of the output to the value channel.
-					valueCh <- tx.MsgTx().TxOut[outpoint.Index].Value
-				}
-			}
-
-			// Close the value channel to signal that all values have been fetched.
-			close(valueCh)
-			return nil
-		})
-
-		// Create a channel to receive errors from the fetching goroutines.
-		errCh = make(chan error)
-
-		// Start a goroutine to wait for all fetching goroutines to finish and send any errors to the error channel.
-		go func() {
-			if err := errWg.Wait(); err != nil {
-				errCh <- err
-			}
-		}()
-	}
-	return
 }

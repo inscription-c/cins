@@ -24,6 +24,7 @@ type Options struct {
 	indexTransaction    bool
 	noIndexInscriptions bool
 	flushNum            uint64
+	startHeight         uint32
 }
 
 type Option func(*Options)
@@ -52,6 +53,12 @@ func WithFlushNum(flushNum uint64) func(*Options) {
 	}
 }
 
+func WithStartHeight(height uint32) func(*Options) {
+	return func(options *Options) {
+		options.startHeight = height
+	}
+}
+
 type Indexer struct {
 	opts                      *Options
 	rangeCache                map[string]model.SatRange
@@ -75,6 +82,10 @@ func NewIndexer(opts ...Option) *Indexer {
 
 func (idx *Indexer) DB() *dao.DB {
 	return idx.opts.db
+}
+
+func (idx *Indexer) Begin() *dao.DB {
+	return &dao.DB{DB: idx.opts.db.DB.Begin()}
 }
 
 func (idx *Indexer) RpcClient() *rpcclient.Client {
