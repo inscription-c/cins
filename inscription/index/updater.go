@@ -13,6 +13,7 @@ import (
 	"golang.org/x/sync/errgroup"
 	"gorm.io/gorm"
 	"sort"
+	"sync"
 	"sync/atomic"
 )
 
@@ -99,29 +100,77 @@ type InscriptionUpdater struct {
 	// flotsam is a slice of pointers to Flotsam structs. Each Flotsam represents a floating inscription.
 	flotsam []*Flotsam
 
-	// lostSats is a uint64 that represents the total number of lost Satoshis.
+	// lostSats is an uint64 that represents the total number of lost Satoshis.
 	lostSats uint64
 
-	// reward is a uint64 that represents the total reward for mining a block.
+	// reward is an uint64 that represents the total reward for mining a block.
 	reward uint64
 
 	// valueCache is a map where the key is a string and the value is an int64. It is used for caching the values of transactions.
-	valueCache map[string]int64
+	valueCache *ValueCache
 
 	// timestamp is an int64 that represents the timestamp of the last block.
 	timestamp int64
 
-	// nextSequenceNumber is a pointer to a uint64 that represents the next sequence number to be used for a transaction.
+	// nextSequenceNumber is a pointer to an uint64 that represents the next sequence number to be used for a transaction.
 	nextSequenceNumber *uint64
 
-	// unboundInscriptions is a pointer to a uint32 that represents the total number of unbound inscriptions.
+	// unboundInscriptions is a pointer to an uint32 that represents the total number of unbound inscriptions.
 	unboundInscriptions *uint32
 
-	// cursedInscriptionCount is a pointer to a uint32 that represents the total number of cursed inscriptions.
+	// cursedInscriptionCount is a pointer to an uint32 that represents the total number of cursed inscriptions.
 	cursedInscriptionCount *uint32
 
-	// blessedInscriptionCount is a pointer to a uint32 that represents the total number of blessed inscriptions.
+	// blessedInscriptionCount is a pointer to an uint32 that represents the total number of blessed inscriptions.
 	blessedInscriptionCount *uint32
+}
+
+type ValueCache struct {
+	sync.RWMutex
+	m map[string]int64
+}
+
+func NewValueCache() *ValueCache {
+	return &ValueCache{
+		m: make(map[string]int64),
+	}
+}
+
+func (c *ValueCache) Read(outpoint string) (int64, bool) {
+	c.RLock()
+	v, ok := c.m[outpoint]
+	c.RUnlock()
+	return v, ok
+}
+
+func (c *ValueCache) Write(outpoint string, value int64) {
+	c.Lock()
+	c.m[outpoint] = value
+	c.Unlock()
+}
+
+func (c *ValueCache) Delete(outpoint string) {
+	c.Lock()
+	delete(c.m, outpoint)
+	c.Unlock()
+}
+
+func (c *ValueCache) Len() int {
+	c.RLock()
+	l := len(c.m)
+	c.RUnlock()
+	return l
+}
+
+func (c *ValueCache) Range(fn func(k string, v int64) error) error {
+	c.RLock()
+	for k, v := range c.m {
+		if err := fn(k, v); err != nil {
+			return err
+		}
+	}
+	c.RUnlock()
+	return nil
 }
 
 // inscribedOffsetEntity represents an entity with an inscribed offset.
@@ -216,13 +265,13 @@ func (u *InscriptionUpdater) indexEnvelopers(
 		preOutpoint := txIn.PreviousOutPoint.String()
 
 		// Try to get the current input value from the value cache.
-		currentInputValue, ok := u.valueCache[txIn.PreviousOutPoint.String()]
+		currentInputValue, ok := u.valueCache.Read(txIn.PreviousOutPoint.String())
 		if ok {
 			// If the value is in the cache, delete it from the cache.
-			delete(u.valueCache, preOutpoint)
+			u.valueCache.Delete(preOutpoint)
 		} else {
 			// If the value is not in the cache, try to get it from the database.
-			currentInputValue, err = u.wtx.GetValueByOutpoint(preOutpoint)
+			currentInputValue, err = u.idx.DB().GetValueByOutpoint(preOutpoint)
 			if err != nil && !errors.Is(err, gorm.ErrRecordNotFound) {
 				return err
 			}
@@ -420,7 +469,7 @@ func (u *InscriptionUpdater) indexEnvelopers(
 
 		// Cache the value of the current output.
 		outpoint := util.NewOutPoint(tx.TxHash().String(), uint32(vout)).String()
-		u.valueCache[outpoint] = txOut.Value
+		u.valueCache.Write(outpoint, txOut.Value)
 	}
 
 	// Loop over each new location.
@@ -693,12 +742,12 @@ func (u *InscriptionUpdater) fetchOutputValues(currentNum int, txs ...*wire.MsgT
 				}
 
 				// If the value of the input is already cached, skip it.
-				if _, ok := u.valueCache[txIn.PreviousOutPoint.String()]; ok {
+				if _, ok := u.valueCache.Read(txIn.PreviousOutPoint.String()); ok {
 					continue
 				}
 
 				// Try to get the value of the input from the database.
-				_, err := u.wtx.GetValueByOutpoint(txIn.PreviousOutPoint.String())
+				_, err := u.idx.DB().GetValueByOutpoint(txIn.PreviousOutPoint.String())
 				if err != nil && !errors.Is(err, gorm.ErrRecordNotFound) {
 					return err
 				}
@@ -741,9 +790,8 @@ func (u *InscriptionUpdater) fetchOutputValues(currentNum int, txs ...*wire.MsgT
 						if err != nil {
 							return err
 						}
-						outpoint := needFetchOutpoints[commitNum*currentNum+ii]
 						// Send the value of the output to the value channel.
-						valueCh <- tx.MsgTx().TxOut[outpoint.Index].Value
+						valueCh <- tx.MsgTx().TxOut[needFetchOutpoints[ii].Index].Value
 						batchResult[ii] = nil
 					}
 					commitNum++
@@ -763,9 +811,8 @@ func (u *InscriptionUpdater) fetchOutputValues(currentNum int, txs ...*wire.MsgT
 				if err != nil {
 					return err
 				}
-				outpoint := needFetchOutpoints[commitNum*currentNum+i]
 				// Send the value of the output to the value channel.
-				valueCh <- tx.MsgTx().TxOut[outpoint.Index].Value
+				valueCh <- tx.MsgTx().TxOut[needFetchOutpoints[i].Index].Value
 				batchResult[i] = nil
 			}
 		}

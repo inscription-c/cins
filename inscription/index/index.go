@@ -68,13 +68,13 @@ type Indexer struct {
 	rangeCache map[string]model.SatRange
 	// height is an uint32 that represents the current height of the blockchain being indexed.
 	height uint32
-	// satRangesSinceFlush is a uint32 that represents the number of satoshi ranges since the last flush.
+	// satRangesSinceFlush is an uint32 that represents the number of satoshi ranges since the last flush.
 	satRangesSinceFlush uint32
-	// outputsCached is a uint64 that represents the number of outputs cached.
+	// outputsCached is an uint64 that represents the number of outputs cached.
 	outputsCached uint64
-	// outputsInsertedSinceFlush is a uint64 that represents the number of outputs inserted since the last flush.
+	// outputsInsertedSinceFlush is an uint64 that represents the number of outputs inserted since the last flush.
 	outputsInsertedSinceFlush uint64
-	// outputsTraversed is a uint32 that represents the number of outputs traversed.
+	// outputsTraversed is an uint32 that represents the number of outputs traversed.
 	outputsTraversed uint32
 }
 
@@ -149,8 +149,8 @@ func (idx *Indexer) UpdateIndex() error {
 	}
 
 	unCommit := 0
-	flushNum := 1000
-	valueCache := make(map[string]int64)
+	flushNum := 5000
+	valueCache := NewValueCache()
 
 	// Iterate over the fetched blocks.
 	for block := range blocksCh {
@@ -166,7 +166,7 @@ func (idx *Indexer) UpdateIndex() error {
 			if err := idx.commit(wtx, valueCache); err != nil {
 				return err
 			}
-			valueCache = make(map[string]int64)
+			valueCache = NewValueCache()
 		}
 	}
 
@@ -184,7 +184,7 @@ func (idx *Indexer) UpdateIndex() error {
 func (idx *Indexer) indexBlock(
 	wtx *dao.DB,
 	block *wire.MsgBlock,
-	valueCache map[string]int64) error {
+	valueCache *ValueCache) error {
 
 	// Detect if there is a reorganization in the blockchain.
 	if err := detectReorg(wtx, block, idx.height); err != nil {
@@ -279,10 +279,10 @@ func (idx *Indexer) indexBlock(
 }
 
 // detectReorg is a method that detects if there is a reorganization in the blockchain.
-func (idx *Indexer) commit(wtx *dao.DB, valueCache map[string]int64) (err error) {
+func (idx *Indexer) commit(wtx *dao.DB, valueCache *ValueCache) (err error) {
 	log.Srv.Infof(
 		"Committing at block %d, %d outputs traversed, %d in map, %d cached",
-		idx.height-1, idx.outputsTraversed, len(valueCache), idx.outputsCached,
+		idx.height-1, idx.outputsTraversed, valueCache.Len(), idx.outputsCached,
 	)
 
 	// If the indexer is configured to index satoshis, flush the satoshi range cache to the database.
@@ -303,10 +303,13 @@ func (idx *Indexer) commit(wtx *dao.DB, valueCache map[string]int64) (err error)
 	}
 
 	// Update the value cache.
-	for outpoint, value := range valueCache {
-		if err = wtx.SetOutpointToValue(outpoint, value); err != nil {
+	if err := valueCache.Range(func(k string, v int64) error {
+		if err = wtx.SetOutpointToValue(k, v); err != nil {
 			return err
 		}
+		return nil
+	}); err != nil {
+		return err
 	}
 
 	// Update various statistics related to the indexing process.
