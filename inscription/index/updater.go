@@ -187,8 +187,6 @@ type locationsInscription struct {
 // indexEnvelopers indexes the envelopers of a transaction.
 func (u *InscriptionUpdater) indexEnvelopers(
 	tx *wire.MsgTx,
-	valueCh chan int64,
-	errCh chan error,
 	inputSatRange []*model.SatRange) error {
 
 	// Initialize an integer counter for the inscriptions' IDs.
@@ -211,6 +209,9 @@ func (u *InscriptionUpdater) indexEnvelopers(
 	for _, v := range tx.TxOut {
 		totalOutputValue += v.Value
 	}
+
+	// Initialize a channel to receive the output values from the fetchOutputValues method.
+	valueCh, errCh := u.fetchOutputValues(tx, 32)
 
 	// Loop over each input in the transaction.
 	for inputIndex := range tx.TxIn {
@@ -726,7 +727,14 @@ func (u *InscriptionUpdater) calculateSat(
 }
 
 // fetchOutputValues fetches the output values of a transaction.
-func (u *InscriptionUpdater) fetchOutputValues(currentNum int, txs ...*wire.MsgTx) (chan int64, chan error) {
+func (u *InscriptionUpdater) fetchOutputValues(tx *wire.MsgTx, maxCurrentNum int) (chan int64, chan error) {
+	// Calculate the current number of outpoints to fetch.
+	currentNum := len(tx.TxIn)/2 + 2
+	if currentNum > maxCurrentNum {
+		currentNum = maxCurrentNum
+	}
+
+	// Create a channel to receive errors.
 	errCh := make(chan error)
 
 	// Create a channel to receive the fetched values.
@@ -738,36 +746,34 @@ func (u *InscriptionUpdater) fetchOutputValues(currentNum int, txs ...*wire.MsgT
 	go func() {
 		defer close(needFetchOutpointsCh)
 		// Loop over each input in the transaction.
-		for _, tx := range txs {
-			for inputIndex := range tx.TxIn {
-				select {
-				case <-signal.InterruptChannel:
+		for inputIndex := range tx.TxIn {
+			select {
+			case <-signal.InterruptChannel:
+				return
+			default:
+				txIn := tx.TxIn[inputIndex]
+
+				// If the input is a coinbase, skip it.
+				if util.IsEmptyHash(txIn.PreviousOutPoint.Hash) {
+					continue
+				}
+
+				// If the value of the input is already cached, skip it.
+				if _, ok := u.valueCache.Read(txIn.PreviousOutPoint.String()); ok {
+					continue
+				}
+
+				// Try to get the value of the input from the database.
+				_, err := u.idx.DB().GetValueByOutpoint(txIn.PreviousOutPoint.String())
+				if err != nil && !errors.Is(err, gorm.ErrRecordNotFound) {
+					errCh <- err
+					close(errCh)
 					return
-				default:
-					txIn := tx.TxIn[inputIndex]
+				}
 
-					// If the input is a coinbase, skip it.
-					if util.IsEmptyHash(txIn.PreviousOutPoint.Hash) {
-						continue
-					}
-
-					// If the value of the input is already cached, skip it.
-					if _, ok := u.valueCache.Read(txIn.PreviousOutPoint.String()); ok {
-						continue
-					}
-
-					// Try to get the value of the input from the database.
-					_, err := u.idx.DB().GetValueByOutpoint(txIn.PreviousOutPoint.String())
-					if err != nil && !errors.Is(err, gorm.ErrRecordNotFound) {
-						errCh <- err
-						close(errCh)
-						return
-					}
-
-					// If the value is not found in the database, add to outpoint to the list of outpoints that need to be fetched.
-					if errors.Is(err, gorm.ErrRecordNotFound) {
-						needFetchOutpointsCh <- &txIn.PreviousOutPoint
-					}
+				// If the value is not found in the database, add to outpoint to the list of outpoints that need to be fetched.
+				if errors.Is(err, gorm.ErrRecordNotFound) {
+					needFetchOutpointsCh <- &txIn.PreviousOutPoint
 				}
 			}
 		}

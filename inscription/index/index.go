@@ -236,10 +236,9 @@ func (idx *Indexer) indexBlock(
 		// If the indexer is configured to index inscriptions, index the inscriptions in the block.
 		txs := append(block.Transactions[1:], block.Transactions[0])
 		// Iterate over the transactions in the block.
-		valueCh, errCh := inscriptionUpdater.fetchOutputValues(32, txs...)
 		for i := range txs {
 			tx := txs[i]
-			if err := inscriptionUpdater.indexEnvelopers(tx, valueCh, errCh, nil); err != nil {
+			if err := inscriptionUpdater.indexEnvelopers(tx, nil); err != nil {
 				return err
 			}
 		}

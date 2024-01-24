@@ -228,6 +228,7 @@ func IndexSrv(opts ...SrvOption) error {
 			&tables.SatPoint{},
 			&tables.SatSatPoint{},
 			&tables.Statistic{},
+			&tables.Protocol{},
 		),
 	)
 	if err != nil {
