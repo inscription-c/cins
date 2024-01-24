@@ -15,7 +15,7 @@ type Inscription struct {
 
 func (d *DB) NextSequenceNumber() (num uint64, err error) {
 	ins := &tables.Inscriptions{}
-	if err = d.DB.Last(&ins).Error; err != nil {
+	if err = d.Last(&ins).Error; err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			err = nil
 		}
@@ -25,7 +25,7 @@ func (d *DB) NextSequenceNumber() (num uint64, err error) {
 }
 
 func (d *DB) GetInscriptionById(inscriptionId string) (ins tables.Inscriptions, err error) {
-	err = d.DB.Where("inscription_id = ?", inscriptionId).First(&ins).Error
+	err = d.Where("inscription_id = ?", inscriptionId).First(&ins).Error
 	if errors.Is(err, gorm.ErrRecordNotFound) {
 		err = nil
 	}
@@ -34,7 +34,7 @@ func (d *DB) GetInscriptionById(inscriptionId string) (ins tables.Inscriptions, 
 
 func (d *DB) DeleteInscriptionById(inscriptionId string) (sequenceNum uint64, err error) {
 	ins := &tables.Inscriptions{}
-	err = d.DB.Clauses(clause.Returning{}).Where("inscription_id = ?", inscriptionId).Delete(ins).Error
+	err = d.Clauses(clause.Returning{}).Where("inscription_id = ?", inscriptionId).Delete(ins).Error
 	if err != nil {
 		return
 	}
@@ -47,7 +47,7 @@ func (d *DB) CreateInscription(ins *tables.Inscriptions) error {
 }
 
 func (d *DB) GetInscriptionBySequenceNum(sequenceNum uint64) (ins tables.Inscriptions, err error) {
-	err = d.DB.Where("sequence_num = ?", sequenceNum).First(&ins).Error
+	err = d.Where("sequence_num = ?", sequenceNum).First(&ins).Error
 	if errors.Is(err, gorm.ErrRecordNotFound) {
 		err = nil
 	}
@@ -59,13 +59,35 @@ type InscriptionId struct {
 	Offset   uint32 `gorm:"column:offset;type:int unsigned;default:0;NOT NULL"`
 }
 
-func (d *DB) FindInscriptionsByPage(page, size int) (list []InscriptionId, total int64, err error) {
-	db := d.DB.Where("inscription_num>=0").Order("inscription_num asc")
-	if err = db.Count(&total).Error; err != nil && !errors.Is(err, gorm.ErrRecordNotFound) {
+func (d *DB) FindInscriptionsByPage(page, size int) (list []*InscriptionId, err error) {
+	err = d.Where("inscription_num>=0").
+		Order("inscription_num asc").
+		Offset((page - 1) * size).Limit(size + 1).Find(&list).Error
+	if errors.Is(err, gorm.ErrRecordNotFound) {
 		err = nil
 		return
 	}
-	err = db.Offset((page - 1) * size).Limit(size).Find(&list).Error
+	return
+}
+
+func (d *DB) FindInscriptionsInBlock(height, page, size int) (list []*InscriptionId, err error) {
+	newBlock := &tables.BlockInfo{}
+	err = d.Where("height=?", height).First(newBlock).Error
+	if errors.Is(err, gorm.ErrRecordNotFound) {
+		err = nil
+		return
+	}
+
+	oldBlock := &tables.BlockInfo{}
+	err = d.Where("height=?", height-1).First(oldBlock).Error
+	if errors.Is(err, gorm.ErrRecordNotFound) {
+		err = nil
+		return
+	}
+
+	err = d.Where("sequence_num>=? and sequence_num<=?",
+		oldBlock.SequenceNum, newBlock.SequenceNum).
+		Offset((page - 1) * size).Limit(size + 1).Find(&list).Error
 	if errors.Is(err, gorm.ErrRecordNotFound) {
 		err = nil
 		return

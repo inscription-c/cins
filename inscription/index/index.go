@@ -125,12 +125,6 @@ func (idx *Indexer) BatchRpcClient() *rpcclient.Client {
 func (idx *Indexer) UpdateIndex() error {
 	var err error
 	wtx := idx.Begin()
-	defer func() {
-		if err != nil {
-			wtx.Rollback()
-			return
-		}
-	}()
 	// Get the current block count from the database.
 	idx.height, err = wtx.BlockCount()
 	if err != nil {
@@ -146,7 +140,7 @@ func (idx *Indexer) UpdateIndex() error {
 
 	// Fetch blocks from the blockchain, starting from the current height of the indexer.
 	var blocksCh chan *wire.MsgBlock
-	blocksCh, err = idx.fetchBlockFrom(idx.height, uint32(endHeight), 5)
+	blocksCh, err = idx.fetchBlockFrom(idx.height, uint32(endHeight), 16)
 	if err != nil {
 		return err
 	}
@@ -155,7 +149,7 @@ func (idx *Indexer) UpdateIndex() error {
 	}
 
 	unCommit := 0
-	flushNum := 5000
+	flushNum := 1000
 	valueCache := make(map[string]int64)
 
 	// Iterate over the fetched blocks.
@@ -241,9 +235,11 @@ func (idx *Indexer) indexBlock(
 	} else if indexInscriptions {
 		// If the indexer is configured to index inscriptions, index the inscriptions in the block.
 		txs := append(block.Transactions[1:], block.Transactions[0])
+		// Iterate over the transactions in the block.
+		valueCh, errCh := inscriptionUpdater.fetchOutputValues(32, txs...)
 		for i := range txs {
 			tx := txs[i]
-			if err := inscriptionUpdater.indexEnvelopers(tx, nil); err != nil {
+			if err := inscriptionUpdater.indexEnvelopers(tx, valueCh, errCh, nil); err != nil {
 				return err
 			}
 		}
@@ -284,6 +280,11 @@ func (idx *Indexer) indexBlock(
 
 // detectReorg is a method that detects if there is a reorganization in the blockchain.
 func (idx *Indexer) commit(wtx *dao.DB, valueCache map[string]int64) (err error) {
+	log.Srv.Infof(
+		"Committing at block %d, %d outputs traversed, %d in map, %d cached",
+		idx.height-1, idx.outputsTraversed, len(valueCache), idx.outputsCached,
+	)
+
 	// If the indexer is configured to index satoshis, flush the satoshi range cache to the database.
 	if idx.opts.indexSats {
 		log.Srv.Infof(
@@ -322,11 +323,6 @@ func (idx *Indexer) commit(wtx *dao.DB, valueCache map[string]int64) (err error)
 	}
 
 	wtx.Commit()
-
-	log.Srv.Infof(
-		"Committing at block %d, %d outputs traversed, %d in map, %d cached",
-		idx.height-1, idx.outputsTraversed, len(valueCache), idx.outputsCached,
-	)
 
 	wtx = idx.Begin()
 

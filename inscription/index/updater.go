@@ -139,6 +139,8 @@ type locationsInscription struct {
 // indexEnvelopers indexes the envelopers of a transaction.
 func (u *InscriptionUpdater) indexEnvelopers(
 	tx *wire.MsgTx,
+	valueCh chan int64,
+	errCh chan error,
 	inputSatRange []*model.SatRange) error {
 
 	// Initialize an integer counter for the inscriptions' IDs.
@@ -160,12 +162,6 @@ func (u *InscriptionUpdater) indexEnvelopers(
 	totalOutputValue := int64(0)
 	for _, v := range tx.TxOut {
 		totalOutputValue += v.Value
-	}
-
-	// Initialize a channel for the output values and a channel for errors.
-	valueCh, errCh, err := u.fetchOutputValues(tx, 12)
-	if err != nil {
-		return err
 	}
 
 	// Loop over each input in the transaction.
@@ -675,70 +671,66 @@ func (u *InscriptionUpdater) calculateSat(
 }
 
 // fetchOutputValues fetches the output values of a transaction.
-func (u *InscriptionUpdater) fetchOutputValues(tx *wire.MsgTx, maxCurrentNum int) (valueCh chan int64, errCh chan error, err error) {
-	// Create a slice to store the outpoints that need to be fetched.
-	needFetchOutpoints := make([]*wire.OutPoint, 0)
-
-	// Loop over each input in the transaction.
-	for inputIndex := range tx.TxIn {
-		txIn := tx.TxIn[inputIndex]
-
-		// If the input is a coinbase, skip it.
-		if util.IsEmptyHash(txIn.PreviousOutPoint.Hash) {
-			continue
-		}
-
-		// If the value of the input is already cached, skip it.
-		if _, ok := u.valueCache[txIn.PreviousOutPoint.String()]; ok {
-			continue
-		}
-
-		// Try to get the value of the input from the database.
-		_, err = u.wtx.GetValueByOutpoint(txIn.PreviousOutPoint.String())
-		if err != nil && !errors.Is(err, gorm.ErrRecordNotFound) {
-			return
-		}
-		// If the value is not found in the database, add to outpoint to the list of outpoints that need to be fetched.
-		if errors.Is(err, gorm.ErrRecordNotFound) {
-			err = nil
-			needFetchOutpoints = append(needFetchOutpoints, &txIn.PreviousOutPoint)
-		}
-	}
-
-	if len(needFetchOutpoints) == 0 {
-		return
-	}
-
-	// Determine the size of the batches.
-	currentNum := len(needFetchOutpoints)/2 + 2
-	if currentNum > maxCurrentNum {
-		currentNum = maxCurrentNum
-	}
-
+func (u *InscriptionUpdater) fetchOutputValues(currentNum int, txs ...*wire.MsgTx) (valueCh chan int64, errCh chan error) {
 	// Create an error group to handle errors from the fetching goroutines.
 	errWg := &errgroup.Group{}
+
+	// Create a channel to send the outpoints that need to be fetched.
+	needFetchOutpointsCh := make(chan *wire.OutPoint, currentNum)
 
 	// Create a channel to receive the fetched values.
 	valueCh = make(chan int64, currentNum)
 
+	errWg.Go(func() error {
+		// Loop over each input in the transaction.
+		for _, tx := range txs {
+			for inputIndex := range tx.TxIn {
+				txIn := tx.TxIn[inputIndex]
+
+				// If the input is a coinbase, skip it.
+				if util.IsEmptyHash(txIn.PreviousOutPoint.Hash) {
+					continue
+				}
+
+				// If the value of the input is already cached, skip it.
+				if _, ok := u.valueCache[txIn.PreviousOutPoint.String()]; ok {
+					continue
+				}
+
+				// Try to get the value of the input from the database.
+				_, err := u.wtx.GetValueByOutpoint(txIn.PreviousOutPoint.String())
+				if err != nil && !errors.Is(err, gorm.ErrRecordNotFound) {
+					return err
+				}
+
+				// If the value is not found in the database, add to outpoint to the list of outpoints that need to be fetched.
+				if errors.Is(err, gorm.ErrRecordNotFound) {
+					needFetchOutpointsCh <- &txIn.PreviousOutPoint
+				}
+			}
+		}
+		close(needFetchOutpointsCh)
+		return nil
+	})
+
 	// Start a goroutine to fetch the values in batches.
 	errWg.Go(func() error {
 		commitNum := 0
-		// Create a slice to store the results of the asynchronous fetch operations.
+		fetchOutpointsNum := 0
+		needFetchOutpoints := make([]*wire.OutPoint, currentNum)
 		batchResult := make([]*rpcclient.FutureGetRawTransactionResult, currentNum)
 
-		// Loop over the outpoints that need to be fetched.
-		for i := 0; i < len(needFetchOutpoints); i++ {
+		for outpoint := range needFetchOutpointsCh {
 			select {
-			// If an interrupt signal is received, return an error.
 			case <-signal.InterruptChannel:
 				return signal.ErrInterrupted
 			default:
-				// Start an asynchronous fetch operation for to outpoint.
-				res := u.idx.BatchRpcClient().GetRawTransactionAsync(&needFetchOutpoints[i].Hash)
-				batchResult[i%currentNum] = &res
+				i := fetchOutpointsNum % currentNum
+				needFetchOutpoints[i] = outpoint
+				res := u.idx.BatchRpcClient().GetRawTransactionAsync(&outpoint.Hash)
+				batchResult[i] = &res
 
-				if (i+1)%currentNum == 0 {
+				if (fetchOutpointsNum+1)%currentNum == 0 {
 					if err := u.idx.BatchRpcClient().Send(); err != nil {
 						return err
 					}
@@ -757,9 +749,10 @@ func (u *InscriptionUpdater) fetchOutputValues(tx *wire.MsgTx, maxCurrentNum int
 					commitNum++
 				}
 			}
+			fetchOutpointsNum++
 		}
 
-		lastNum := len(needFetchOutpoints) % currentNum
+		lastNum := fetchOutpointsNum % currentNum
 		if lastNum > 0 {
 			if err := u.idx.BatchRpcClient().Send(); err != nil {
 				return err

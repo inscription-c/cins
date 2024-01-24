@@ -1,9 +1,7 @@
 package dao
 
 import (
-	"errors"
 	"github.com/inscription-c/insc/inscription/index/tables"
-	"gorm.io/gorm"
 )
 
 func (d *DB) GetValueByOutpoint(outpoint string) (value int64, err error) {
@@ -20,13 +18,14 @@ func (d *DB) DeleteValueByOutpoint(outpoint string) (err error) {
 }
 
 func (d *DB) SetOutpointToValue(outpoint string, value int64) (err error) {
-	entity := &tables.OutpointValue{}
-	err = d.DB.Where("outpoint=?", outpoint).First(entity).Error
-	if errors.Is(err, gorm.ErrRecordNotFound) {
-		entity.Outpoint = outpoint
-		entity.Value = value
-		err = d.DB.Create(entity).Error
-		return
+	entity := &tables.OutpointValue{
+		Outpoint: outpoint,
+		Value:    value,
 	}
-	return d.DB.Save(entity).Error
+	return d.DB.Where("outpoint=?", outpoint).
+		Assign(tables.OutpointValue{
+			Outpoint: outpoint,
+			Value:    value,
+		}).
+		FirstOrCreate(entity).Error
 }

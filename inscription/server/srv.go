@@ -22,6 +22,11 @@ import (
 var (
 	activeNet  = &netparams.MainNetParams
 	srvOptions = &SrvOptions{}
+
+	mainNetRPCListen  = ":8335"
+	testNetRPCListen  = ":18335"
+	mainNetRPCConnect = "localhost:8334"
+	testNetRPCConnect = "localhost:18334"
 )
 
 type SrvOptions struct {
@@ -142,9 +147,9 @@ var Cmd = &cobra.Command{
 func init() {
 	Cmd.Flags().StringVarP(&srvOptions.username, "user", "u", "", "btcd rpc server username")
 	Cmd.Flags().StringVarP(&srvOptions.password, "password", "P", "", "btcd rpc server password")
-	Cmd.Flags().StringVarP(&srvOptions.rpcListen, "rpclisten", "l", ":8335", "rpc server listen address. Default `mainnet :8335, testnet :18335`")
+	Cmd.Flags().StringVarP(&srvOptions.rpcListen, "rpclisten", "l", mainNetRPCListen, "rpc server listen address. Default `mainnet :8335, testnet :18335`")
 	Cmd.Flags().BoolVarP(&srvOptions.testnet, "testnet", "t", false, "bitcoin testnet3")
-	Cmd.Flags().StringVarP(&srvOptions.rpcConnect, "rpcconnect", "s", "localhost:8334", "the URL of wallet RPC server to connect to (default localhost:8334, testnet: localhost:18334)")
+	Cmd.Flags().StringVarP(&srvOptions.rpcConnect, "rpcconnect", "s", mainNetRPCConnect, "the URL of btcd RPC server to connect to (default localhost:8334, testnet: localhost:18334)")
 	Cmd.Flags().BoolVarP(&srvOptions.noEmbedDB, "noembeddb", "", false, "don't embed db")
 	Cmd.Flags().StringVarP(&srvOptions.dataDir, "datadir", "", "", "embed database data dir")
 	Cmd.Flags().StringVarP(&srvOptions.mysqlAddr, "mysqladdr", "d", "127.0.0.1:4000", "inscription index mysql database addr")
@@ -170,7 +175,12 @@ func IndexSrv(opts ...SrvOption) error {
 	}
 	if srvOptions.testnet {
 		activeNet = &netparams.TestNet3Params
-		srvOptions.rpcListen = ":18335"
+		if srvOptions.rpcListen == mainNetRPCListen {
+			srvOptions.rpcListen = testNetRPCListen
+		}
+		if srvOptions.rpcConnect == mainNetRPCConnect {
+			srvOptions.rpcConnect = testNetRPCConnect
+		}
 	}
 	srvOptions.dataDir = datDir()
 

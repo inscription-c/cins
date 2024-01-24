@@ -9,10 +9,6 @@ import (
 
 func (h *Handler) Inscriptions(ctx *gin.Context) {
 	page := ctx.DefaultQuery("page", "1")
-	if page == "" {
-		ctx.Status(http.StatusBadRequest)
-		return
-	}
 	if err := h.doInscriptions(ctx, page); err != nil {
 		ctx.Status(http.StatusInternalServerError)
 		return
@@ -27,19 +23,19 @@ func (h *Handler) doInscriptions(ctx *gin.Context, pageStr string) error {
 	}
 	pageSize := 100
 
-	inscriptionIds, total, err := h.DB().FindInscriptionsByPage(page, pageSize)
+	inscriptions, err := h.DB().FindInscriptionsByPage(page, pageSize)
 	if err != nil {
 		return err
 	}
 
-	inscriptionIdsResp := make([]string, 0, len(inscriptionIds))
-	for _, v := range inscriptionIds {
-		inscriptionIdsResp = append(inscriptionIdsResp, util.NewInscriptionId(v.Outpoint, v.Offset))
+	inscriptionIds := make([]string, 0, len(inscriptions))
+	for _, v := range inscriptions {
+		inscriptionIds = append(inscriptionIds, util.NewInscriptionId(v.Outpoint, v.Offset))
 	}
 	ctx.JSON(http.StatusOK, gin.H{
 		"page_index":   page,
-		"more":         total > int64(page*pageSize),
-		"inscriptions": inscriptionIdsResp,
+		"more":         len(inscriptionIds) > pageSize,
+		"inscriptions": inscriptionIds,
 	})
 	return nil
 }

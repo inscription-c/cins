@@ -9,4 +9,6 @@ func (h *Handler) InitRouter() {
 	h.Engine().GET("/inscription/:query", h.Inscription)
 	h.Engine().GET("/content/:inscriptionId", h.Content)
 	h.Engine().GET("/inscriptions/:pages", h.Inscriptions)
+	h.Engine().GET("/inscriptions/block/:height", h.InscriptionsInBlock)
+	h.Engine().GET("/inscriptions/block/:height/:page", h.InscriptionsInBlock)
 }
