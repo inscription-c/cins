@@ -9,6 +9,10 @@ import (
 	"regexp"
 )
 
+func init() {
+	RegisterProtocol(&BRC20C{})
+}
+
 // tickNameRegexp is a regular expression that matches valid tick names.
 var tickNameRegexp = regexp.MustCompile(`^[a-zA-Z0-9-]+$`)
 
@@ -116,4 +120,9 @@ func (b *BRC20C) Check() error {
 	p.Reset(body)
 	*b = *p
 	return nil
+}
+
+// Clone returns a new DefaultProtocol.
+func (b *BRC20C) Clone() Protocol {
+	return &BRC20C{}
 }

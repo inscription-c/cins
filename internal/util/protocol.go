@@ -2,8 +2,17 @@ package util
 
 import (
 	"bytes"
+	"encoding/json"
+	"errors"
 	"io"
 )
+
+var totalProtocol = make(map[string]Protocol)
+
+// RegisterProtocol is a function that registers a protocol.
+func RegisterProtocol(p Protocol) {
+	totalProtocol[p.Name()] = p
+}
 
 // Protocol is an interface that defines the methods that a protocol should implement.
 // It includes methods for getting the name of the protocol, checking the protocol, getting the length of the protocol, and getting the chunks of the protocol.
@@ -12,6 +21,7 @@ type Protocol interface {
 	Check() error
 	Reset([]byte)
 	Len() int
+	Clone() Protocol
 	Chunks(size uint64) ([]byte, error)
 }
 
@@ -79,9 +89,38 @@ func (d *DefaultProtocol) Name() string {
 	return "default"
 }
 
+// Clone returns a new DefaultProtocol.
+func (d *DefaultProtocol) Clone() Protocol {
+	return &DefaultProtocol{}
+}
+
 // Check is a method of the DefaultProtocol struct.
 // It checks the DefaultProtocol.
 // Currently, it does not perform any operations and always returns nil.
 func (d *DefaultProtocol) Check() error {
 	return nil
+}
+
+// NotSupportedProtocol is an error that represents a not supported protocol.
+var NotSupportedProtocol = errors.New("not supported protocol")
+
+// NewProtocolFromBytes is a function that returns a new protocol from bytes.
+func NewProtocolFromBytes(body []byte) (Protocol, error) {
+	p := struct {
+		Protocol string `json:"p"`
+	}{}
+	if err := json.Unmarshal(body, &p); err != nil {
+		return nil, NotSupportedProtocol
+	}
+
+	protocol, ok := totalProtocol[p.Protocol]
+	if !ok {
+		return nil, NotSupportedProtocol
+	}
+	cloneProtocol := protocol.Clone()
+	cloneProtocol.Reset(body)
+	if err := cloneProtocol.Check(); err != nil {
+		return nil, NotSupportedProtocol
+	}
+	return cloneProtocol, nil
 }

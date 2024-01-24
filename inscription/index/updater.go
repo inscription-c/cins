@@ -10,7 +10,6 @@ import (
 	"github.com/inscription-c/insc/inscription/index/tables"
 	"github.com/inscription-c/insc/internal/signal"
 	"github.com/inscription-c/insc/internal/util"
-	"golang.org/x/sync/errgroup"
 	"gorm.io/gorm"
 	"sort"
 	"sync"
@@ -282,6 +281,8 @@ func (u *InscriptionUpdater) indexEnvelopers(
 				}
 			} else {
 				select {
+				case <-signal.InterruptChannel:
+					return signal.ErrInterrupted
 				case currentInputValue, ok = <-valueCh:
 					if !ok {
 						return errors.New("valueCh closed")
@@ -666,6 +667,11 @@ func (u *InscriptionUpdater) updateInscriptionLocation(
 		if err := u.wtx.CreateInscription(entry); err != nil {
 			return err
 		}
+		// Create protocol entry
+		p := NewProtocol(u.wtx, entry)
+		if err := p.SaveProtocol(); err != nil {
+			return err
+		}
 	}
 
 	// Set the Satpoint to the sequence number in the database.
@@ -720,59 +726,70 @@ func (u *InscriptionUpdater) calculateSat(
 }
 
 // fetchOutputValues fetches the output values of a transaction.
-func (u *InscriptionUpdater) fetchOutputValues(currentNum int, txs ...*wire.MsgTx) (valueCh chan int64, errCh chan error) {
-	// Create an error group to handle errors from the fetching goroutines.
-	errWg := &errgroup.Group{}
+func (u *InscriptionUpdater) fetchOutputValues(currentNum int, txs ...*wire.MsgTx) (chan int64, chan error) {
+	errCh := make(chan error)
+
+	// Create a channel to receive the fetched values.
+	valueCh := make(chan int64, currentNum)
 
 	// Create a channel to send the outpoints that need to be fetched.
 	needFetchOutpointsCh := make(chan *wire.OutPoint, currentNum)
 
-	// Create a channel to receive the fetched values.
-	valueCh = make(chan int64, currentNum)
-
-	errWg.Go(func() error {
+	go func() {
+		defer close(needFetchOutpointsCh)
 		// Loop over each input in the transaction.
 		for _, tx := range txs {
 			for inputIndex := range tx.TxIn {
-				txIn := tx.TxIn[inputIndex]
+				select {
+				case <-signal.InterruptChannel:
+					return
+				default:
+					txIn := tx.TxIn[inputIndex]
 
-				// If the input is a coinbase, skip it.
-				if util.IsEmptyHash(txIn.PreviousOutPoint.Hash) {
-					continue
-				}
+					// If the input is a coinbase, skip it.
+					if util.IsEmptyHash(txIn.PreviousOutPoint.Hash) {
+						continue
+					}
 
-				// If the value of the input is already cached, skip it.
-				if _, ok := u.valueCache.Read(txIn.PreviousOutPoint.String()); ok {
-					continue
-				}
+					// If the value of the input is already cached, skip it.
+					if _, ok := u.valueCache.Read(txIn.PreviousOutPoint.String()); ok {
+						continue
+					}
 
-				// Try to get the value of the input from the database.
-				_, err := u.idx.DB().GetValueByOutpoint(txIn.PreviousOutPoint.String())
-				if err != nil && !errors.Is(err, gorm.ErrRecordNotFound) {
-					return err
-				}
+					// Try to get the value of the input from the database.
+					_, err := u.idx.DB().GetValueByOutpoint(txIn.PreviousOutPoint.String())
+					if err != nil && !errors.Is(err, gorm.ErrRecordNotFound) {
+						errCh <- err
+						close(errCh)
+						return
+					}
 
-				// If the value is not found in the database, add to outpoint to the list of outpoints that need to be fetched.
-				if errors.Is(err, gorm.ErrRecordNotFound) {
-					needFetchOutpointsCh <- &txIn.PreviousOutPoint
+					// If the value is not found in the database, add to outpoint to the list of outpoints that need to be fetched.
+					if errors.Is(err, gorm.ErrRecordNotFound) {
+						needFetchOutpointsCh <- &txIn.PreviousOutPoint
+					}
 				}
 			}
 		}
-		close(needFetchOutpointsCh)
-		return nil
-	})
+	}()
 
 	// Start a goroutine to fetch the values in batches.
-	errWg.Go(func() error {
+	go func() {
 		commitNum := 0
 		fetchOutpointsNum := 0
 		needFetchOutpoints := make([]*wire.OutPoint, currentNum)
 		batchResult := make([]*rpcclient.FutureGetRawTransactionResult, currentNum)
 
+		defer func() {
+			close(valueCh)
+			batchResult = nil
+			needFetchOutpoints = nil
+		}()
+
 		for outpoint := range needFetchOutpointsCh {
 			select {
 			case <-signal.InterruptChannel:
-				return signal.ErrInterrupted
+				return
 			default:
 				i := fetchOutpointsNum % currentNum
 				needFetchOutpoints[i] = outpoint
@@ -781,14 +798,18 @@ func (u *InscriptionUpdater) fetchOutputValues(currentNum int, txs ...*wire.MsgT
 
 				if (fetchOutpointsNum+1)%currentNum == 0 {
 					if err := u.idx.BatchRpcClient().Send(); err != nil {
-						return err
+						errCh <- err
+						close(errCh)
+						return
 					}
 					// Loop over the results of the batch.
 					for ii := 0; ii < currentNum; ii++ {
 						// Receive the result of the fetch operation.
 						tx, err := batchResult[ii].Receive()
 						if err != nil {
-							return err
+							errCh <- err
+							close(errCh)
+							return
 						}
 						// Send the value of the output to the value channel.
 						valueCh <- tx.MsgTx().TxOut[needFetchOutpoints[ii].Index].Value
@@ -803,33 +824,23 @@ func (u *InscriptionUpdater) fetchOutputValues(currentNum int, txs ...*wire.MsgT
 		lastNum := fetchOutpointsNum % currentNum
 		if lastNum > 0 {
 			if err := u.idx.BatchRpcClient().Send(); err != nil {
-				return err
+				errCh <- err
+				close(errCh)
+				return
 			}
 			for i := 0; i < lastNum; i++ {
 				// Receive the result of the fetch operation.
 				tx, err := batchResult[i].Receive()
 				if err != nil {
-					return err
+					errCh <- err
+					close(errCh)
+					return
 				}
 				// Send the value of the output to the value channel.
 				valueCh <- tx.MsgTx().TxOut[needFetchOutpoints[i].Index].Value
 				batchResult[i] = nil
 			}
 		}
-		close(valueCh)
-		batchResult = nil
-		needFetchOutpoints = nil
-		return nil
-	})
-
-	errCh = make(chan error)
-
-	// Start a goroutine to wait for all fetching goroutines to finish and send any errors to the error channel.
-	go func() {
-		if err := errWg.Wait(); err != nil {
-			errCh <- err
-		}
-		close(errCh)
 	}()
-	return
+	return valueCh, errCh
 }
