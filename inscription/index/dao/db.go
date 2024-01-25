@@ -3,6 +3,7 @@ package dao
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"flag"
 	"fmt"
 	"github.com/btcsuite/btcd/btcutil"
@@ -13,17 +14,18 @@ import (
 	gormMysqlDriver "gorm.io/driver/mysql"
 	"gorm.io/gorm"
 	"gorm.io/gorm/logger"
+	"net"
 	"os"
 	"path/filepath"
 	"runtime"
 	"strconv"
 	"strings"
 	"sync/atomic"
+	"syscall"
 	"time"
 
 	inscLog "github.com/inscription-c/insc/inscription/log"
 	"github.com/opentracing/opentracing-go"
-	"github.com/pingcap/errors"
 	"github.com/pingcap/failpoint"
 	"github.com/pingcap/log"
 	"github.com/pingcap/tidb/pkg/bindinfo"
@@ -176,20 +178,39 @@ func NewDB(opts ...DBOption) (*DB, error) {
 	for _, opt := range opts {
 		opt(options)
 	}
-	if !options.noEmbedDB {
-		go TIDB(options)
-		time.Sleep(3 * time.Second)
-	}
 
-	gormLogger := &GormLogger{Logger: inscLog.Gorm}
 	conn := "%s:%s@tcp(%s)/%s?charset=utf8mb4&parseTime=True&loc=Local"
 	dsn := fmt.Sprintf(conn, options.user, options.password, options.addr, "")
 
-	db, err := gorm.Open(gormMysqlDriver.Open(dsn), &gorm.Config{Logger: gormLogger})
-	if err != nil {
-		return nil, fmt.Errorf("gorm open :%v", err)
+	var err error
+	var db *gorm.DB
+
+	if !options.noEmbedDB {
+		go TIDB(options)
+		timeout := time.After(time.Second * 30)
+		ticker := time.NewTicker(time.Second)
+		defer ticker.Stop()
+		for range ticker.C {
+			select {
+			case <-timeout:
+				return nil, fmt.Errorf("gorm open timeout")
+			default:
+				db, err = gorm.Open(gormMysqlDriver.Open(dsn), &gorm.Config{Logger: logger.Discard})
+				if err != nil {
+					var opErr *net.OpError
+					if errors.As(err, &opErr) {
+						var syscallErr *os.SyscallError
+						if errors.As(opErr.Err, &syscallErr) &&
+							errors.Is(syscallErr.Err, syscall.ECONNREFUSED) {
+							continue
+						}
+					}
+					return nil, err
+				}
+			}
+			break
+		}
 	}
-	db = db.Debug()
 
 	createDb := fmt.Sprintf("CREATE DATABASE IF NOT EXISTS %s;", options.dbName)
 	if err = db.Exec(createDb).Error; err != nil {
@@ -197,7 +218,7 @@ func NewDB(opts ...DBOption) (*DB, error) {
 	}
 
 	dsn = fmt.Sprintf(conn, options.user, options.password, options.addr, options.dbName)
-	db, err = gorm.Open(gormMysqlDriver.Open(dsn), &gorm.Config{Logger: gormLogger})
+	db, err = gorm.Open(gormMysqlDriver.Open(dsn), &gorm.Config{Logger: &GormLogger{Logger: inscLog.Gorm}})
 	if err != nil {
 		return nil, fmt.Errorf("gorm open :%v", err)
 	}
@@ -685,7 +706,7 @@ func overrideConfig(cfg *config.Config, fset *flag.FlagSet) {
 	if actualFlags[nmAdvertiseAddress] {
 		var err error
 		if len(strings.Split(*advertiseAddress, " ")) > 1 {
-			err = errors.Errorf("Only support one advertise-address")
+			err = fmt.Errorf("only support one advertise-address")
 		}
 		terror.MustNil(err)
 		cfg.AdvertiseAddress = *advertiseAddress
@@ -1085,7 +1106,7 @@ func closeDomainAndStorage(storage kv.Storage, dom *domain.Domain) {
 	copr.GlobalMPPFailedStoreProber.Stop()
 	mppcoordmanager.InstanceMPPCoordinatorManager.Stop()
 	err := storage.Close()
-	terror.Log(errors.Trace(err))
+	terror.Log(err)
 }
 
 // The amount of time we wait for the ongoing txt to finished.

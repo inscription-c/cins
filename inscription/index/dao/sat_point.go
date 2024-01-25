@@ -26,6 +26,9 @@ func (d *DB) InscriptionsByOutpoint(outpoint string) (res []*Inscription, err er
 		err = nil
 		return
 	}
+	if len(satpoints) == 0 {
+		return
+	}
 
 	satpointMap := make(map[uint64]*tables.SatPoint)
 	ids := make([]uint64, 0, len(satpoints))
