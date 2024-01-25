@@ -172,6 +172,13 @@ func (c *ValueCache) Range(fn func(k string, v int64) error) error {
 	return nil
 }
 
+func (c *ValueCache) Values() map[string]int64 {
+	c.RLock()
+	m := c.m
+	c.RUnlock()
+	return m
+}
+
 // inscribedOffsetEntity represents an entity with an inscribed offset.
 type inscribedOffsetEntity struct {
 	inscriptionId *util.InscriptionId

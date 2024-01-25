@@ -149,7 +149,8 @@ func (idx *Indexer) UpdateIndex() error {
 	}
 
 	unCommit := 0
-	flushNum := 5000
+	flushBlockNum := 1000
+	cacheValueNum := 50_000
 	valueCache := NewValueCache()
 
 	// Iterate over the fetched blocks.
@@ -161,12 +162,23 @@ func (idx *Indexer) UpdateIndex() error {
 			return err
 		}
 
-		if unCommit == flushNum {
+		if unCommit >= flushBlockNum || valueCache.Len() >= cacheValueNum {
 			unCommit = 0
 			if err := idx.commit(wtx, valueCache); err != nil {
 				return err
 			}
 			valueCache = NewValueCache()
+
+			wtx = idx.Begin()
+
+			// Check if the block count in the database matches the current height of the indexer.
+			height, err := wtx.BlockCount()
+			if err != nil {
+				return err
+			}
+			if height != idx.height {
+				return errors.New("height mismatch")
+			}
 		}
 	}
 
@@ -292,22 +304,14 @@ func (idx *Indexer) commit(wtx *dao.DB, valueCache *ValueCache) (err error) {
 			float64(len(idx.rangeCache))/float64(idx.outputsInsertedSinceFlush)*100,
 			idx.outputsInsertedSinceFlush,
 		)
-
-		for outpoint, satRange := range idx.rangeCache {
-			if err = wtx.SetOutpointToSatRange(outpoint, satRange); err != nil {
-				return err
-			}
+		if err = wtx.SetOutpointToSatRange(idx.rangeCache); err != nil {
+			return err
 		}
 		idx.outputsInsertedSinceFlush = 0
 	}
 
 	// Update the value cache.
-	if err := valueCache.Range(func(k string, v int64) error {
-		if err = wtx.SetOutpointToValue(k, v); err != nil {
-			return err
-		}
-		return nil
-	}); err != nil {
+	if err = wtx.SetOutpointToValue(valueCache.Values()); err != nil {
 		return err
 	}
 
@@ -325,17 +329,6 @@ func (idx *Indexer) commit(wtx *dao.DB, valueCache *ValueCache) (err error) {
 	}
 
 	wtx.Commit()
-
-	wtx = idx.Begin()
-
-	// Check if the block count in the database matches the current height of the indexer.
-	height, err := wtx.BlockCount()
-	if err != nil {
-		return err
-	}
-	if height != idx.height {
-		return errors.New("height mismatch")
-	}
 	return nil
 }
 

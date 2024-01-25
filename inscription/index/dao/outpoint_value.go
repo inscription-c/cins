@@ -17,15 +17,13 @@ func (d *DB) DeleteValueByOutpoint(outpoint string) (err error) {
 	return
 }
 
-func (d *DB) SetOutpointToValue(outpoint string, value int64) (err error) {
-	entity := &tables.OutpointValue{
-		Outpoint: outpoint,
-		Value:    value,
-	}
-	return d.DB.Where("outpoint=?", outpoint).
-		Assign(tables.OutpointValue{
+func (d *DB) SetOutpointToValue(values map[string]int64) (err error) {
+	list := make([]*tables.OutpointValue, 0, len(values))
+	for outpoint, value := range values {
+		list = append(list, &tables.OutpointValue{
 			Outpoint: outpoint,
 			Value:    value,
-		}).
-		FirstOrCreate(entity).Error
+		})
+	}
+	return d.DB.Create(&list).Error
 }
