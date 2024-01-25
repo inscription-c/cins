@@ -1,7 +1,6 @@
 package index
 
 import (
-	"github.com/btcsuite/btcd/btcutil"
 	"github.com/gogf/gf/v2/util/gconv"
 	"github.com/inscription-c/insc/constants"
 	"github.com/inscription-c/insc/inscription/index/dao"
@@ -11,17 +10,17 @@ import (
 )
 
 type Protocol struct {
-	wtx     *dao.DB
-	entry   *tables.Inscriptions
-	address btcutil.Address
+	wtx   *dao.DB
+	entry *tables.Inscriptions
+	miner string
 }
 
 // NewProtocol is a function that returns a new protocol.
-func NewProtocol(wtx *dao.DB, entry *tables.Inscriptions, address btcutil.Address) *Protocol {
+func NewProtocol(wtx *dao.DB, entry *tables.Inscriptions, miner string) *Protocol {
 	return &Protocol{
-		wtx:     wtx,
-		entry:   entry,
-		address: address,
+		wtx:   wtx,
+		entry: entry,
+		miner: miner,
 	}
 }
 
@@ -41,6 +40,7 @@ func (p *Protocol) SaveProtocol() error {
 
 // brc20c is a function that saves the brc20c protocol.
 func (p *Protocol) brc20c(brc20c *util.BRC20C) error {
+	outpoint := p.entry.Outpoint
 	switch brc20c.Operation {
 	case constants.OperationDeploy:
 		list, err := p.wtx.FindProtocol(brc20c.Protocol, brc20c.Tick, brc20c.Operation)
@@ -51,8 +51,9 @@ func (p *Protocol) brc20c(brc20c *util.BRC20C) error {
 			log.Log.Warnf("protocol %s, %s, %s already exists", brc20c.Protocol, brc20c.Tick, brc20c.Operation)
 			return nil
 		}
+
 		if err := p.wtx.SaveProtocol(&tables.Protocol{
-			Outpoint:    p.entry.Outpoint,
+			Outpoint:    outpoint,
 			SequenceNum: p.entry.SequenceNum,
 			Protocol:    brc20c.Protocol,
 			Ticker:      brc20c.Tick,
@@ -61,6 +62,7 @@ func (p *Protocol) brc20c(brc20c *util.BRC20C) error {
 			Limit:       gconv.Uint64(brc20c.Limit),
 			Decimals:    gconv.Uint32(brc20c.Decimals),
 			To:          brc20c.To,
+			Miner:       p.miner,
 		}); err != nil {
 			return err
 		}
@@ -92,7 +94,7 @@ func (p *Protocol) brc20c(brc20c *util.BRC20C) error {
 			return nil
 		}
 		mint := &tables.Protocol{
-			Outpoint:    p.entry.Outpoint,
+			Outpoint:    outpoint,
 			SequenceNum: p.entry.SequenceNum,
 			Protocol:    constants.ProtocolBRC20C,
 			Ticker:      brc20c.Tick,
@@ -100,9 +102,7 @@ func (p *Protocol) brc20c(brc20c *util.BRC20C) error {
 			TkID:        inscriptionId.OutPoint.String(),
 			Amount:      gconv.Uint64(brc20c.Amount),
 			To:          brc20c.To,
-		}
-		if mint.To == "" {
-			mint.To = p.address.String()
+			Miner:       p.miner,
 		}
 		if err := p.wtx.SaveProtocol(mint); err != nil {
 			return err

@@ -1,6 +1,8 @@
 package util
 
 import (
+	"database/sql/driver"
+	"errors"
 	"fmt"
 	"github.com/btcsuite/btcd/chaincfg/chainhash"
 	"github.com/btcsuite/btcd/wire"
@@ -26,6 +28,25 @@ func StringToOutpoint(s string) *OutPoint {
 
 type OutPoint struct {
 	wire.OutPoint
+}
+
+func (o *OutPoint) Scan(value interface{}) error {
+	bytes, ok := value.([]byte)
+	if !ok {
+		return errors.New(fmt.Sprint("Failed to unmarshal JSONB value:", value))
+	}
+	outpoint := StringToOutpoint(string(bytes))
+	*o = *outpoint
+	return nil
+}
+
+func (o *OutPoint) Value() (driver.Value, error) {
+	return []byte(o.String()), nil
+}
+
+func (o *OutPoint) MarshalJSON() ([]byte, error) {
+	s := fmt.Sprintf("\"%s\"", o.InscriptionId().String())
+	return []byte(s), nil
 }
 
 func NewOutPoint(txId string, index uint32) *OutPoint {

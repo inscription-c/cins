@@ -10,6 +10,7 @@ import (
 	"github.com/inscription-c/insc/inscription/index/dao"
 	"github.com/inscription-c/insc/inscription/index/model"
 	"github.com/inscription-c/insc/inscription/index/tables"
+	"github.com/inscription-c/insc/inscription/log"
 	"github.com/inscription-c/insc/internal/signal"
 	"github.com/inscription-c/insc/internal/util"
 	"golang.org/x/sync/errgroup"
@@ -249,7 +250,7 @@ func (u *InscriptionUpdater) indexEnvelopers(
 			offset := uint64(totalInputValue) + uint64(v.SatPoint.Offset)
 
 			// Get the ID of the inscription.
-			insId := util.StringToOutpoint(v.Inscriptions.Outpoint).InscriptionId()
+			insId := v.Inscriptions.Outpoint.InscriptionId()
 
 			// Create a new Flotsam with the inscription ID, offset, and old origin, and append it to the floating inscriptions.
 			floatingInscriptions = append(floatingInscriptions, &Flotsam{
@@ -653,7 +654,7 @@ func (u *InscriptionUpdater) updateInscriptionLocation(
 		ins := flotsam.Origin.New.Inscription
 		// Create a new inscription entry.
 		entry := &tables.Inscriptions{
-			Outpoint:        inscriptionId.OutPoint.String(),
+			Outpoint:        &inscriptionId.OutPoint,
 			SequenceNum:     sequenceNumber,
 			InscriptionNum:  inscriptionNumber,
 			Charms:          charms,
@@ -680,8 +681,16 @@ func (u *InscriptionUpdater) updateInscriptionLocation(
 		if err != nil {
 			return err
 		}
-		pkScript := tx.MsgTx().TxOut[inscriptionId.OutPoint.Index].PkScript
-		_, addrs, _, err := txscript.ExtractPkScriptAddrs(pkScript, util.ActiveNet.Params)
+		if inscriptionId.OutPoint.Index >= uint32(len(tx.MsgTx().TxIn)) {
+			log.Log.Warnf("index out of range: %d >= %d", inscriptionId.OutPoint.Index, len(tx.MsgTx().TxIn))
+			return nil
+		}
+		preOutpoint := &tx.MsgTx().TxIn[inscriptionId.OutPoint.Index].PreviousOutPoint
+		tx, err = u.idx.opts.cli.GetRawTransaction(&preOutpoint.Hash)
+		if err != nil {
+			return err
+		}
+		_, addrs, _, err := txscript.ExtractPkScriptAddrs(tx.MsgTx().TxOut[preOutpoint.Index].PkScript, util.ActiveNet.Params)
 		if err != nil {
 			return err
 		}
@@ -689,7 +698,7 @@ func (u *InscriptionUpdater) updateInscriptionLocation(
 			return errors.New("no address found")
 		}
 		// Create protocol entry
-		p := NewProtocol(u.wtx, entry, addrs[0])
+		p := NewProtocol(u.wtx, entry, addrs[0].String())
 		if err := p.SaveProtocol(); err != nil {
 			return err
 		}

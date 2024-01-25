@@ -61,7 +61,7 @@ func (h *Handler) doBRC20CToken(ctx *gin.Context, tkid string) error {
 func (h *Handler) GetBRC20TokenInfo(token *tables.Protocol) (gin.H, error) {
 	lock := &sync.Mutex{}
 	resp := gin.H{
-		"ticker_id":    util.StringToOutpoint(token.Outpoint).InscriptionId().String(),
+		"ticker_id":    token.Outpoint,
 		"ticker":       token.Ticker,
 		"total_supply": token.Max,
 	}
@@ -84,7 +84,7 @@ func (h *Handler) GetBRC20TokenInfo(token *tables.Protocol) (gin.H, error) {
 	})
 
 	errWg.Go(func() error {
-		amount, err := h.DB().CountProtocolAmount(constants.ProtocolBRC20C, token.Ticker, constants.OperationMint, token.Outpoint)
+		amount, err := h.DB().CountProtocolAmount(constants.ProtocolBRC20C, token.Ticker, constants.OperationMint, token.Outpoint.String())
 		if err != nil {
 			return err
 		}
@@ -95,7 +95,7 @@ func (h *Handler) GetBRC20TokenInfo(token *tables.Protocol) (gin.H, error) {
 	})
 
 	errWg.Go(func() error {
-		holders, err := h.DB().CountToAddress(constants.ProtocolBRC20C, token.Ticker, constants.OperationMint, token.Outpoint)
+		holders, err := h.DB().CountToAddress(constants.ProtocolBRC20C, token.Ticker, constants.OperationMint, token.Outpoint.String())
 		if err != nil {
 			return err
 		}

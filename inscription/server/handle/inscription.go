@@ -79,7 +79,7 @@ func (h *Handler) doInscription(ctx *gin.Context, query string) error {
 	}
 	preInscriptionId := ""
 	if preInscription.Id > 0 {
-		preInscriptionId = util.NewInscriptionId(preInscription.Outpoint, preInscription.Offset)
+		preInscriptionId = preInscription.Outpoint.InscriptionId().String()
 	}
 
 	nextInscription, err := h.DB().GetInscriptionBySequenceNum(inscription.SequenceNum + 1)
@@ -88,20 +88,19 @@ func (h *Handler) doInscription(ctx *gin.Context, query string) error {
 	}
 	nextInscriptionId := ""
 	if nextInscription.Id > 0 {
-		nextInscriptionId = util.NewInscriptionId(nextInscription.Outpoint, nextInscription.Offset)
+		nextInscriptionId = nextInscription.Outpoint.InscriptionId().String()
 	}
 
-	value, err := h.DB().GetValueByOutpoint(inscription.Outpoint)
+	value, err := h.DB().GetValueByOutpoint(inscription.Outpoint.String())
 	if err != nil && !errors.Is(err, gorm.ErrRecordNotFound) {
 		return err
 	}
 
-	outpoint := util.StringToOutpoint(inscription.Outpoint)
-	tx, err := h.RpcClient().GetRawTransaction(&outpoint.Hash)
+	tx, err := h.RpcClient().GetRawTransaction(&inscription.Outpoint.Hash)
 	if err != nil {
 		return err
 	}
-	pkScript := tx.MsgTx().TxOut[outpoint.Index].PkScript
+	pkScript := tx.MsgTx().TxOut[inscription.Outpoint.Index].PkScript
 	taprootAddress, err := util.TapRootAddress(pkScript, h.GetChainParams())
 	if err != nil {
 		return err

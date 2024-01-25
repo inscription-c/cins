@@ -24,17 +24,17 @@ func (d *DB) NextSequenceNumber() (num uint64, err error) {
 	return ins.SequenceNum + 1, nil
 }
 
-func (d *DB) GetInscriptionById(inscriptionId string) (ins tables.Inscriptions, err error) {
-	err = d.Where("inscription_id = ?", inscriptionId).First(&ins).Error
+func (d *DB) GetInscriptionById(outpoint string) (ins tables.Inscriptions, err error) {
+	err = d.Where("outpoint = ?", outpoint).First(&ins).Error
 	if errors.Is(err, gorm.ErrRecordNotFound) {
 		err = nil
 	}
 	return
 }
 
-func (d *DB) DeleteInscriptionById(inscriptionId string) (sequenceNum uint64, err error) {
+func (d *DB) DeleteInscriptionById(outpoint string) (sequenceNum uint64, err error) {
 	ins := &tables.Inscriptions{}
-	err = d.Clauses(clause.Returning{}).Where("inscription_id = ?", inscriptionId).Delete(ins).Error
+	err = d.Clauses(clause.Returning{}).Where("outpoint = ?", outpoint).Delete(ins).Error
 	if err != nil {
 		return
 	}

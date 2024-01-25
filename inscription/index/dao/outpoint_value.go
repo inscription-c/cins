@@ -25,5 +25,5 @@ func (d *DB) SetOutpointToValue(values map[string]int64) (err error) {
 			Value:    value,
 		})
 	}
-	return d.DB.Create(&list).Error
+	return d.DB.CreateInBatches(&list, 10_000).Error
 }
