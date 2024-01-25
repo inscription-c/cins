@@ -1,6 +1,7 @@
 package index
 
 import (
+	"github.com/btcsuite/btcd/btcutil"
 	"github.com/gogf/gf/v2/util/gconv"
 	"github.com/inscription-c/insc/constants"
 	"github.com/inscription-c/insc/inscription/index/dao"
@@ -10,15 +11,17 @@ import (
 )
 
 type Protocol struct {
-	wtx   *dao.DB
-	entry *tables.Inscriptions
+	wtx     *dao.DB
+	entry   *tables.Inscriptions
+	address btcutil.Address
 }
 
 // NewProtocol is a function that returns a new protocol.
-func NewProtocol(wtx *dao.DB, entry *tables.Inscriptions) *Protocol {
+func NewProtocol(wtx *dao.DB, entry *tables.Inscriptions, address btcutil.Address) *Protocol {
 	return &Protocol{
-		wtx:   wtx,
-		entry: entry,
+		wtx:     wtx,
+		entry:   entry,
+		address: address,
 	}
 }
 
@@ -88,16 +91,20 @@ func (p *Protocol) brc20c(brc20c *util.BRC20C) error {
 			log.Log.Warnf("protocol %s, %s, %s total amount %d exceeds max %d", brc20c.Protocol, brc20c.Tick, brc20c.Operation, totalAmount, deploy.Max)
 			return nil
 		}
-		if err := p.wtx.SaveProtocol(&tables.Protocol{
+		mint := &tables.Protocol{
 			Outpoint:    p.entry.Outpoint,
 			SequenceNum: p.entry.SequenceNum,
 			Protocol:    constants.ProtocolBRC20C,
 			Ticker:      brc20c.Tick,
 			Operator:    brc20c.Operation,
-			TkID:        brc20c.TkId,
+			TkID:        inscriptionId.OutPoint.String(),
 			Amount:      gconv.Uint64(brc20c.Amount),
 			To:          brc20c.To,
-		}); err != nil {
+		}
+		if mint.To == "" {
+			mint.To = p.address.String()
+		}
+		if err := p.wtx.SaveProtocol(mint); err != nil {
 			return err
 		}
 	}

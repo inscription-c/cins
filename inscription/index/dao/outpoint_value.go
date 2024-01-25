@@ -12,8 +12,8 @@ func (d *DB) GetValueByOutpoint(outpoint string) (value int64, err error) {
 	return outpointVal.Value, nil
 }
 
-func (d *DB) DeleteValueByOutpoint(outpoint string) (err error) {
-	err = d.DB.Where("outpoint = ?", outpoint).Delete(&tables.OutpointValue{}).Error
+func (d *DB) DeleteValueByOutpoint(outpoints ...string) (err error) {
+	err = d.DB.Where("outpoint in (?)", outpoints).Delete(&tables.OutpointValue{}).Error
 	return
 }
 

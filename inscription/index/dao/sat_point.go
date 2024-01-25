@@ -35,7 +35,7 @@ func (d *DB) InscriptionsByOutpoint(outpoint string) (res []*Inscription, err er
 	}
 
 	list := make([]*tables.Inscriptions, 0, len(ids))
-	err = d.DB.Where("id in (?)", ids).Find(&list).Error
+	err = d.DB.Where("sequence_num in (?)", ids).Find(&list).Error
 	if errors.Is(err, gorm.ErrRecordNotFound) {
 		err = nil
 	}

@@ -13,6 +13,7 @@ import (
 	"github.com/inscription-c/insc/inscription/server/handle"
 	"github.com/inscription-c/insc/internal/cfgutil"
 	"github.com/inscription-c/insc/internal/signal"
+	"github.com/inscription-c/insc/internal/util"
 	"github.com/spf13/cobra"
 	"net"
 	"os"
@@ -20,7 +21,6 @@ import (
 )
 
 var (
-	activeNet  = &netparams.MainNetParams
 	srvOptions = &SrvOptions{}
 
 	mainNetRPCListen  = ":8335"
@@ -174,7 +174,7 @@ func IndexSrv(opts ...SrvOption) error {
 		v(srvOptions)
 	}
 	if srvOptions.testnet {
-		activeNet = &netparams.TestNet3Params
+		util.ActiveNet = &netparams.TestNet3Params
 		if srvOptions.rpcListen == mainNetRPCListen {
 			srvOptions.rpcListen = testNetRPCListen
 		}
@@ -191,7 +191,7 @@ func IndexSrv(opts ...SrvOption) error {
 
 	disableTls := false
 	if srvOptions.rpcConnect != "" {
-		rpcConnect, err := cfgutil.NormalizeAddress(srvOptions.rpcConnect, activeNet.RPCClientPort)
+		rpcConnect, err := cfgutil.NormalizeAddress(srvOptions.rpcConnect, util.ActiveNet.RPCClientPort)
 		if err != nil {
 			return err
 		}

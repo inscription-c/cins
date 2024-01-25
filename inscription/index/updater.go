@@ -3,13 +3,16 @@ package index
 import (
 	"errors"
 	"github.com/btcsuite/btcd/rpcclient"
+	"github.com/btcsuite/btcd/txscript"
 	"github.com/btcsuite/btcd/wire"
 	"github.com/gogf/gf/v2/util/gconv"
+	"github.com/gogf/gf/v2/util/gutil"
 	"github.com/inscription-c/insc/inscription/index/dao"
 	"github.com/inscription-c/insc/inscription/index/model"
 	"github.com/inscription-c/insc/inscription/index/tables"
 	"github.com/inscription-c/insc/internal/signal"
 	"github.com/inscription-c/insc/internal/util"
+	"golang.org/x/sync/errgroup"
 	"gorm.io/gorm"
 	"sort"
 	"sync"
@@ -218,7 +221,10 @@ func (u *InscriptionUpdater) indexEnvelopers(
 	}
 
 	// Initialize a channel to receive the output values from the fetchOutputValues method.
-	valueCh, errCh := u.fetchOutputValues(tx, 32)
+	valueCh, errCh, needDelOutpoints, err := u.fetchOutputValues(tx, 32)
+	if err != nil {
+		return err
+	}
 
 	// Loop over each input in the transaction.
 	for inputIndex := range tx.TxIn {
@@ -277,17 +283,7 @@ func (u *InscriptionUpdater) indexEnvelopers(
 			// If the value is in the cache, delete it from the cache.
 			u.valueCache.Delete(preOutpoint)
 		} else {
-			// If the value is not in the cache, try to get it from the database.
-			currentInputValue, err = u.idx.DB().GetValueByOutpoint(preOutpoint)
-			if err != nil && !errors.Is(err, gorm.ErrRecordNotFound) {
-				return err
-			}
-			if err == nil {
-				// If the value is in the database, delete it from the database.
-				if err := u.wtx.DeleteValueByOutpoint(preOutpoint); err != nil {
-					return err
-				}
-			} else {
+			if _, ok := needDelOutpoints[preOutpoint]; !ok {
 				select {
 				case <-signal.InterruptChannel:
 					return signal.ErrInterrupted
@@ -403,6 +399,11 @@ func (u *InscriptionUpdater) indexEnvelopers(
 			inscribedOffset.count++
 			idCounter++
 		}
+	}
+
+	// If the value is in the database, delete it from the database.
+	if err := u.wtx.DeleteValueByOutpoint(gutil.Keys(needDelOutpoints)...); err != nil {
+		return err
 	}
 
 	// TODO index transaction
@@ -675,8 +676,20 @@ func (u *InscriptionUpdater) updateInscriptionLocation(
 		if err := u.wtx.CreateInscription(entry); err != nil {
 			return err
 		}
+		tx, err := u.idx.opts.cli.GetRawTransaction(&inscriptionId.OutPoint.Hash)
+		if err != nil {
+			return err
+		}
+		pkScript := tx.MsgTx().TxOut[inscriptionId.OutPoint.Index].PkScript
+		_, addrs, _, err := txscript.ExtractPkScriptAddrs(pkScript, util.ActiveNet.Params)
+		if err != nil {
+			return err
+		}
+		if len(addrs) == 0 {
+			return errors.New("no address found")
+		}
 		// Create protocol entry
-		p := NewProtocol(u.wtx, entry)
+		p := NewProtocol(u.wtx, entry, addrs[0])
 		if err := p.SaveProtocol(); err != nil {
 			return err
 		}
@@ -734,7 +747,7 @@ func (u *InscriptionUpdater) calculateSat(
 }
 
 // fetchOutputValues fetches the output values of a transaction.
-func (u *InscriptionUpdater) fetchOutputValues(tx *wire.MsgTx, maxCurrentNum int) (chan int64, chan error) {
+func (u *InscriptionUpdater) fetchOutputValues(tx *wire.MsgTx, maxCurrentNum int) (valueCh chan int64, errCh chan error, needDelOutpoints map[string]struct{}, err error) {
 	// Calculate the current number of outpoints to fetch.
 	currentNum := len(tx.TxIn)/2 + 2
 	if currentNum > maxCurrentNum {
@@ -742,13 +755,55 @@ func (u *InscriptionUpdater) fetchOutputValues(tx *wire.MsgTx, maxCurrentNum int
 	}
 
 	// Create a channel to receive errors.
-	errCh := make(chan error)
+	errCh = make(chan error)
 
 	// Create a channel to receive the fetched values.
-	valueCh := make(chan int64, currentNum)
+	valueCh = make(chan int64, currentNum)
 
 	// Create a channel to send the outpoints that need to be fetched.
 	needFetchOutpointsCh := make(chan *wire.OutPoint, currentNum)
+
+	needDelOutpointsLock := &sync.Mutex{}
+	needDelOutpoints = make(map[string]struct{})
+
+	errWg := &errgroup.Group{}
+	for inputIndex := range tx.TxIn {
+		select {
+		case <-signal.InterruptChannel:
+			err = signal.ErrInterrupted
+			return
+		default:
+			txIn := tx.TxIn[inputIndex]
+
+			// If the input is a coinbase, skip it.
+			if util.IsEmptyHash(txIn.PreviousOutPoint.Hash) {
+				continue
+			}
+
+			// If the value of the input is already cached, skip it.
+			if _, ok := u.valueCache.Read(txIn.PreviousOutPoint.String()); ok {
+				continue
+			}
+
+			errWg.Go(func() error {
+				// Try to get the value of the input from the database.
+				_, err := u.idx.DB().GetValueByOutpoint(txIn.PreviousOutPoint.String())
+				if err != nil && !errors.Is(err, gorm.ErrRecordNotFound) {
+					return err
+				}
+				if err == nil {
+					needDelOutpointsLock.Lock()
+					needDelOutpoints[txIn.PreviousOutPoint.String()] = struct{}{}
+					needDelOutpointsLock.Unlock()
+				}
+				return nil
+			})
+		}
+	}
+
+	if err = errWg.Wait(); err != nil {
+		return
+	}
 
 	go func() {
 		defer close(needFetchOutpointsCh)
@@ -756,6 +811,7 @@ func (u *InscriptionUpdater) fetchOutputValues(tx *wire.MsgTx, maxCurrentNum int
 		for inputIndex := range tx.TxIn {
 			select {
 			case <-signal.InterruptChannel:
+				err = signal.ErrInterrupted
 				return
 			default:
 				txIn := tx.TxIn[inputIndex]
@@ -771,15 +827,7 @@ func (u *InscriptionUpdater) fetchOutputValues(tx *wire.MsgTx, maxCurrentNum int
 				}
 
 				// Try to get the value of the input from the database.
-				_, err := u.idx.DB().GetValueByOutpoint(txIn.PreviousOutPoint.String())
-				if err != nil && !errors.Is(err, gorm.ErrRecordNotFound) {
-					errCh <- err
-					close(errCh)
-					return
-				}
-
-				// If the value is not found in the database, add to outpoint to the list of outpoints that need to be fetched.
-				if errors.Is(err, gorm.ErrRecordNotFound) {
+				if _, ok := needDelOutpoints[txIn.PreviousOutPoint.String()]; !ok {
 					needFetchOutpointsCh <- &txIn.PreviousOutPoint
 				}
 			}
@@ -855,5 +903,5 @@ func (u *InscriptionUpdater) fetchOutputValues(tx *wire.MsgTx, maxCurrentNum int
 			}
 		}
 	}()
-	return valueCh, errCh
+	return
 }

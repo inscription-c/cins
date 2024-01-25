@@ -11,4 +11,7 @@ func (h *Handler) InitRouter() {
 	h.Engine().GET("/inscriptions/:pages", h.Inscriptions)
 	h.Engine().GET("/inscriptions/block/:height", h.InscriptionsInBlock)
 	h.Engine().GET("/inscriptions/block/:height/:page", h.InscriptionsInBlock)
+	h.Engine().GET("/brc20c/token/:tkid", h.BRC20CToken)
+	h.Engine().GET("/brc20c/tokens/:tk/:page", h.BRC20CTokens)
+	h.Engine().GET("/brc20c/mint-history/:tkidOrAddr/:page", h.BRC20CMintHistory)
 }
