@@ -14,4 +14,5 @@ func (h *Handler) InitRouter() {
 	h.Engine().GET("/brc20c/token/:tkid", h.BRC20CToken)
 	h.Engine().GET("/brc20c/tokens/:tk/:page", h.BRC20CTokens)
 	h.Engine().GET("/brc20c/mint-history/:tkidOrAddr/:page", h.BRC20CMintHistory)
+	h.Engine().GET("/brc20c/holders/:tkid/:page", h.BRC20CHolders)
 }

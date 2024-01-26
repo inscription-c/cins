@@ -28,7 +28,7 @@ func (d *DB) CountProtocolAmount(protocol, ticker, operator string, tkid ...stri
 	if len(tkid) > 0 {
 		db = d.Where("tkid=?", tkid[0])
 	}
-	err = db.Select("sum(amount)").Where("protocol=? and ticker=? and operator=?", protocol, ticker, operator).Scan(&total).Error
+	err = db.Model(&tables.Protocol{}).Select("sum(amount)").Where("protocol=? and ticker=? and operator=?", protocol, ticker, operator).Scan(&total).Error
 	if errors.Is(err, gorm.ErrRecordNotFound) {
 		err = nil
 	}
@@ -48,7 +48,7 @@ func (d *DB) CountToAddress(protocol, ticker, operator string, tkid ...string) (
 	if len(tkid) > 0 {
 		db = d.Where("tkid=?", tkid[0])
 	}
-	err = db.Select("count(distinct to)").Where("protocol=? and ticker=? and operator=?", protocol, ticker, operator).Scan(&total).Error
+	err = db.Model(&tables.Protocol{}).Select("count(distinct COALESCE(`to`, miner))").Where("protocol=? and ticker=? and operator=?", protocol, ticker, operator).Scan(&total).Error
 	if errors.Is(err, gorm.ErrRecordNotFound) {
 		err = nil
 	}
@@ -56,7 +56,7 @@ func (d *DB) CountToAddress(protocol, ticker, operator string, tkid ...string) (
 }
 
 func (d *DB) FindTokenPageByTicker(protocol, ticker, operator string, page, pageSize int) (list []*tables.Protocol, err error) {
-	err = d.Where("protocol=? and ticker=? and operator=?", protocol, ticker, operator).
+	err = d.Model(&tables.Protocol{}).Where("protocol=? and ticker=? and operator=?", protocol, ticker, operator).
 		Offset((page - 1) * pageSize).Limit(pageSize + 1).Find(&list).Error
 	if errors.Is(err, gorm.ErrRecordNotFound) {
 		err = nil
@@ -71,7 +71,7 @@ type ProtocolAmount struct {
 }
 
 func (d *DB) SumAmountByToAddress(protocol, to string, page, pageSize int) (list []*ProtocolAmount, err error) {
-	err = d.Select("tkid, ticker, sum(amount) as amount").
+	err = d.Model(&tables.Protocol{}).Select("tkid, ticker, sum(amount) as amount").
 		Where("protocol=? and `to`=?", protocol, to).
 		Group("tkid").Offset((page - 1) * pageSize).Limit(pageSize + 1).Find(&list).Error
 	if errors.Is(err, gorm.ErrRecordNotFound) {
@@ -88,8 +88,23 @@ type FindMintHistoryByTkIdResp struct {
 }
 
 func (d *DB) FindMintHistoryByTkId(tkid, protocol, operator string, page, pageSize int) (list []*FindMintHistoryByTkIdResp, err error) {
-	err = d.Where("tkid=? and protocol=? and operator=?", tkid, protocol, operator).
+	err = d.Model(&tables.Protocol{}).Where("tkid=? and protocol=? and operator=?", tkid, protocol, operator).
 		Offset((page - 1) * pageSize).Limit(pageSize + 1).Find(&list).Error
+	if errors.Is(err, gorm.ErrRecordNotFound) {
+		err = nil
+	}
+	return
+}
+
+type FindHoldersByTkIdResp struct {
+	Amount  uint64 `gorm:"column:amount" json:"amount"`
+	Address string `gorm:"column:address" json:"address"`
+}
+
+func (d *DB) FindHoldersByTkId(tkid, protocol, operator string, page, pageSize int) (list []*FindHoldersByTkIdResp, err error) {
+	err = d.Model(&tables.Protocol{}).Select("DISTINCT COALESCE(`to`,miner) as address, sum(amount) as amount").
+		Where("tkid=? and protocol=? and operator=?", tkid, protocol, operator).
+		Group("address").Offset((page - 1) * pageSize).Limit(pageSize + 1).Find(&list).Error
 	if errors.Is(err, gorm.ErrRecordNotFound) {
 		err = nil
 	}

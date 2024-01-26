@@ -41,9 +41,9 @@ func (h *Handler) doBRC20CMintHistory(ctx *gin.Context, tkidOrAddr string, page 
 			res = res[:pageSize]
 		}
 		ctx.JSON(http.StatusOK, gin.H{
-			"page":   page,
-			"more":   len(res) > pageSize,
-			"amount": res,
+			"page_index": page,
+			"more":       len(res) > pageSize,
+			"amount":     res,
 		})
 		return nil
 	}
