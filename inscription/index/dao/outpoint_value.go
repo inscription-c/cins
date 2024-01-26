@@ -12,7 +12,7 @@ func (d *DB) GetValueByOutpoint(outpoint string) (value int64, err error) {
 	if err = d.DB.Where("outpoint = ?", outpoint).First(outpointVal).Error; err != nil {
 		return
 	}
-	// Return the value associated with the outpoint
+	// Return the value associated with to outpoint
 	return outpointVal.Value, nil
 }
 

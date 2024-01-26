@@ -1,12 +1,8 @@
 package server
 
 import (
-	"errors"
 	"github.com/btcsuite/btcd/rpcclient"
 	"github.com/inscription-c/insc/inscription/index"
-	"github.com/inscription-c/insc/inscription/log"
-	"github.com/inscription-c/insc/internal/signal"
-	"time"
 )
 
 type Options struct {
@@ -49,28 +45,4 @@ func NewRunner(opts ...Option) *Runner {
 		v(r.opts)
 	}
 	return r
-}
-
-func (r *Runner) Start() {
-	go func() {
-		ticker := time.NewTicker(time.Second * 5)
-		defer ticker.Stop()
-		for {
-			select {
-			case <-signal.InterruptChannel:
-				return
-			case <-ticker.C:
-				err := r.opts.idx.UpdateIndex()
-				if err != nil && !errors.Is(err, signal.ErrInterrupted) {
-					log.Srv.Error("UpdateIndex", "err", err)
-				}
-				if errors.Is(err, signal.ErrInterrupted) {
-					return
-				}
-			}
-		}
-	}()
-}
-
-func (r *Runner) Stop() {
 }

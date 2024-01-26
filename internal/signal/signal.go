@@ -85,10 +85,9 @@ func AddInterruptHandler(handler func()) {
 // the caller can just use an if statement instead of a select.
 func InterruptRequested() bool {
 	select {
-	case <-InterruptHandlersDone:
+	case <-InterruptChannel:
 		return true
 	default:
 	}
-
 	return false
 }

@@ -9,7 +9,7 @@ import (
 // GetStatisticCountByName retrieves the count of a specific statistic by its name.
 // It takes a name of type tables.StatisticType as a parameter.
 // It returns the count of the statistic and any error encountered.
-func (d *DB) GetStatisticCountByName(name tables.StatisticType) (count uint32, err error) {
+func (d *DB) GetStatisticCountByName(name tables.StatisticType) (count uint64, err error) {
 	statistic := &tables.Statistic{}
 	err = d.DB.Where("name = ?", name).First(statistic).Error
 	if errors.Is(err, gorm.ErrRecordNotFound) {
@@ -24,7 +24,7 @@ func (d *DB) GetStatisticCountByName(name tables.StatisticType) (count uint32, e
 // If the statistic does not exist, it creates a new one with the given name and count.
 // If the statistic exists, it increments its count by the given amount.
 // It returns any error encountered during the operation.
-func (d *DB) IncrementStatistic(name tables.StatisticType, count uint32) error {
+func (d *DB) IncrementStatistic(name tables.StatisticType, count uint64) error {
 	statistic := &tables.Statistic{}
 	err := d.DB.Where("name = ?", name).First(statistic).Error
 	if errors.Is(err, gorm.ErrRecordNotFound) {

@@ -1,4 +1,4 @@
-package util
+package model
 
 import (
 	"errors"
@@ -12,7 +12,7 @@ import (
 
 type SatPoint struct {
 	Outpoint wire.OutPoint
-	Offset   uint32
+	Offset   uint64
 }
 
 func FormatSatPoint(outpoint string, sat uint64) string {
@@ -32,7 +32,7 @@ func NewSatPointFromString(satpoint string) (*SatPoint, error) {
 	if err != nil {
 		return nil, fmt.Errorf("invalid output index: %v", err)
 	}
-	offset, err := strconv.ParseUint(parts[2], 10, 32)
+	offset, err := strconv.ParseUint(parts[2], 10, 64)
 	if err != nil {
 		return nil, fmt.Errorf("invalid satpoint offset: %v", err)
 	}
@@ -41,7 +41,7 @@ func NewSatPointFromString(satpoint string) (*SatPoint, error) {
 			Hash:  *hash,
 			Index: uint32(outputIndex),
 		},
-		Offset: uint32(offset),
+		Offset: offset,
 	}, nil
 }
 

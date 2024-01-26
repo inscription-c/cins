@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"github.com/btcsuite/btcd/btcutil/hdkeychain"
 	"github.com/inscription-c/insc/internal/legacy/keystore"
+	"github.com/inscription-c/insc/internal/util"
 	"os"
 	"path/filepath"
 	"time"
@@ -94,15 +95,15 @@ func convertLegacyKeystore(legacyKeyStore *keystore.Store, w *wallet.Wallet) {
 // and generates the wallet accordingly.  The new wallet will reside at the
 // provided path.
 func createWallet(cfg *Config) error {
-	dbDir := networkDir(cfg.AppDataDir.Value, activeNet.Params)
+	dbDir := networkDir(cfg.AppDataDir.Value, util.ActiveNet.Params)
 	loader := wallet.NewLoader(
-		activeNet.Params, dbDir, true, cfg.DBTimeout, 250,
+		util.ActiveNet.Params, dbDir, true, cfg.DBTimeout, 250,
 	)
 
 	// When there is a legacy keystore, open it now to ensure any errors
 	// don't end up exiting the process after the user has spent time
 	// entering a bunch of information.
-	netDir := networkDir(cfg.AppDataDir.Value, activeNet.Params)
+	netDir := networkDir(cfg.AppDataDir.Value, util.ActiveNet.Params)
 	keystorePath := filepath.Join(netDir, keystore.Filename)
 	var legacyKeyStore *keystore.Store
 	_, err := os.Stat(keystorePath)
@@ -179,7 +180,7 @@ func createSimulationWallet(cfg *Config) error {
 	// Public passphrase is the default.
 	pubPass := []byte(wallet.InsecurePubPassphrase)
 
-	netDir := networkDir(cfg.AppDataDir.Value, activeNet.Params)
+	netDir := networkDir(cfg.AppDataDir.Value, util.ActiveNet.Params)
 
 	// Create the wallet.
 	dbPath := filepath.Join(netDir, wallet.WalletDBName)
@@ -193,7 +194,7 @@ func createSimulationWallet(cfg *Config) error {
 	defer db.Close()
 
 	// Create the wallet.
-	err = wallet.Create(db, pubPass, privPass, nil, activeNet.Params, time.Now())
+	err = wallet.Create(db, pubPass, privPass, nil, util.ActiveNet.Params, time.Now())
 	if err != nil {
 		return err
 	}

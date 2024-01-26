@@ -3,14 +3,22 @@ package wallet
 import (
 	"errors"
 	"fmt"
+	"github.com/btcsuite/btcd/btcutil"
 	"github.com/inscription-c/insc/btcd"
+	"github.com/inscription-c/insc/constants"
+	"github.com/inscription-c/insc/inscription/index"
+	"github.com/inscription-c/insc/inscription/index/dao"
+	"github.com/inscription-c/insc/inscription/index/tables"
+	log2 "github.com/inscription-c/insc/inscription/log"
 	"github.com/inscription-c/insc/internal/signal"
+	"github.com/inscription-c/insc/internal/util"
 	"github.com/inscription-c/insc/wallet/log"
 	"github.com/spf13/cobra"
 	"net"
 	"net/http"
 	_ "net/http/pprof"
 	"os"
+	"path/filepath"
 	"sync"
 
 	"github.com/btcsuite/btcwallet/chain"
@@ -18,35 +26,26 @@ import (
 	"github.com/btcsuite/btcwallet/wallet"
 )
 
+const (
+	btcdRpcListenMainNet = "127.0.0.1:8334"
+	btcdRpcListenTestNet = "127.0.0.1:18334"
+)
+
 var (
-	cfg        *Config
-	username   string
-	password   string
-	walletPass string
-	testnet    bool
-	rpcConnect string
+	cfg          *Config
+	username     string
+	password     string
+	walletPass   string
+	testnet      bool
+	rpcConnect   string
+	dbListenPort string
 )
 
 var Cmd = &cobra.Command{
 	Use:   "wallet",
 	Short: "wallet embed btcd endpoint",
 	Run: func(cmd *cobra.Command, args []string) {
-		if rpcConnect == "" {
-			btcdRpcListen := "127.0.0.1:8334"
-			if testnet {
-				btcdRpcListen = "127.0.0.1:18334"
-			}
-			rpcConnect = btcdRpcListen
-			if err := btcd.Btcd(nil,
-				btcd.WithUser(username),
-				btcd.WithPassword(password),
-				btcd.WithTestnet(testnet),
-				btcd.WithRpcListen(btcdRpcListen)); err != nil {
-				fmt.Println(err)
-				os.Exit(1)
-			}
-		}
-		if err := Wallet(nil); err != nil {
+		if err := Main(); err != nil {
 			fmt.Println(err)
 			os.Exit(1)
 		}
@@ -60,6 +59,7 @@ func init() {
 	Cmd.Flags().StringVarP(&walletPass, "walletpass", "", "", "wallet password")
 	Cmd.Flags().BoolVarP(&testnet, "testnet", "t", false, "bitcoin testnet3")
 	Cmd.Flags().StringVarP(&rpcConnect, "rpcconnect", "", "", "Hostname/IP and port of btcd RPC server to connect to (default localhost:8334, testnet: localhost:18334)")
+	Cmd.Flags().StringVarP(&dbListenPort, "dblistenport", "", constants.DefaultDBListenPort, "db listen port")
 	if err := Cmd.MarkFlagRequired("user"); err != nil {
 		fmt.Println(err)
 		os.Exit(1)
@@ -72,6 +72,72 @@ func init() {
 		fmt.Println(err)
 		os.Exit(1)
 	}
+}
+
+func Main() error {
+	if rpcConnect == "" {
+		btcdRpcListen := btcdRpcListenMainNet
+		if testnet {
+			btcdRpcListen = btcdRpcListenTestNet
+		}
+		rpcConnect = btcdRpcListen
+		if err := btcd.Btcd(nil,
+			btcd.WithUser(username),
+			btcd.WithPassword(password),
+			btcd.WithTestnet(testnet),
+			btcd.WithRpcListen(btcdRpcListen)); err != nil {
+			return err
+		}
+	}
+
+	if err := Wallet(nil); err != nil {
+		return err
+	}
+
+	logFile := btcutil.AppDataDir(filepath.Join(constants.AppName, "inscription", "logs", "inscription.log"), false)
+	log2.InitLogRotator(logFile)
+
+	db, err := dao.NewDB(
+		dao.WithAddr(fmt.Sprintf("localhost:%s", dbListenPort)),
+		dao.WithUser(constants.DefaultDBUser),
+		dao.WithPassword(constants.DefaultDBPass),
+		dao.WithDBName(constants.DefaultDBName),
+		dao.WithDataDir(constants.DBDatDir(testnet)),
+		dao.WithServerPort(constants.DefaultDBListenPort),
+		dao.WithStatusPort(constants.DefaultDbStatusListenPort),
+		dao.WithAutoMigrateTables(tables.Tables...),
+	)
+	if err != nil {
+		return err
+	}
+
+	disableTls, err := util.DisableTls(rpcConnect, util.ActiveNet.RPCClientPort)
+	if err != nil {
+		return err
+	}
+	cli, err := btcd.NewClient(rpcConnect, username, password, disableTls)
+	if err != nil {
+		return err
+	}
+	batchCli, err := btcd.NewBatchClient(rpcConnect, username, password, disableTls)
+	if err != nil {
+		return err
+	}
+	signal.AddInterruptHandler(func() {
+		cli.Shutdown()
+		batchCli.Shutdown()
+	})
+
+	indexer := index.NewIndexer(
+		index.WithDB(db),
+		index.WithClient(cli),
+		index.WithBatchClient(batchCli),
+	)
+	indexer.Start()
+	signal.AddInterruptHandler(func() {
+		indexer.Stop()
+	})
+	return nil
 }
 
 // Wallet is a work-around main function that is required since deferred
@@ -108,9 +174,9 @@ func Wallet(walletCh chan<- *wallet.Wallet) error {
 		}()
 	}
 
-	dbDir := networkDir(cfg.AppDataDir.Value, activeNet.Params)
+	dbDir := networkDir(cfg.AppDataDir.Value, util.ActiveNet.Params)
 	loader := wallet.NewLoader(
-		activeNet.Params, dbDir, true, cfg.DBTimeout, 250,
+		util.ActiveNet.Params, dbDir, true, cfg.DBTimeout, 250,
 	)
 
 	// Create and start HTTP server to serve wallet client connections.
@@ -241,7 +307,7 @@ func rpcClientConnectLoop(legacyRPCServer *legacyrpc.Server, loader *wallet.Load
 // authentication error.  Instead, all requests to the client will simply error.
 func startChainRPC(certs []byte) (*chain.RPCClient, error) {
 	log.Log.Infof("Attempting RPC client connection to %v", cfg.RPCConnect)
-	rpcc, err := chain.NewRPCClient(activeNet.Params, cfg.RPCConnect, cfg.BtcdUsername, cfg.BtcdPassword, certs, cfg.DisableClientTLS, 0)
+	rpcc, err := chain.NewRPCClient(util.ActiveNet.Params, cfg.RPCConnect, cfg.BtcdUsername, cfg.BtcdPassword, certs, cfg.DisableClientTLS, 0)
 	if err != nil {
 		return nil, err
 	}

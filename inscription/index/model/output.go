@@ -1,8 +1,6 @@
-package util
+package model
 
 import (
-	"database/sql/driver"
-	"errors"
 	"fmt"
 	"github.com/btcsuite/btcd/chaincfg/chainhash"
 	"github.com/btcsuite/btcd/wire"
@@ -10,6 +8,10 @@ import (
 	"github.com/inscription-c/insc/constants"
 	"strings"
 )
+
+type OutPoint struct {
+	wire.OutPoint
+}
 
 func StringToOutpoint(s string) *OutPoint {
 	s = strings.ToLower(s)
@@ -24,29 +26,6 @@ func StringToOutpoint(s string) *OutPoint {
 			Index: gconv.Uint32(insId[1]),
 		},
 	}
-}
-
-type OutPoint struct {
-	wire.OutPoint
-}
-
-func (o *OutPoint) Scan(value interface{}) error {
-	bytes, ok := value.([]byte)
-	if !ok {
-		return errors.New(fmt.Sprint("Failed to unmarshal JSONB value:", value))
-	}
-	outpoint := StringToOutpoint(string(bytes))
-	*o = *outpoint
-	return nil
-}
-
-func (o *OutPoint) Value() (driver.Value, error) {
-	return []byte(o.String()), nil
-}
-
-func (o *OutPoint) MarshalJSON() ([]byte, error) {
-	s := fmt.Sprintf("\"%s\"", o.InscriptionId().String())
-	return []byte(s), nil
 }
 
 func NewOutPoint(txId string, index uint32) *OutPoint {
@@ -65,10 +44,4 @@ func (o *OutPoint) String() string {
 
 func (o *OutPoint) WireOutpoint() (*wire.OutPoint, error) {
 	return wire.NewOutPointFromString(o.String())
-}
-
-func (o *OutPoint) InscriptionId() *InscriptionId {
-	return &InscriptionId{
-		OutPoint: *o,
-	}
 }

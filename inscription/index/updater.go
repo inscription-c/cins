@@ -2,6 +2,7 @@ package index
 
 import (
 	"errors"
+	"github.com/btcsuite/btcd/chaincfg/chainhash"
 	"github.com/btcsuite/btcd/rpcclient"
 	"github.com/btcsuite/btcd/txscript"
 	"github.com/btcsuite/btcd/wire"
@@ -10,7 +11,6 @@ import (
 	"github.com/inscription-c/insc/inscription/index/dao"
 	"github.com/inscription-c/insc/inscription/index/model"
 	"github.com/inscription-c/insc/inscription/index/tables"
-	"github.com/inscription-c/insc/inscription/log"
 	"github.com/inscription-c/insc/internal/signal"
 	"github.com/inscription-c/insc/internal/util"
 	"golang.org/x/sync/errgroup"
@@ -39,7 +39,7 @@ const (
 // Flotsam represents a floating inscription.
 type Flotsam struct {
 	// InscriptionId is a pointer to the unique identifier of the inscription.
-	InscriptionId *util.InscriptionId
+	InscriptionId *tables.InscriptionId
 
 	// Offset is the position of the inscription within the transaction.
 	Offset uint64
@@ -89,7 +89,7 @@ type OriginNew struct {
 
 // OriginOld represents an old origin of an inscription.
 type OriginOld struct {
-	OldSatPoint util.SatPoint
+	OldSatPoint model.SatPoint
 }
 
 // InscriptionUpdater is responsible for updating inscriptions.
@@ -119,13 +119,13 @@ type InscriptionUpdater struct {
 	nextSequenceNumber *uint64
 
 	// unboundInscriptions is a pointer to an uint32 that represents the total number of unbound inscriptions.
-	unboundInscriptions *uint32
+	unboundInscriptions *uint64
 
 	// cursedInscriptionCount is a pointer to an uint32 that represents the total number of cursed inscriptions.
-	cursedInscriptionCount *uint32
+	cursedInscriptionCount *uint64
 
 	// blessedInscriptionCount is a pointer to an uint32 that represents the total number of blessed inscriptions.
-	blessedInscriptionCount *uint32
+	blessedInscriptionCount *uint64
 }
 
 type ValueCache struct {
@@ -185,13 +185,13 @@ func (c *ValueCache) Values() map[string]int64 {
 
 // inscribedOffsetEntity represents an entity with an inscribed offset.
 type inscribedOffsetEntity struct {
-	inscriptionId *util.InscriptionId
+	inscriptionId *tables.InscriptionId
 	count         int64
 }
 
 // locationsInscription represents the location of an inscription.
 type locationsInscription struct {
-	satpoint *util.SatPoint
+	satpoint *model.SatPoint
 	flotsam  *Flotsam
 }
 
@@ -201,7 +201,7 @@ func (u *InscriptionUpdater) indexEnvelopers(
 	inputSatRange []*model.SatRange) error {
 
 	// Initialize an integer counter for the inscriptions' IDs.
-	idCounter := int64(0)
+	idCounter := uint32(0)
 
 	// Initialize the total value of the inputs in the transaction.
 	totalInputValue := int64(0)
@@ -246,13 +246,11 @@ func (u *InscriptionUpdater) indexEnvelopers(
 
 		// Loop over each fetched inscription.
 		for _, v := range inscriptions {
-			// Calculate the offset of the inscription by adding the total input value to the offset of the SatPoint.
 			offset := uint64(totalInputValue) + uint64(v.SatPoint.Offset)
-
-			// Get the ID of the inscription.
-			insId := v.Inscriptions.Outpoint.InscriptionId()
-
-			// Create a new Flotsam with the inscription ID, offset, and old origin, and append it to the floating inscriptions.
+			insId := &tables.InscriptionId{
+				TxId:   v.TxId,
+				Offset: v.Inscriptions.Offset,
+			}
 			floatingInscriptions = append(floatingInscriptions, &Flotsam{
 				InscriptionId: insId,
 				Offset:        offset,
@@ -302,18 +300,14 @@ func (u *InscriptionUpdater) indexEnvelopers(
 
 		// Loop over each inscription in the input.
 		for _, inscription := range envelopes {
-			if inscription.input != inputIndex {
+			if inscription.index != uint32(inputIndex) {
 				break
 			}
 
 			// Create a new inscription ID for the current inscription.
-			inscriptionId := util.InscriptionId{
-				OutPoint: util.OutPoint{
-					OutPoint: wire.OutPoint{
-						Hash:  tx.TxHash(),
-						Index: uint32(idCounter),
-					},
-				},
+			inscriptionId := tables.InscriptionId{
+				TxId:   tx.TxHash().String(),
+				Offset: idCounter,
 			}
 
 			// Initialize a variable to store the type of curse, if any, that applies to the inscription.
@@ -325,7 +319,7 @@ func (u *InscriptionUpdater) indexEnvelopers(
 				curse = CurseDuplicateField
 			} else if inscription.payload.IncompleteField {
 				curse = CurseIncompleteField
-			} else if inscription.input != 0 {
+			} else if inscription.index != 0 {
 				curse = CurseNotInFirstInput
 			} else if inscription.offset != 0 {
 				curse = CurseNotAtOffsetZero
@@ -342,7 +336,7 @@ func (u *InscriptionUpdater) indexEnvelopers(
 					if offsetEntity.count > 1 {
 						curse = CurseReInscription
 					} else {
-						entry, err := u.wtx.GetInscriptionById(offsetEntity.inscriptionId.String())
+						entry, err := u.wtx.GetInscriptionById(offsetEntity.inscriptionId)
 						if err != nil {
 							return err
 						}
@@ -412,7 +406,7 @@ func (u *InscriptionUpdater) indexEnvelopers(
 
 	// still have to normalize over inscription size
 	for _, flotsam := range floatingInscriptions {
-		flotsam.Origin.New.Fee = (totalInputValue - totalOutputValue) / idCounter
+		flotsam.Origin.New.Fee = (totalInputValue - totalOutputValue) / int64(idCounter)
 	}
 
 	// Check if the transaction is a coinbase transaction.
@@ -455,12 +449,12 @@ func (u *InscriptionUpdater) indexEnvelopers(
 				break
 			}
 			// Create a new SatPoint for the inscription at the current output and offset.
-			newSatpoint := &util.SatPoint{
+			newSatpoint := &model.SatPoint{
 				Outpoint: wire.OutPoint{
 					Hash:  tx.TxHash(),
 					Index: uint32(vout),
 				},
-				Offset: uint32(flotsam.Offset - outputValue),
+				Offset: flotsam.Offset - outputValue,
 			}
 			// Add the new location to the list of new locations.
 			newLocations = append(newLocations, &locationsInscription{
@@ -479,7 +473,7 @@ func (u *InscriptionUpdater) indexEnvelopers(
 		outputValue = end
 
 		// Cache the value of the current output.
-		outpoint := util.NewOutPoint(tx.TxHash().String(), uint32(vout)).String()
+		outpoint := model.NewOutPoint(tx.TxHash().String(), uint32(vout)).String()
 		u.valueCache.Write(outpoint, txOut.Value)
 	}
 
@@ -499,12 +493,12 @@ func (u *InscriptionUpdater) indexEnvelopers(
 					continue
 				}
 				flotsam.Offset = pointer
-				newSatpoint = &util.SatPoint{
+				newSatpoint = &model.SatPoint{
 					Outpoint: wire.OutPoint{
 						Hash:  tx.TxHash(),
 						Index: uint32(vout),
 					},
-					Offset: uint32(pointer - rangeEntity.Start),
+					Offset: pointer - rangeEntity.Start,
 				}
 			}
 		}
@@ -518,8 +512,8 @@ func (u *InscriptionUpdater) indexEnvelopers(
 	// If the transaction is a coinbase transaction, update the location of each floating inscription to a lost SatPoint and update the total number of lost Satoshis.
 	if isCoinBase {
 		for _, flotsam := range floatingInscriptions {
-			newSatpoint := &util.SatPoint{
-				Offset: uint32(u.lostSats + flotsam.Offset - outputValue),
+			newSatpoint := &model.SatPoint{
+				Offset: u.lostSats + flotsam.Offset - outputValue,
 			}
 			if err := u.updateInscriptionLocation(inputSatRange, flotsam, newSatpoint); err != nil {
 				return err
@@ -545,14 +539,13 @@ func (u *InscriptionUpdater) indexEnvelopers(
 func (u *InscriptionUpdater) updateInscriptionLocation(
 	inputSatRanges []*model.SatRange,
 	flotsam *Flotsam,
-	newSatpoint *util.SatPoint,
+	newSatPoint *model.SatPoint,
 ) error {
 
 	// Initialize error, unbound flag, and sequence number.
 	var err error
 	var unbound bool
 	var sequenceNumber uint64
-	// Get the inscription ID from the flotsam.
 	inscriptionId := flotsam.InscriptionId
 
 	// If the origin of the flotsam is old, delete all by SatPoint and delete the inscription by ID.
@@ -562,7 +555,7 @@ func (u *InscriptionUpdater) updateInscriptionLocation(
 			return err
 		}
 		// Delete the inscription by ID from the database.
-		sequenceNumber, err = u.wtx.DeleteInscriptionById(inscriptionId.String())
+		sequenceNumber, err = u.wtx.DeleteInscriptionById(inscriptionId)
 		if err != nil {
 			return err
 		}
@@ -573,14 +566,14 @@ func (u *InscriptionUpdater) updateInscriptionLocation(
 		// If the flotsam is cursed, increment the cursed inscription count.
 		if flotsam.Origin.New.Cursed {
 			number := *u.cursedInscriptionCount
-			if !atomic.CompareAndSwapUint32(u.cursedInscriptionCount, number, number+1) {
+			if !atomic.CompareAndSwapUint64(u.cursedInscriptionCount, number, number+1) {
 				return errors.New("cursedInscriptionCount compare and swap failed")
 			}
 			// because cursed numbers start at -1
 			inscriptionNumber = -(int64(number) + 1)
 		} else { // If the flotsam is not cursed, increment the blessed inscription count.
 			number := *u.blessedInscriptionCount
-			if !atomic.CompareAndSwapUint32(u.blessedInscriptionCount, number, number+1) {
+			if !atomic.CompareAndSwapUint64(u.blessedInscriptionCount, number, number+1) {
 				return errors.New("blessedInscriptionCount compare and swap failed")
 			}
 			inscriptionNumber = int64(number) + 1
@@ -633,8 +626,8 @@ func (u *InscriptionUpdater) updateInscriptionLocation(
 			}
 		}
 
-		// If the new Satpoint is empty, set the lost charm.
-		if util.IsEmptyHash(newSatpoint.Outpoint.Hash) {
+		// If the new newSatPoint is empty, set the lost charm.
+		if util.IsEmptyHash(newSatPoint.Outpoint.Hash) {
 			CharmLost.Set(&charms)
 		}
 
@@ -650,23 +643,23 @@ func (u *InscriptionUpdater) updateInscriptionLocation(
 			}
 		}
 
-		// Get the inscription from the flotsam.
-		ins := flotsam.Origin.New.Inscription
+		inscription := flotsam.Origin.New.Inscription
 		// Create a new inscription entry.
 		entry := &tables.Inscriptions{
-			Outpoint:        &inscriptionId.OutPoint,
+			InscriptionId:   *inscriptionId,
+			Index:           inscription.index,
 			SequenceNum:     sequenceNumber,
 			InscriptionNum:  inscriptionNumber,
 			Charms:          charms,
 			Fee:             uint64(flotsam.Origin.New.Fee),
 			Height:          u.idx.height,
 			Timestamp:       u.timestamp,
-			Body:            ins.payload.Body,
-			ContentEncoding: string(ins.payload.ContentEncoding),
-			ContentType:     string(ins.payload.ContentType),
-			DstChain:        string(ins.payload.DstChain),
-			Metadata:        ins.payload.Metadata,
-			Pointer:         gconv.Int32(string(ins.payload.Pointer)),
+			Body:            inscription.payload.Body,
+			ContentEncoding: string(inscription.payload.ContentEncoding),
+			ContentType:     string(inscription.payload.ContentType),
+			DstChain:        string(inscription.payload.DstChain),
+			Metadata:        inscription.payload.Metadata,
+			Pointer:         gconv.Int32(string(inscription.payload.Pointer)),
 		}
 		// If the Sat is not nil, set the Sat and offset in the entry.
 		if sat != nil {
@@ -677,15 +670,16 @@ func (u *InscriptionUpdater) updateInscriptionLocation(
 		if err := u.wtx.CreateInscription(entry); err != nil {
 			return err
 		}
-		tx, err := u.idx.opts.cli.GetRawTransaction(&inscriptionId.OutPoint.Hash)
+		txHash, err := chainhash.NewHashFromStr(inscriptionId.TxId)
 		if err != nil {
 			return err
 		}
-		if inscriptionId.OutPoint.Index >= uint32(len(tx.MsgTx().TxIn)) {
-			log.Log.Warnf("index out of range: %d >= %d", inscriptionId.OutPoint.Index, len(tx.MsgTx().TxIn))
-			return nil
+		tx, err := u.idx.opts.cli.GetRawTransaction(txHash)
+		if err != nil {
+			return err
 		}
-		preOutpoint := &tx.MsgTx().TxIn[inscriptionId.OutPoint.Index].PreviousOutPoint
+
+		preOutpoint := &tx.MsgTx().TxIn[inscription.index].PreviousOutPoint
 		tx, err = u.idx.opts.cli.GetRawTransaction(&preOutpoint.Hash)
 		if err != nil {
 			return err
@@ -704,14 +698,14 @@ func (u *InscriptionUpdater) updateInscriptionLocation(
 		}
 	}
 
-	// Set the Satpoint to the sequence number in the database.
-	satPoint := newSatpoint
+	// Set the newSatPoint to the sequence number in the database.
+	satPoint := newSatPoint
 	if unbound {
 		unboundNum := *u.unboundInscriptions
-		if !atomic.CompareAndSwapUint32(u.unboundInscriptions, unboundNum, unboundNum+1) {
+		if !atomic.CompareAndSwapUint64(u.unboundInscriptions, unboundNum, unboundNum+1) {
 			return errors.New("unboundInscriptions compare and swap failed")
 		}
-		satPoint = &util.SatPoint{
+		satPoint = &model.SatPoint{
 			Offset: unboundNum,
 		}
 	}
@@ -795,6 +789,9 @@ func (u *InscriptionUpdater) fetchOutputValues(tx *wire.MsgTx, maxCurrentNum int
 			}
 
 			errWg.Go(func() error {
+				if signal.InterruptRequested() {
+					return nil
+				}
 				// Try to get the value of the input from the database.
 				_, err := u.idx.DB().GetValueByOutpoint(txIn.PreviousOutPoint.String())
 				if err != nil && !errors.Is(err, gorm.ErrRecordNotFound) {

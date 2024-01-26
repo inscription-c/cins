@@ -5,7 +5,6 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/inscription-c/insc/constants"
 	"github.com/inscription-c/insc/inscription/index/tables"
-	"github.com/inscription-c/insc/internal/util"
 	"golang.org/x/sync/errgroup"
 	"net/http"
 	"sync"
@@ -28,8 +27,8 @@ func (h *Handler) BRC20CToken(ctx *gin.Context) {
 // doBRC20CToken is a helper function for handling BRC20C token requests.
 // It retrieves the token information of a specific BRC20C token and returns them in the response.
 func (h *Handler) doBRC20CToken(ctx *gin.Context, tkid string) error {
-	inscriptionId := util.StringToInscriptionId(tkid)
-	token, err := h.DB().GetProtocolByOutpoint(inscriptionId.OutPoint.String())
+	inscriptionId := tables.StringToInscriptionId(tkid)
+	token, err := h.DB().GetProtocolByInscriptionId(inscriptionId)
 	if err != nil {
 		return err
 	}
@@ -43,7 +42,8 @@ func (h *Handler) doBRC20CToken(ctx *gin.Context, tkid string) error {
 	}
 
 	if token.Operator == constants.OperationMint {
-		token, err = h.DB().GetProtocolByOutpoint(token.TkID.String())
+		inscriptionId := tables.StringToInscriptionId(token.TkID)
+		token, err = h.DB().GetProtocolByInscriptionId(inscriptionId)
 		if err != nil {
 			return err
 		}
@@ -57,7 +57,6 @@ func (h *Handler) doBRC20CToken(ctx *gin.Context, tkid string) error {
 	if err != nil {
 		return err
 	}
-
 	ctx.JSON(http.StatusOK, resp)
 	return nil
 }
@@ -68,7 +67,7 @@ func (h *Handler) doBRC20CToken(ctx *gin.Context, tkid string) error {
 func (h *Handler) GetBRC20TokenInfo(token *tables.Protocol) (gin.H, error) {
 	lock := &sync.Mutex{}
 	resp := gin.H{
-		"ticker_id":    token.Outpoint,
+		"ticker_id":    token.InscriptionId,
 		"ticker":       token.Ticker,
 		"total_supply": token.Max,
 	}
@@ -91,7 +90,7 @@ func (h *Handler) GetBRC20TokenInfo(token *tables.Protocol) (gin.H, error) {
 	})
 
 	errWg.Go(func() error {
-		amount, err := h.DB().CountProtocolAmount(constants.ProtocolBRC20C, token.Ticker, constants.OperationMint, token.Outpoint.String())
+		amount, err := h.DB().SumProtocolAmount(constants.ProtocolBRC20C, token.Ticker, constants.OperationMint, token.String())
 		if err != nil {
 			return err
 		}
@@ -102,7 +101,7 @@ func (h *Handler) GetBRC20TokenInfo(token *tables.Protocol) (gin.H, error) {
 	})
 
 	errWg.Go(func() error {
-		holders, err := h.DB().CountToAddress(constants.ProtocolBRC20C, token.Ticker, constants.OperationMint, token.Outpoint.String())
+		holders, err := h.DB().SumAddressNum(constants.ProtocolBRC20C, token.Ticker, constants.OperationMint, token.String())
 		if err != nil {
 			return err
 		}

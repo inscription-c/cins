@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"github.com/btcsuite/btclog"
+	"github.com/go-sql-driver/mysql"
 	gormMysqlDriver "gorm.io/driver/mysql"
 	"gorm.io/gorm"
 	"gorm.io/gorm/logger"
@@ -25,17 +26,15 @@ type DB struct {
 
 // DBOptions is a struct that holds the configuration options for the database.
 type DBOptions struct {
-	addr             string
-	user             string
-	password         string
-	dbName           string
-	noEmbedDB        bool
-	dataDir          string
-	serverPort       string
-	serverStatusPort string
-	startHeight      uint32
-
-	log               btclog.Logger
+	addr              string
+	user              string
+	password          string
+	dbName            string
+	noEmbedDB         bool
+	dataDir           string
+	serverPort        string
+	serverStatusPort  string
+	startHeight       uint32
 	autoMigrateTables []interface{}
 }
 
@@ -67,13 +66,6 @@ func WithPassword(password string) DBOption {
 func WithDBName(dbName string) DBOption {
 	return func(o *DBOptions) {
 		o.dbName = dbName
-	}
-}
-
-// WithLogger returns a DBOption that sets the logger of the database.
-func WithLogger(log btclog.Logger) DBOption {
-	return func(o *DBOptions) {
-		o.log = log
 	}
 }
 
@@ -127,6 +119,11 @@ func NewDB(opts ...DBOption) (*DB, error) {
 		opt(options)
 	}
 
+	gormLog := &GormLogger{Logger: inscLog.Gorm}
+	if err := mysql.SetLogger(gormLog); err != nil {
+		return nil, err
+	}
+
 	conn := "%s:%s@tcp(%s)/%s?charset=utf8mb4&parseTime=True&loc=Local"
 	dsn := fmt.Sprintf(conn, options.user, options.password, options.addr, "")
 
@@ -158,22 +155,21 @@ func NewDB(opts ...DBOption) (*DB, error) {
 			}
 			break
 		}
-	}
-
-	createDb := fmt.Sprintf("CREATE DATABASE IF NOT EXISTS %s;", options.dbName)
-	if err = db.Exec(createDb).Error; err != nil {
-		return nil, fmt.Errorf("gorm create database :%v", err)
+		createDb := fmt.Sprintf("CREATE DATABASE IF NOT EXISTS %s;", options.dbName)
+		if err = db.Exec(createDb).Error; err != nil {
+			return nil, fmt.Errorf("gorm create database :%v", err)
+		}
+		if err := db.AutoMigrate(options.autoMigrateTables...); err != nil {
+			return nil, err
+		}
 	}
 
 	dsn = fmt.Sprintf(conn, options.user, options.password, options.addr, options.dbName)
-	db, err = gorm.Open(gormMysqlDriver.Open(dsn), &gorm.Config{Logger: &GormLogger{Logger: inscLog.Gorm}})
+	db, err = gorm.Open(gormMysqlDriver.Open(dsn), &gorm.Config{Logger: gormLog})
 	if err != nil {
 		return nil, fmt.Errorf("gorm open :%v", err)
 	}
 	db = db.Debug()
-	if err := db.AutoMigrate(options.autoMigrateTables...); err != nil {
-		return nil, err
-	}
 	sqlDB, err := db.DB()
 	if err != nil {
 		return nil, fmt.Errorf("gorm db :%v", err)
@@ -209,6 +205,10 @@ func (g *GormLogger) LogMode(level logger.LogLevel) logger.Interface {
 // Info is a method on GormLogger that logs an informational message.
 func (g *GormLogger) Info(ctx context.Context, msg string, data ...interface{}) {
 	g.Logger.Info(append([]interface{}{msg}, data...))
+}
+
+func (g *GormLogger) Print(data ...interface{}) {
+	g.Logger.Info(data...)
 }
 
 // Warn is a method on GormLogger that logs a warning message.

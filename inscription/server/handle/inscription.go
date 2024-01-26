@@ -2,10 +2,12 @@ package handle
 
 import (
 	"errors"
+	"github.com/btcsuite/btcd/txscript"
 	"github.com/btcsuite/btcd/wire"
 	"github.com/gin-gonic/gin"
 	"github.com/inscription-c/insc/constants"
 	"github.com/inscription-c/insc/inscription/index"
+	"github.com/inscription-c/insc/inscription/index/model"
 	"github.com/inscription-c/insc/inscription/index/tables"
 	"github.com/inscription-c/insc/internal/util"
 	"gorm.io/gorm"
@@ -55,11 +57,11 @@ func (h *Handler) doInscription(ctx *gin.Context, query string) error {
 	// If that fails, try to convert it to a sequence number.
 	// If both fail, return a bad request status.
 	query = strings.TrimSpace(query)
-	inscriptionId := util.StringToInscriptionId(query)
+	inscriptionId := tables.StringToInscriptionId(query)
 	var err error
 	var inscription tables.Inscriptions
 	if inscriptionId != nil {
-		inscription, err = h.DB().GetInscriptionById(inscriptionId.String())
+		inscription, err = h.DB().GetInscriptionById(inscriptionId)
 		if err != nil {
 			return err
 		}
@@ -89,7 +91,7 @@ func (h *Handler) doInscription(ctx *gin.Context, query string) error {
 	}
 	preInscriptionId := ""
 	if preInscription.Id > 0 {
-		preInscriptionId = preInscription.Outpoint.InscriptionId().String()
+		preInscriptionId = preInscription.InscriptionId.String()
 	}
 
 	nextInscription, err := h.DB().GetInscriptionBySequenceNum(inscription.SequenceNum + 1)
@@ -98,37 +100,34 @@ func (h *Handler) doInscription(ctx *gin.Context, query string) error {
 	}
 	nextInscriptionId := ""
 	if nextInscription.Id > 0 {
-		nextInscriptionId = nextInscription.Outpoint.InscriptionId().String()
+		nextInscriptionId = nextInscription.InscriptionId.String()
 	}
 
-	// Retrieve the value of the inscription's outpoint.
-	value, err := h.DB().GetValueByOutpoint(inscription.Outpoint.String())
+	outpoint := model.NewOutPoint(inscription.TxId, inscription.Index)
+	value, err := h.DB().GetValueByOutpoint(outpoint.String())
 	if err != nil && !errors.Is(err, gorm.ErrRecordNotFound) {
 		return err
 	}
 
-	// Retrieve the transaction of the inscription's outpoint and get the taproot address.
-	tx, err := h.RpcClient().GetRawTransaction(&inscription.Outpoint.Hash)
+	tx, err := h.RpcClient().GetRawTransaction(&outpoint.OutPoint.Hash)
 	if err != nil {
 		return err
 	}
-	pkScript := tx.MsgTx().TxOut[inscription.Outpoint.Index].PkScript
-	taprootAddress, err := util.TapRootAddress(pkScript, h.GetChainParams())
+	pkScript := tx.MsgTx().TxOut[inscription.Index].PkScript
+	_, address, _, err := txscript.ExtractPkScriptAddrs(pkScript, h.GetChainParams())
 	if err != nil {
 		return err
 	}
 
-	// Retrieve the sat point of the inscription.
 	satPoint, err := h.DB().GetSatPointBySat(inscription.Sat)
 	if err != nil {
 		return err
 	}
-	satPointStr := util.FormatSatPoint(wire.OutPoint{}.String(), 0)
-	if satPoint.Id == 0 {
-		satPointStr = util.FormatSatPoint(satPoint.Outpoint, satPoint.Offset)
+	satPointStr := model.FormatSatPoint(wire.OutPoint{}.String(), 0)
+	if satPoint.Id > 0 {
+		satPointStr = model.FormatSatPoint(satPoint.Outpoint, satPoint.Offset)
 	}
 
-	// Check if the inscription's body is a BRC20C token.
 	brc20c := &util.BRC20C{}
 	brc20c.Reset(inscription.Body)
 	contentProtocol := ""
@@ -136,7 +135,6 @@ func (h *Handler) doInscription(ctx *gin.Context, query string) error {
 		contentProtocol = constants.ProtocolBRC20C
 	}
 
-	// Create the response and return it.
 	resp := &RespInscription{
 		InscriptionId:   inscriptionId.String(),
 		InscriptionNum:  inscription.InscriptionNum,
@@ -144,7 +142,7 @@ func (h *Handler) doInscription(ctx *gin.Context, query string) error {
 		GenesisHeight:   inscription.Height,
 		GenesisFee:      inscription.Fee,
 		OutputValue:     value,
-		Address:         taprootAddress,
+		Address:         address[0].String(),
 		Sat:             inscription.Sat,
 		SatPoint:        satPointStr,
 		ContentType:     inscription.ContentType,

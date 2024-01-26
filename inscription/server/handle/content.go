@@ -5,6 +5,7 @@ import (
 	"github.com/andybalholm/brotli"
 	"github.com/gin-gonic/gin"
 	"github.com/inscription-c/insc/constants"
+	"github.com/inscription-c/insc/inscription/index/tables"
 	"github.com/inscription-c/insc/internal/util"
 	"github.com/kataras/iris/v12/context"
 	"net/http"
@@ -27,7 +28,7 @@ func (h *Handler) Content(ctx *gin.Context) {
 // doContent is a helper function for handling content requests.
 // It retrieves the content of a specific inscription and returns it in the response.
 func (h *Handler) doContent(ctx *gin.Context, inscriptionId string) error {
-	inscription, err := h.DB().GetInscriptionById(inscriptionId)
+	inscription, err := h.DB().GetInscriptionById(tables.StringToInscriptionId(inscriptionId))
 	if err != nil {
 		return err
 	}

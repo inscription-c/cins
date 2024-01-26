@@ -40,7 +40,6 @@ func (p *Protocol) SaveProtocol() error {
 
 // brc20c is a function that saves the brc20c protocol.
 func (p *Protocol) brc20c(brc20c *util.BRC20C) error {
-	outpoint := p.entry.Outpoint
 	switch brc20c.Operation {
 	case constants.OperationDeploy:
 		list, err := p.wtx.FindProtocol(brc20c.Protocol, brc20c.Tick, brc20c.Operation)
@@ -53,7 +52,11 @@ func (p *Protocol) brc20c(brc20c *util.BRC20C) error {
 		}
 
 		if err := p.wtx.SaveProtocol(&tables.Protocol{
-			Outpoint:    outpoint,
+			InscriptionId: tables.InscriptionId{
+				TxId:   p.entry.TxId,
+				Offset: p.entry.Offset,
+			},
+			Index:       p.entry.Index,
 			SequenceNum: p.entry.SequenceNum,
 			Protocol:    brc20c.Protocol,
 			Ticker:      brc20c.Tick,
@@ -67,8 +70,8 @@ func (p *Protocol) brc20c(brc20c *util.BRC20C) error {
 			return err
 		}
 	case constants.OperationMint:
-		inscriptionId := util.StringToInscriptionId(brc20c.TkId)
-		deploy, err := p.wtx.GetProtocolByOutpoint(inscriptionId.OutPoint.String())
+		inscriptionId := tables.StringToInscriptionId(brc20c.TkId)
+		deploy, err := p.wtx.GetProtocolByInscriptionId(inscriptionId)
 		if err != nil {
 			return err
 		}
@@ -84,7 +87,7 @@ func (p *Protocol) brc20c(brc20c *util.BRC20C) error {
 			log.Log.Warnf("protocol %s, %s, %s amount %s exceeds limit %d", brc20c.Protocol, brc20c.Tick, brc20c.Operation, brc20c.Amount, deploy.Limit)
 			return nil
 		}
-		totalAmount, err := p.wtx.CountProtocolAmount(brc20c.Protocol, brc20c.Tick, brc20c.Operation, brc20c.TkId)
+		totalAmount, err := p.wtx.SumProtocolAmount(brc20c.Protocol, brc20c.Tick, brc20c.Operation, brc20c.TkId)
 		if err != nil {
 			return err
 		}
@@ -94,12 +97,16 @@ func (p *Protocol) brc20c(brc20c *util.BRC20C) error {
 			return nil
 		}
 		mint := &tables.Protocol{
-			Outpoint:    outpoint,
+			InscriptionId: tables.InscriptionId{
+				TxId:   p.entry.TxId,
+				Offset: p.entry.Offset,
+			},
+			Index:       p.entry.Index,
 			SequenceNum: p.entry.SequenceNum,
 			Protocol:    constants.ProtocolBRC20C,
 			Ticker:      brc20c.Tick,
 			Operator:    brc20c.Operation,
-			TkID:        inscriptionId.OutPoint.String(),
+			TkID:        inscriptionId.String(),
 			Amount:      gconv.Uint64(brc20c.Amount),
 			To:          brc20c.To,
 			Miner:       p.miner,

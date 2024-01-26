@@ -5,8 +5,9 @@ import (
 	"errors"
 	"fmt"
 	"github.com/inscription-c/insc/constants"
-	"github.com/shopspring/decimal"
+	"github.com/inscription-c/insc/inscription/index/tables"
 	"regexp"
+	"strconv"
 )
 
 func init() {
@@ -60,57 +61,41 @@ func (b *BRC20C) Check() error {
 
 	switch p.Operation {
 	case constants.OperationDeploy:
-		// Check the deployment operation
 		p.TkId = ""
 		p.Amount = ""
 		p.To = ""
-
 		var err error
-		var m decimal.Decimal
-		if p.Max == "" {
-			return errors.New("max can not empty")
-		}
-
-		m, err = decimal.NewFromString(p.Max)
-		if err != nil {
-			return err
-		}
-		if m.LessThanOrEqual(decimal.Zero) {
-			return errors.New("max must greater than 0")
+		var tokenMax uint64
+		if p.Max != "" {
+			tokenMax, err = strconv.ParseUint(p.Max, 10, 64)
+			if err != nil {
+				return err
+			}
 		}
 
 		if p.Limit != "" {
-			lim, err := decimal.NewFromString(p.Limit)
+			var limit uint64
+			limit, err = strconv.ParseUint(p.Limit, 10, 64)
 			if err != nil {
 				return err
 			}
-			if lim.LessThanOrEqual(decimal.Zero) {
-				return errors.New("limit must greater than 0")
-			}
-			if p.Max != "" {
-				if lim.GreaterThan(m) {
-					return errors.New("lim must less than or equal max")
-				}
+			if p.Max != "" && limit > tokenMax {
+				return errors.New("limit must be less than or equal max")
 			}
 		}
 
-		if p.Decimals != "" {
+		if p.Decimals == "" {
 			p.Decimals = constants.DecimalsDefault
 		} else {
-			dec, err := decimal.NewFromString(p.Decimals)
-			if err != nil {
+			if _, err := strconv.ParseUint(p.Decimals, 10, 64); err != nil {
 				return err
-			}
-			if dec.LessThan(decimal.Zero) {
-				return errors.New("dec must greater than or equal 0, default is 18")
 			}
 		}
 	case constants.OperationMint:
-		// Check the mint operation
 		p.Max = ""
 		p.Limit = ""
 		p.Decimals = ""
-		if InscriptionIdToOutpoint(p.TkId) == nil {
+		if tables.StringToInscriptionId(p.TkId) == nil {
 			return errors.New("tkid invalid")
 		}
 	default:

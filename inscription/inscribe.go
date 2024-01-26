@@ -21,7 +21,6 @@ var (
 	walletPass           string
 	testnet              bool
 	rpcCert              string
-	tlsSkipVerify        bool
 	inscriptionsFilePath string
 	rpcConnect           string
 	postage              = uint64(constants.DefaultPostage)
@@ -32,9 +31,9 @@ var (
 	brc20c               bool
 	dstChain             string
 	destination          string
-	mysqlAddr            string
-	mysqlUser            string
-	mysqlPass            string
+	dbAddr               string
+	dbUser               string
+	dbPass               string
 )
 
 // InsufficientBalanceError is an error that represents an insufficient balance.
@@ -45,8 +44,6 @@ func init() {
 	Cmd.Flags().StringVarP(&password, "password", "P", "", "wallet rpc server password")
 	Cmd.Flags().StringVarP(&walletPass, "walletpass", "", "", "wallet password for master private key")
 	Cmd.Flags().BoolVarP(&testnet, "testnet", "t", false, "bitcoin testnet3")
-	Cmd.Flags().StringVarP(&rpcCert, "rpccert", "c", "", "rpc cert file path")
-	Cmd.Flags().BoolVarP(&tlsSkipVerify, "tlsskipverify", "", false, "skip server tls verify")
 	Cmd.Flags().StringVarP(&inscriptionsFilePath, "filepath", "f", "", "inscription file path")
 	Cmd.Flags().StringVarP(&rpcConnect, "rpcconnect", "s", "localhost:8332", "the URL of wallet RPC server to connect to (default localhost:8332, testnet: localhost:18332)")
 	Cmd.Flags().Uint64VarP(&postage, "postage", "p", constants.DefaultPostage, "Amount of postage to include in the inscription. Default `10000sat`.")
@@ -57,9 +54,9 @@ func init() {
 	Cmd.Flags().BoolVarP(&brc20c, "brc20c", "", false, "is brc-20-c protocol, add this flag will auto check protocol content effectiveness")
 	Cmd.Flags().StringVarP(&dstChain, "dstchain", "", "", "target chain coin_type for https://github.com/satoshilabs/slips/blob/master/slip-0044.md")
 	Cmd.Flags().StringVarP(&destination, "destination", "", "", "Send inscription to <DESTINATION> address.")
-	Cmd.Flags().StringVarP(&mysqlAddr, "mysqladdr", "", "127.0.0.1:4000", "index server database address")
-	Cmd.Flags().StringVarP(&mysqlUser, "mysqluser", "", "root", "index server database user")
-	Cmd.Flags().StringVarP(&mysqlPass, "mysqlpass", "", "", "index server database password")
+	Cmd.Flags().StringVarP(&dbAddr, "dbaddr", "", fmt.Sprintf("localhost:%s", constants.DefaultDBListenPort), "index server database address")
+	Cmd.Flags().StringVarP(&dbUser, "dbuser", "", "root", "index server database user")
+	Cmd.Flags().StringVarP(&dbPass, "dbpass", "", "", "index server database password")
 	if err := Cmd.MarkFlagRequired("filepath"); err != nil {
 		fmt.Println(err)
 		os.Exit(1)
@@ -139,11 +136,10 @@ func inscribe() error {
 
 	// Get the database
 	db, err := dao.NewDB(
-		dao.WithAddr(mysqlAddr),
-		dao.WithUser(mysqlUser),
-		dao.WithPassword(mysqlPass),
+		dao.WithAddr(dbAddr),
+		dao.WithUser(dbUser),
+		dao.WithPassword(dbPass),
 		dao.WithDBName(constants.DefaultDBName),
-		dao.WithLogger(log.Gorm),
 		dao.WithNoEmbedDB(true),
 	)
 	if err != nil {

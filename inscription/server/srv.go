@@ -11,11 +11,9 @@ import (
 	"github.com/inscription-c/insc/inscription/index/tables"
 	"github.com/inscription-c/insc/inscription/log"
 	"github.com/inscription-c/insc/inscription/server/handle"
-	"github.com/inscription-c/insc/internal/cfgutil"
 	"github.com/inscription-c/insc/internal/signal"
 	"github.com/inscription-c/insc/internal/util"
 	"github.com/spf13/cobra"
-	"net"
 	"os"
 	"path/filepath"
 )
@@ -36,6 +34,7 @@ type SrvOptions struct {
 	testnet            bool
 	rpcConnect         string
 	noEmbedDB          bool
+	noApi              bool
 	dataDir            string
 	mysqlAddr          string
 	mysqlUser          string
@@ -81,6 +80,12 @@ func WithRpcConnect(rpcConnect string) SrvOption {
 func WithNoEmbedDB(noEmbedDB bool) SrvOption {
 	return func(options *SrvOptions) {
 		options.noEmbedDB = noEmbedDB
+	}
+}
+
+func WithNoApi(noApi bool) SrvOption {
+	return func(options *SrvOptions) {
+		options.noApi = noApi
 	}
 }
 
@@ -151,6 +156,7 @@ func init() {
 	Cmd.Flags().BoolVarP(&srvOptions.testnet, "testnet", "t", false, "bitcoin testnet3")
 	Cmd.Flags().StringVarP(&srvOptions.rpcConnect, "rpcconnect", "s", mainNetRPCConnect, "the URL of btcd RPC server to connect to (default localhost:8334, testnet: localhost:18334)")
 	Cmd.Flags().BoolVarP(&srvOptions.noEmbedDB, "noembeddb", "", false, "don't embed db")
+	Cmd.Flags().BoolVarP(&srvOptions.noApi, "noapi", "", false, "don't start api server")
 	Cmd.Flags().StringVarP(&srvOptions.dataDir, "datadir", "", "", "embed database data dir")
 	Cmd.Flags().StringVarP(&srvOptions.mysqlAddr, "mysqladdr", "d", "127.0.0.1:4000", "inscription index mysql database addr")
 	Cmd.Flags().StringVarP(&srvOptions.mysqlUser, "mysqluser", "", "root", "inscription index mysql database user")
@@ -182,30 +188,19 @@ func IndexSrv(opts ...SrvOption) error {
 			srvOptions.rpcConnect = testNetRPCConnect
 		}
 	}
-	srvOptions.dataDir = datDir()
+	srvOptions.dataDir = constants.DBDatDir(srvOptions.testnet)
 
 	// Initialize log rotation.  After log rotation has been initialized, the
 	// logger variables may be used.
 	logFile := btcutil.AppDataDir(filepath.Join(constants.AppName, "inscription", "logs", "index.log"), false)
 	log.InitLogRotator(logFile)
 
+	var err error
 	disableTls := false
 	if srvOptions.rpcConnect != "" {
-		rpcConnect, err := cfgutil.NormalizeAddress(srvOptions.rpcConnect, util.ActiveNet.RPCClientPort)
+		disableTls, err = util.DisableTls(srvOptions.rpcConnect, util.ActiveNet.RPCClientPort)
 		if err != nil {
 			return err
-		}
-		RPCHost, _, err := net.SplitHostPort(rpcConnect)
-		if err != nil {
-			return err
-		}
-		localhostListeners := map[string]struct{}{
-			"localhost": {},
-			"127.0.0.1": {},
-			"::1":       {},
-		}
-		if _, ok := localhostListeners[RPCHost]; ok {
-			disableTls = true
 		}
 	}
 
@@ -214,22 +209,11 @@ func IndexSrv(opts ...SrvOption) error {
 		dao.WithUser(srvOptions.mysqlUser),
 		dao.WithPassword(srvOptions.mysqlPassword),
 		dao.WithDBName(srvOptions.mysqlDBName),
-		dao.WithLogger(log.Gorm),
 		dao.WithDataDir(srvOptions.dataDir),
 		dao.WithNoEmbedDB(srvOptions.noEmbedDB),
 		dao.WithServerPort(srvOptions.dbListenPort),
 		dao.WithStatusPort(srvOptions.dbStatusListenPort),
-		dao.WithAutoMigrateTables(
-			&tables.BlockInfo{},
-			&tables.Inscriptions{},
-			&tables.OutpointSatRange{},
-			&tables.OutpointValue{},
-			&tables.Sat{},
-			&tables.SatPoint{},
-			&tables.SatSatPoint{},
-			&tables.Statistic{},
-			&tables.Protocol{},
-		),
+		dao.WithAutoMigrateTables(tables.Tables...),
 	)
 	if err != nil {
 		return err
@@ -248,32 +232,30 @@ func IndexSrv(opts ...SrvOption) error {
 		batchCli.Shutdown()
 	})
 
-	h, err := handle.New(
-		handle.WithDB(db),
-		handle.WithClient(cli),
-		handle.WithAddr(srvOptions.rpcListen),
-		handle.WithTestNet(srvOptions.testnet),
-		handle.WithEnablePProf(srvOptions.enablePProf),
-	)
-	if err != nil {
-		return err
-	}
-
-	idx := index.NewIndexer(
+	indexer := index.NewIndexer(
 		index.WithDB(db),
 		index.WithClient(cli),
 		index.WithBatchClient(batchCli),
 	)
-	runner := NewRunner(
-		WithClient(cli),
-		WithIndex(idx),
-	)
-	runner.Start()
+	indexer.Start()
 	signal.AddInterruptHandler(func() {
-		runner.Stop()
+		indexer.Stop()
 	})
-	if err := h.Run(); err != nil {
-		return err
+
+	if !srvOptions.noApi {
+		h, err := handle.New(
+			handle.WithDB(db),
+			handle.WithClient(cli),
+			handle.WithAddr(srvOptions.rpcListen),
+			handle.WithTestNet(srvOptions.testnet),
+			handle.WithEnablePProf(srvOptions.enablePProf),
+		)
+		if err != nil {
+			return err
+		}
+		if err := h.Run(); err != nil {
+			return err
+		}
 	}
 	return nil
 }

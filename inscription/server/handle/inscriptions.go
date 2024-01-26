@@ -3,7 +3,6 @@ package handle
 import (
 	"github.com/gin-gonic/gin"
 	"github.com/gogf/gf/v2/util/gconv"
-	"github.com/inscription-c/insc/internal/util"
 	"net/http"
 )
 
@@ -31,22 +30,20 @@ func (h *Handler) doInscriptions(ctx *gin.Context, pageStr string) error {
 	pageSize := 100
 
 	// Retrieve the inscriptions for the specified page.
-	inscriptions, err := h.DB().FindInscriptionsByPage(page, pageSize)
+	list, err := h.DB().FindInscriptionsByPage(page, pageSize)
 	if err != nil {
 		return err
 	}
-
-	// Create a slice to hold the inscription IDs.
-	inscriptionIds := make([]string, 0, len(inscriptions))
-	// Iterate over the inscriptions and add their IDs to the slice.
-	for _, v := range inscriptions {
-		inscriptionIds = append(inscriptionIds, util.NewInscriptionId(v.Outpoint, v.Offset))
+	more := false
+	if len(list) > pageSize {
+		more = true
+		list = list[:pageSize]
 	}
-	// Return the inscription IDs, page index, and a flag indicating if there are more inscriptions.
+
 	ctx.JSON(http.StatusOK, gin.H{
 		"page_index":   page,
-		"more":         len(inscriptionIds) > pageSize,
-		"inscriptions": inscriptionIds,
+		"more":         more,
+		"inscriptions": list,
 	})
 	return nil
 }

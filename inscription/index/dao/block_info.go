@@ -2,9 +2,27 @@ package dao
 
 import (
 	"errors"
+	"github.com/btcsuite/btcd/wire"
 	"github.com/inscription-c/insc/inscription/index/tables"
 	"gorm.io/gorm"
 )
+
+// BlockHeader retrieves the block header for a given block height.
+func (d *DB) BlockHeader() (height uint32, header *wire.BlockHeader, err error) {
+	blockInfo := &tables.BlockInfo{}
+	// Retrieve the last block if no height is provided
+	if err = d.DB.Last(blockInfo).Error; err != nil {
+		return
+	}
+	height = blockInfo.Height
+
+	// Load the block header
+	header, err = blockInfo.LoadHeader()
+	if err != nil {
+		return
+	}
+	return
+}
 
 // BlockHash retrieves the block hash for a given block height.
 // If no height is provided, it retrieves the hash for the last block.
@@ -33,8 +51,20 @@ func (d *DB) BlockHash(height ...uint32) (blockHash string, err error) {
 	return
 }
 
+// BlockHeight retrieves the height of the last block in the database.
+func (d *DB) BlockHeight() (height uint32, err error) {
+	block := &tables.BlockInfo{}
+	err = d.DB.Order("id desc").First(block).Error
+	if errors.Is(err, gorm.ErrRecordNotFound) {
+		err = nil
+		return
+	}
+	height = block.Height
+	return
+}
+
 // BlockCount retrieves the total number of blocks in the database.
-// It returns the count as a uint32 and any error encountered.
+// It returns the count as an uint32 and any error encountered.
 func (d *DB) BlockCount() (count uint32, err error) {
 	block := &tables.BlockInfo{}
 	// Retrieve the last block

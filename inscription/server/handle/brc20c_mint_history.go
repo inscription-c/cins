@@ -4,8 +4,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/gogf/gf/v2/util/gconv"
 	"github.com/inscription-c/insc/constants"
-	"github.com/inscription-c/insc/inscription/index/dao"
-	"github.com/inscription-c/insc/internal/util"
+	"github.com/inscription-c/insc/inscription/index/tables"
 	"net/http"
 )
 
@@ -33,26 +32,28 @@ func (h *Handler) BRC20CMintHistory(ctx *gin.Context) {
 func (h *Handler) doBRC20CMintHistory(ctx *gin.Context, tkidOrAddr string, page int) error {
 	pageSize := 100
 	var err error
-	var res []*dao.ProtocolAmount
-	tkid := util.StringToInscriptionId(tkidOrAddr)
+	var res []*tables.ProtocolAmount
+	tkid := tables.StringToInscriptionId(tkidOrAddr)
 	if tkid == nil {
 		address := tkidOrAddr
-		res, err = h.DB().SumAmountByToAddress(constants.ProtocolBRC20C, address, page, pageSize)
+		res, err = h.DB().SumMintAmountByAddress(address, constants.ProtocolBRC20C, page, pageSize)
 		if err != nil {
 			return err
 		}
+		more := false
 		if len(res) > pageSize {
+			more = true
 			res = res[:pageSize]
 		}
 		ctx.JSON(http.StatusOK, gin.H{
 			"page_index": page,
-			"more":       len(res) > pageSize,
+			"more":       more,
 			"amount":     res,
 		})
 		return nil
 	}
 
-	list, err := h.DB().FindMintHistoryByTkId(tkid.OutPoint.String(), constants.ProtocolBRC20C, constants.OperationMint, page, pageSize)
+	list, err := h.DB().FindMintHistoryByTkId(tkid.String(), constants.ProtocolBRC20C, constants.OperationMint, page, pageSize)
 	if err != nil {
 		return err
 	}
@@ -61,14 +62,14 @@ func (h *Handler) doBRC20CMintHistory(ctx *gin.Context, tkidOrAddr string, page 
 		more = true
 		list = list[:pageSize]
 	}
-	deploy, err := h.DB().GetInscriptionById(tkid.OutPoint.String())
+	deploy, err := h.DB().GetInscriptionById(tkid)
 	if err != nil {
 		return err
 	}
 
 	ctx.JSON(http.StatusOK, gin.H{
 		"chain":        deploy.DstChain,
-		"ticker_id":    deploy.Outpoint.InscriptionId().String(),
+		"ticker_id":    deploy.InscriptionId,
 		"page_index":   page,
 		"more":         more,
 		"mint_history": list,

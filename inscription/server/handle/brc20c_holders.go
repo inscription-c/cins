@@ -4,7 +4,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/gogf/gf/v2/util/gconv"
 	"github.com/inscription-c/insc/constants"
-	"github.com/inscription-c/insc/internal/util"
+	"github.com/inscription-c/insc/inscription/index/tables"
 	"net/http"
 )
 
@@ -31,12 +31,12 @@ func (h *Handler) BRC20CHolders(ctx *gin.Context) {
 // It retrieves the holders of a specific BRC20C token and returns them in the response.
 func (h *Handler) doBRC20CHolders(ctx *gin.Context, tkid string, page int) error {
 	pageSize := 100
-	inscriptionId := util.StringToInscriptionId(tkid)
+	inscriptionId := tables.StringToInscriptionId(tkid)
 	if inscriptionId == nil {
 		ctx.Status(http.StatusBadRequest)
 		return nil
 	}
-	protocol, err := h.DB().GetProtocolByOutpoint(inscriptionId.OutPoint.String())
+	protocol, err := h.DB().GetProtocolByInscriptionId(inscriptionId)
 	if err != nil {
 		return err
 	}
@@ -45,17 +45,9 @@ func (h *Handler) doBRC20CHolders(ctx *gin.Context, tkid string, page int) error
 		return nil
 	}
 	if protocol.Operator == constants.OperationMint {
-		protocol, err = h.DB().GetProtocolByOutpoint(protocol.TkID.String())
-		if err != nil {
-			return err
-		}
-		if protocol.Id == 0 {
-			ctx.Status(http.StatusNotFound)
-			return nil
-		}
+		tkid = tables.StringToInscriptionId(protocol.TkID).String()
 	}
-
-	list, err := h.DB().FindHoldersByTkId(protocol.Outpoint.String(), constants.ProtocolBRC20C, constants.OperationMint, page, pageSize)
+	list, err := h.DB().FindHoldersByTkId(tkid, constants.ProtocolBRC20C, constants.OperationMint, page, pageSize)
 	if err != nil {
 		return err
 	}

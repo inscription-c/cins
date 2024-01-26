@@ -6,6 +6,7 @@ import (
 	"github.com/inscription-c/insc/constants"
 	"github.com/inscription-c/insc/internal/cfgutil"
 	"github.com/inscription-c/insc/internal/legacy/keystore"
+	"github.com/inscription-c/insc/internal/util"
 	"github.com/inscription-c/insc/wallet/log"
 	"net"
 	"os"
@@ -290,7 +291,7 @@ func loadConfig() (*Config, []string, error) {
 	cfg.RPCConnect = rpcConnect
 
 	if cfg.RPCConnect != "" {
-		rpcConnect, err := cfgutil.NormalizeAddress(rpcConnect, activeNet.RPCClientPort)
+		rpcConnect, err := cfgutil.NormalizeAddress(rpcConnect, util.ActiveNet.RPCClientPort)
 		if err != nil {
 			return nil, nil, err
 		}
@@ -335,15 +336,15 @@ func loadConfig() (*Config, []string, error) {
 	// Multiple networks can't be selected simultaneously.
 	numNets := 0
 	if cfg.TestNet3 {
-		activeNet = &netparams.TestNet3Params
+		util.ActiveNet = &netparams.TestNet3Params
 		numNets++
 	}
 	if cfg.SimNet {
-		activeNet = &netparams.SimNetParams
+		util.ActiveNet = &netparams.SimNetParams
 		numNets++
 	}
 	if cfg.SigNet {
-		activeNet = &netparams.SigNetParams
+		util.ActiveNet = &netparams.SigNetParams
 		numNets++
 
 		// Let the user overwrite the default signet parameters. The
@@ -378,7 +379,7 @@ func loadConfig() (*Config, []string, error) {
 		chainParams := chaincfg.CustomSignetParams(
 			sigNetChallenge, sigNetSeeds,
 		)
-		activeNet.Params = &chainParams
+		util.ActiveNet.Params = &chainParams
 	}
 	if numNets > 1 {
 		str := "%s: The testnet, signet and simnet params can't be " +
@@ -388,10 +389,10 @@ func loadConfig() (*Config, []string, error) {
 		return nil, nil, err
 	}
 
-	// Append the network type to the log directory so it is "namespaced"
+	// Append the network type to the log directory, so it is "namespaced"
 	// per network.
 	cfg.LogDir = cleanAndExpandPath(cfg.LogDir)
-	cfg.LogDir = filepath.Join(cfg.LogDir, activeNet.Params.Name)
+	cfg.LogDir = filepath.Join(cfg.LogDir, util.ActiveNet.Params.Name)
 
 	// Special show command to list supported subsystems and exit.
 	if cfg.DebugLevel == "show" {
@@ -426,8 +427,8 @@ func loadConfig() (*Config, []string, error) {
 		os.Exit(0)
 	}
 
-	// Ensure the wallet exists or create it when the create flag is set.
-	netDir := networkDir(cfg.AppDataDir.Value, activeNet.Params)
+	// Ensure the wallet exists or create it when the creation flag is set.
+	netDir := networkDir(cfg.AppDataDir.Value, util.ActiveNet.Params)
 	dbPath := filepath.Join(netDir, wallet.WalletDBName)
 
 	if cfg.CreateTemp && cfg.Create {
@@ -527,7 +528,7 @@ func loadConfig() (*Config, []string, error) {
 		}
 		cfg.LegacyRPCListeners = make([]string, 0, len(addrs))
 		for _, addr := range addrs {
-			addr = net.JoinHostPort(addr, activeNet.RPCServerPort)
+			addr = net.JoinHostPort(addr, util.ActiveNet.RPCServerPort)
 			cfg.LegacyRPCListeners = append(cfg.LegacyRPCListeners, addr)
 		}
 	}
@@ -535,14 +536,14 @@ func loadConfig() (*Config, []string, error) {
 	// Add default port to all rpc listener addresses if needed and remove
 	// duplicate addresses.
 	cfg.LegacyRPCListeners, err = cfgutil.NormalizeAddresses(
-		cfg.LegacyRPCListeners, activeNet.RPCServerPort)
+		cfg.LegacyRPCListeners, util.ActiveNet.RPCServerPort)
 	if err != nil {
 		fmt.Fprintf(os.Stderr,
 			"Invalid network address in legacy RPC listeners: %v\n", err)
 		return nil, nil, err
 	}
 	cfg.ExperimentalRPCListeners, err = cfgutil.NormalizeAddresses(
-		cfg.ExperimentalRPCListeners, activeNet.RPCServerPort)
+		cfg.ExperimentalRPCListeners, util.ActiveNet.RPCServerPort)
 	if err != nil {
 		fmt.Fprintf(os.Stderr,
 			"Invalid network address in RPC listeners: %v\n", err)

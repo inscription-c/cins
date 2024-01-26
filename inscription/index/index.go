@@ -5,6 +5,8 @@ import (
 	"errors"
 	"github.com/btcsuite/btcd/rpcclient"
 	"github.com/btcsuite/btcd/wire"
+	"github.com/go-sql-driver/mysql"
+	"github.com/inscription-c/insc/constants"
 	"github.com/inscription-c/insc/inscription/index/dao"
 	"github.com/inscription-c/insc/inscription/index/model"
 	"github.com/inscription-c/insc/inscription/index/tables"
@@ -69,13 +71,13 @@ type Indexer struct {
 	// height is an uint32 that represents the current height of the blockchain being indexed.
 	height uint32
 	// satRangesSinceFlush is an uint32 that represents the number of satoshi ranges since the last flush.
-	satRangesSinceFlush uint32
+	satRangesSinceFlush uint64
 	// outputsCached is an uint64 that represents the number of outputs cached.
 	outputsCached uint64
 	// outputsInsertedSinceFlush is an uint64 that represents the number of outputs inserted since the last flush.
 	outputsInsertedSinceFlush uint64
 	// outputsTraversed is an uint32 that represents the number of outputs traversed.
-	outputsTraversed uint32
+	outputsTraversed uint64
 }
 
 // NewIndexer is a function that returns a pointer to a new Indexer instance.
@@ -93,6 +95,29 @@ func NewIndexer(opts ...Option) *Indexer {
 	idx.rangeCache = make(map[string]model.SatRange)
 	// Return the pointer to the new Indexer instance.
 	return idx
+}
+
+func (idx *Indexer) Start() {
+	go func() {
+		for {
+			select {
+			case <-signal.InterruptChannel:
+			default:
+				err := idx.UpdateIndex()
+				if errors.Is(err, signal.ErrInterrupted) ||
+					errors.Is(err, mysql.ErrInvalidConn) {
+					return
+				}
+				if err != nil {
+					log.Srv.Error("UpdateIndex", "err", err)
+				}
+				time.Sleep(time.Second * 5)
+			}
+		}
+	}()
+}
+
+func (idx *Indexer) Stop() {
 }
 
 // DB is a method that returns a pointer to the dao.DB instance associated with the Indexer.
@@ -149,8 +174,7 @@ func (idx *Indexer) UpdateIndex() error {
 	}
 
 	unCommit := 0
-	flushBlockNum := 1000
-	cacheValueNum := 50_000
+	startTime := time.Now()
 	valueCache := NewValueCache()
 
 	// Iterate over the fetched blocks.
@@ -162,8 +186,12 @@ func (idx *Indexer) UpdateIndex() error {
 			return err
 		}
 
-		if unCommit >= flushBlockNum || valueCache.Len() >= cacheValueNum {
+		if unCommit >= constants.DefaultWithFlushNum ||
+			valueCache.Len() >= constants.DefaultFlushCacheNum ||
+			time.Since(startTime) > time.Minute*30 {
 			unCommit = 0
+			startTime = time.Now()
+
 			if err := idx.commit(wtx, valueCache); err != nil {
 				return err
 			}
@@ -205,7 +233,7 @@ func (idx *Indexer) indexBlock(
 
 	start := time.Now()
 	satRangesWritten := uint64(0)
-	outputsInBlock := uint32(0)
+	outputsInBlock := uint64(0)
 	indexInscriptions :=
 		/*idx.height >= index.first_inscription_height && */ !idx.opts.noIndexInscriptions
 
@@ -284,7 +312,7 @@ func (idx *Indexer) indexBlock(
 
 	// Increment the height of the indexer and the number of outputs traversed.
 	atomic.AddUint32(&idx.height, 1)
-	atomic.AddUint32(&idx.outputsTraversed, outputsInBlock)
+	atomic.AddUint64(&idx.outputsTraversed, outputsInBlock)
 	log.Srv.Infof("Block Height %d Wrote %d sat ranges from %d outputs in %d ms", idx.height-1, satRangesWritten, outputsInBlock, time.Since(start).Milliseconds())
 	return nil
 }

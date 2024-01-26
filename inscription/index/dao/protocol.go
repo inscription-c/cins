@@ -4,7 +4,6 @@ import (
 	"errors"
 	"github.com/inscription-c/insc/constants"
 	"github.com/inscription-c/insc/inscription/index/tables"
-	"github.com/inscription-c/insc/internal/util"
 	"gorm.io/gorm"
 )
 
@@ -28,9 +27,9 @@ func (d *DB) FindProtocol(protocol, ticker, operator string, tkid ...string) (li
 	return
 }
 
-// CountProtocolAmount counts the total amount for a specific protocol.
+// SumProtocolAmount counts the total amount for a specific protocol.
 // It returns the total amount and any error encountered.
-func (d *DB) CountProtocolAmount(protocol, ticker, operator string, tkid ...string) (total uint64, err error) {
+func (d *DB) SumProtocolAmount(protocol, ticker, operator string, tkid ...string) (total uint64, err error) {
 	db := d.DB
 	if len(tkid) > 0 {
 		db = d.Where("tkid=?", tkid[0])
@@ -42,19 +41,19 @@ func (d *DB) CountProtocolAmount(protocol, ticker, operator string, tkid ...stri
 	return
 }
 
-// GetProtocolByOutpoint retrieves a protocol by its outpoint.
+// GetProtocolByInscriptionId retrieves a protocol by its outpoint.
 // It returns the protocol and any error encountered.
-func (d *DB) GetProtocolByOutpoint(outpoint string) (p tables.Protocol, err error) {
-	err = d.Where("outpoint=?", outpoint).First(&p).Error
+func (d *DB) GetProtocolByInscriptionId(inscriptionId *tables.InscriptionId) (p tables.Protocol, err error) {
+	err = d.Where("tx_id=? and offset=?", inscriptionId.TxId, inscriptionId.Offset).First(&p).Error
 	if errors.Is(err, gorm.ErrRecordNotFound) {
 		err = nil
 	}
 	return
 }
 
-// CountToAddress counts the number of distinct addresses for a specific protocol.
+// SumAddressNum counts the number of distinct addresses for a specific protocol.
 // It returns the total count and any error encountered.
-func (d *DB) CountToAddress(protocol, ticker, operator string, tkid ...string) (total uint64, err error) {
+func (d *DB) SumAddressNum(protocol, ticker, operator string, tkid ...string) (total uint64, err error) {
 	db := d.DB
 	if len(tkid) > 0 {
 		db = d.Where("tkid=?", tkid[0])
@@ -77,19 +76,12 @@ func (d *DB) FindTokenPageByTicker(protocol, ticker, operator string, page, page
 	return
 }
 
-// ProtocolAmount is a struct that represents the amount of a protocol.
-type ProtocolAmount struct {
-	TkID   *util.OutPoint `gorm:"column:tkid" json:"ticker_id"` // The unique identifier of the ticker
-	Ticker string         `gorm:"column:ticker" json:"ticker"`  // The ticker symbol
-	Amount uint64         `gorm:"column:amount" json:"amount"`  // The amount of the protocol
-}
-
-// SumAmountByToAddress sums the amount for a specific address and protocol.
+// SumMintAmountByAddress sums the amount for a specific address and protocol.
 // It returns a list of protocol amounts and any error encountered.
-func (d *DB) SumAmountByToAddress(protocol, to string, page, pageSize int) (list []*ProtocolAmount, err error) {
-	err = d.Model(&tables.Protocol{}).Select("tkid, ticker, sum(amount) as amount").
-		Where("`to`=? and protocol=? and operator=?", to, protocol, constants.OperationMint).
-		Group("tkid").Offset((page - 1) * pageSize).Limit(pageSize + 1).Find(&list).Error
+func (d *DB) SumMintAmountByAddress(address, protocol string, page, pageSize int) (list []*tables.ProtocolAmount, err error) {
+	err = d.Model(&tables.Protocol{}).Select("tx_id, ticker, sum(amount) as amount").
+		Where("(`to`=? or miner=?) and protocol=? and operator=?", address, address, protocol, constants.OperationMint).
+		Group("`to`,miner").Offset((page - 1) * pageSize).Limit(pageSize + 1).Find(&list).Error
 	if errors.Is(err, gorm.ErrRecordNotFound) {
 		err = nil
 	}
@@ -98,10 +90,10 @@ func (d *DB) SumAmountByToAddress(protocol, to string, page, pageSize int) (list
 
 // FindMintHistoryByTkIdResp is a struct that represents the response for finding mint history by TkId.
 type FindMintHistoryByTkIdResp struct {
-	Outpoint *util.OutPoint `gorm:"column:outpoint" json:"inscription_id"` // To outpoint of the inscription
-	Amount   uint64         `gorm:"column:amount" json:"amount"`           // The amount of the mint
-	To       string         `gorm:"column:to" json:"to_address"`           // The address to which the mint was made
-	Miner    string         `gorm:"column:miner" json:"miner"`             // The miner of the mint
+	tables.InscriptionId `gorm:"embedded" json:"inscription_id"`
+	Amount               uint64 `gorm:"column:amount" json:"amount"` // The amount of the mint
+	To                   string `gorm:"column:to" json:"to_address"` // The address to which the mint was made
+	Miner                string `gorm:"column:miner" json:"miner"`   // The miner of the mint
 }
 
 // FindMintHistoryByTkId finds the mint history for a specific TkId and protocol.
