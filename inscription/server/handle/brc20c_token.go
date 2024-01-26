@@ -11,6 +11,8 @@ import (
 	"sync"
 )
 
+// BRC20CToken is a handler function for handling BRC20C token requests.
+// It validates the request parameters and calls the doBRC20CToken function.
 func (h *Handler) BRC20CToken(ctx *gin.Context) {
 	tkid := ctx.Query("tkid")
 	if tkid == "" {
@@ -23,6 +25,8 @@ func (h *Handler) BRC20CToken(ctx *gin.Context) {
 	}
 }
 
+// doBRC20CToken is a helper function for handling BRC20C token requests.
+// It retrieves the token information of a specific BRC20C token and returns them in the response.
 func (h *Handler) doBRC20CToken(ctx *gin.Context, tkid string) error {
 	inscriptionId := util.StringToInscriptionId(tkid)
 	token, err := h.DB().GetProtocolByOutpoint(inscriptionId.OutPoint.String())
@@ -39,7 +43,7 @@ func (h *Handler) doBRC20CToken(ctx *gin.Context, tkid string) error {
 	}
 
 	if token.Operator == constants.OperationMint {
-		token, err = h.DB().GetProtocolByOutpoint(token.TkID)
+		token, err = h.DB().GetProtocolByOutpoint(token.TkID.String())
 		if err != nil {
 			return err
 		}
@@ -58,6 +62,9 @@ func (h *Handler) doBRC20CToken(ctx *gin.Context, tkid string) error {
 	return nil
 }
 
+// GetBRC20TokenInfo retrieves the information of a specific BRC20C token.
+// It takes a token of type *tables.Protocol as a parameter.
+// It returns the token information and any error encountered.
 func (h *Handler) GetBRC20TokenInfo(token *tables.Protocol) (gin.H, error) {
 	lock := &sync.Mutex{}
 	resp := gin.H{

@@ -9,6 +9,8 @@ import (
 	"net/http"
 )
 
+// BRC20CMintHistory is a handler function for handling BRC20C mint history requests.
+// It validates the request parameters and calls the doBRC20CMintHistory function.
 func (h *Handler) BRC20CMintHistory(ctx *gin.Context) {
 	tkidOrAddr := ctx.Query("tkidOrAddr")
 	page := ctx.DefaultQuery("page", "1")
@@ -26,6 +28,8 @@ func (h *Handler) BRC20CMintHistory(ctx *gin.Context) {
 	}
 }
 
+// doBRC20CMintHistory is a helper function for handling BRC20C mint history requests.
+// It retrieves the mint history of a specific BRC20C token or address and returns them in the response.
 func (h *Handler) doBRC20CMintHistory(ctx *gin.Context, tkidOrAddr string, page int) error {
 	pageSize := 100
 	var err error

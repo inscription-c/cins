@@ -8,6 +8,8 @@ import (
 	"net/http"
 )
 
+// BRC20CHolders is a handler function for handling BRC20C holders requests.
+// It validates the request parameters and calls the doBRC20CHolders function.
 func (h *Handler) BRC20CHolders(ctx *gin.Context) {
 	tkid := ctx.Query("tkid")
 	page := ctx.DefaultQuery("page", "1")
@@ -25,6 +27,8 @@ func (h *Handler) BRC20CHolders(ctx *gin.Context) {
 	}
 }
 
+// doBRC20CHolders is a helper function for handling BRC20C holders requests.
+// It retrieves the holders of a specific BRC20C token and returns them in the response.
 func (h *Handler) doBRC20CHolders(ctx *gin.Context, tkid string, page int) error {
 	pageSize := 100
 	inscriptionId := util.StringToInscriptionId(tkid)
@@ -41,7 +45,7 @@ func (h *Handler) doBRC20CHolders(ctx *gin.Context, tkid string, page int) error
 		return nil
 	}
 	if protocol.Operator == constants.OperationMint {
-		protocol, err = h.DB().GetProtocolByOutpoint(protocol.TkID)
+		protocol, err = h.DB().GetProtocolByOutpoint(protocol.TkID.String())
 		if err != nil {
 			return err
 		}
@@ -61,6 +65,7 @@ func (h *Handler) doBRC20CHolders(ctx *gin.Context, tkid string, page int) error
 		list = list[:pageSize]
 	}
 
+	// Respond with the holders list, page index and a flag indicating if there are more holders
 	ctx.JSON(http.StatusOK, gin.H{
 		"page_index": page,
 		"more":       more,

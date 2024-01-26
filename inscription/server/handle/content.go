@@ -10,6 +10,8 @@ import (
 	"net/http"
 )
 
+// Content is a handler function for handling content requests.
+// It validates the request parameters and calls the doContent function.
 func (h *Handler) Content(ctx *gin.Context) {
 	inscriptionId := ctx.Param("inscriptionId")
 	if inscriptionId == "" {
@@ -22,6 +24,8 @@ func (h *Handler) Content(ctx *gin.Context) {
 	}
 }
 
+// doContent is a helper function for handling content requests.
+// It retrieves the content of a specific inscription and returns it in the response.
 func (h *Handler) doContent(ctx *gin.Context, inscriptionId string) error {
 	inscription, err := h.DB().GetInscriptionById(inscriptionId)
 	if err != nil {
@@ -32,15 +36,16 @@ func (h *Handler) doContent(ctx *gin.Context, inscriptionId string) error {
 		return nil
 	}
 
-	// cache
+	// Set cache control headers
 	ctx.Header(context.CacheControlHeaderKey, "public, max-age=1209600, immutable")
-	// content type
+
+	// Set content type
 	contentType := constants.ContentTypeOctetStream
 	if inscription.ContentType != "" {
 		contentType = constants.ContentType(inscription.ContentType)
 	}
 
-	// content encoding
+	// Handle content encoding
 	if inscription.ContentEncoding != "" {
 		acceptEncoding := util.ParseAcceptEncoding(ctx.Request.Header.Get(context.AcceptEncodingHeaderKey))
 		if acceptEncoding.IsAccept(inscription.ContentEncoding) {
@@ -61,10 +66,13 @@ func (h *Handler) doContent(ctx *gin.Context, inscriptionId string) error {
 		}
 	}
 
+	// If there is nobody, return an OK status
 	if len(inscription.Body) == 0 {
 		ctx.Status(http.StatusOK)
 		return nil
 	}
+
+	// Return the body with the appropriate content type
 	ctx.Data(http.StatusOK, string(contentType), inscription.Body)
 	return nil
 }

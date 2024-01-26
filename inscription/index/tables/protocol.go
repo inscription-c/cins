@@ -17,10 +17,10 @@ type Protocol struct {
 	Limit    uint64 `gorm:"column:limit;type:bigint unsigned;default:0;NOT NULL"`
 	Decimals uint32 `gorm:"column:decimals;type:int unsigned;default:0;NOT NULL"`
 
-	TkID   string `gorm:"column:tkid;type:varchar(255);index:idx_tkid;default:;NOT NULL"`
-	Amount uint64 `gorm:"column:amount;type:bigint unsigned;default:0;NOT NULL"`
-	To     string `gorm:"column:to;type:varchar(255);index:idx_to;default:;NOT NULL"`
-	Miner  string `gorm:"column:miner;type:varchar(255);index:idx_miner;default:;NOT NULL"`
+	TkID   *util.OutPoint `gorm:"column:tkid;type:varchar(255);index:idx_tkid;default:;NOT NULL"`
+	Amount uint64         `gorm:"column:amount;type:bigint unsigned;default:0;NOT NULL"`
+	To     string         `gorm:"column:to;type:varchar(255);index:idx_to;default:;NOT NULL"`
+	Miner  string         `gorm:"column:miner;type:varchar(255);index:idx_miner;default:;NOT NULL"`
 
 	CreatedAt time.Time `gorm:"column:created_at;type:timestamp;default:CURRENT_TIMESTAMP;NOT NULL"`
 	UpdatedAt time.Time `gorm:"column:updated_at;type:timestamp;default:CURRENT_TIMESTAMP;NOT NULL"`

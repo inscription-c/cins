@@ -14,6 +14,7 @@ import (
 	"strings"
 )
 
+// RespInscription is a struct that represents the response for an inscription request.
 type RespInscription struct {
 	InscriptionId   string   `json:"inscription_id"`
 	Charms          []string `json:"charms"`
@@ -33,6 +34,8 @@ type RespInscription struct {
 	ContentProtocol string   `json:"content_protocol"`
 }
 
+// Inscription is a handler function for handling inscription requests.
+// It validates the request parameters and calls the doInscription function.
 func (h *Handler) Inscription(ctx *gin.Context) {
 	query := ctx.Param("query")
 	if query == "" {
@@ -45,7 +48,12 @@ func (h *Handler) Inscription(ctx *gin.Context) {
 	}
 }
 
+// doInscription is a helper function for handling inscription requests.
+// It retrieves the inscription based on the provided query and returns it in the response.
 func (h *Handler) doInscription(ctx *gin.Context, query string) error {
+	// Trim spaces from the query and try to convert it to an inscription ID.
+	// If that fails, try to convert it to a sequence number.
+	// If both fail, return a bad request status.
 	query = strings.TrimSpace(query)
 	inscriptionId := util.StringToInscriptionId(query)
 	var err error
@@ -68,11 +76,13 @@ func (h *Handler) doInscription(ctx *gin.Context, query string) error {
 		}
 	}
 
+	// If the inscription does not exist, return a not found status.
 	if inscription.Id == 0 {
 		ctx.Status(http.StatusNotFound)
 		return nil
 	}
 
+	// Retrieve the previous and next inscriptions.
 	preInscription, err := h.DB().GetInscriptionBySequenceNum(inscription.SequenceNum - 1)
 	if err != nil && !errors.Is(err, gorm.ErrRecordNotFound) {
 		return err
@@ -91,11 +101,13 @@ func (h *Handler) doInscription(ctx *gin.Context, query string) error {
 		nextInscriptionId = nextInscription.Outpoint.InscriptionId().String()
 	}
 
+	// Retrieve the value of the inscription's outpoint.
 	value, err := h.DB().GetValueByOutpoint(inscription.Outpoint.String())
 	if err != nil && !errors.Is(err, gorm.ErrRecordNotFound) {
 		return err
 	}
 
+	// Retrieve the transaction of the inscription's outpoint and get the taproot address.
 	tx, err := h.RpcClient().GetRawTransaction(&inscription.Outpoint.Hash)
 	if err != nil {
 		return err
@@ -106,6 +118,7 @@ func (h *Handler) doInscription(ctx *gin.Context, query string) error {
 		return err
 	}
 
+	// Retrieve the sat point of the inscription.
 	satPoint, err := h.DB().GetSatPointBySat(inscription.Sat)
 	if err != nil {
 		return err
@@ -115,6 +128,7 @@ func (h *Handler) doInscription(ctx *gin.Context, query string) error {
 		satPointStr = util.FormatSatPoint(satPoint.Outpoint, satPoint.Offset)
 	}
 
+	// Check if the inscription's body is a BRC20C token.
 	brc20c := &util.BRC20C{}
 	brc20c.Reset(inscription.Body)
 	contentProtocol := ""
@@ -122,6 +136,7 @@ func (h *Handler) doInscription(ctx *gin.Context, query string) error {
 		contentProtocol = constants.ProtocolBRC20C
 	}
 
+	// Create the response and return it.
 	resp := &RespInscription{
 		InscriptionId:   inscriptionId.String(),
 		InscriptionNum:  inscription.InscriptionNum,

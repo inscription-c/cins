@@ -7,10 +7,16 @@ import (
 	"gorm.io/gorm"
 )
 
+// DeleteAllBySatPoint deletes all records by a given SatPoint.
+// It takes a SatPoint as a parameter.
+// It returns any error encountered during the operation.
 func (d *DB) DeleteAllBySatPoint(satpoint *util.SatPoint) error {
 	return d.Where("outpoint = ? AND offset = ?", satpoint.Outpoint.String(), satpoint.Offset).Delete(&tables.SatPoint{}).Error
 }
 
+// SetSatPointToSequenceNum sets a SatPoint to a sequence number in the database.
+// It takes a SatPoint and a sequence number as parameters.
+// It returns any error encountered during the operation.
 func (d *DB) SetSatPointToSequenceNum(satPoint *util.SatPoint, sequenceNum uint64) error {
 	return d.Create(&tables.SatPoint{
 		Outpoint:    satPoint.Outpoint.String(),
@@ -19,6 +25,9 @@ func (d *DB) SetSatPointToSequenceNum(satPoint *util.SatPoint, sequenceNum uint6
 	}).Error
 }
 
+// InscriptionsByOutpoint retrieves inscriptions by a given outpoint.
+// It takes an outpoint as a parameter.
+// It returns a list of inscriptions and any error encountered.
 func (d *DB) InscriptionsByOutpoint(outpoint string) (res []*Inscription, err error) {
 	satpoints := make([]*tables.SatPoint, 0)
 	err = d.DB.Where("outpoint = ?", outpoint).Find(&satpoints).Error
@@ -56,6 +65,9 @@ func (d *DB) InscriptionsByOutpoint(outpoint string) (res []*Inscription, err er
 	return
 }
 
+// GetSatPointBySat retrieves a SatSatPoint by a given SAT.
+// It takes a SAT as a parameter.
+// It returns a SatSatPoint and any error encountered.
 func (d *DB) GetSatPointBySat(sat uint64) (res tables.SatSatPoint, err error) {
 	err = d.DB.Where("sat = ?", sat).First(&res).Error
 	if errors.Is(err, gorm.ErrRecordNotFound) {

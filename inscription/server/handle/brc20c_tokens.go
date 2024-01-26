@@ -8,6 +8,8 @@ import (
 	"net/http"
 )
 
+// BRC20CTokens is a handler function for handling BRC20C tokens requests.
+// It validates the request parameters and calls the doBRC20CTokens function.
 func (h *Handler) BRC20CTokens(ctx *gin.Context) {
 	tk := ctx.Query("tk")
 	page := ctx.DefaultQuery("page", "1")
@@ -25,22 +27,26 @@ func (h *Handler) BRC20CTokens(ctx *gin.Context) {
 	}
 }
 
+// doBRC20CTokens is a helper function for handling BRC20C tokens requests.
+// It retrieves the tokens of a specific BRC20C token and returns them in the response.
 func (h *Handler) doBRC20CTokens(ctx *gin.Context, tk string, page int) error {
 	pageSize := 100
 	list, err := h.DB().FindTokenPageByTicker(constants.ProtocolBRC20C, tk, constants.OperationDeploy, page, pageSize)
 	if err != nil {
 		return err
 	}
-	respSize := len(list)
-	if respSize > pageSize {
-		respSize = pageSize
+	more := false
+	if len(list) > pageSize {
+		more = true
+		list = list[:pageSize]
 	}
 
 	currentNum := 10
 	errWg := &errgroup.Group{}
 	ch := make(chan int, currentNum)
-	respList := make([]gin.H, respSize)
+	respList := make([]gin.H, len(list))
 
+	// This goroutine is responsible for sending indices to the channel for processing.
 	errWg.Go(func() error {
 		for idx := range respList {
 			ch <- idx
@@ -49,6 +55,7 @@ func (h *Handler) doBRC20CTokens(ctx *gin.Context, tk string, page int) error {
 		return nil
 	})
 
+	// These goroutines are responsible for processing the indices sent to the channel.
 	for i := 0; i < currentNum; i++ {
 		errWg.Go(func() error {
 			for idx := range ch {
@@ -66,9 +73,10 @@ func (h *Handler) doBRC20CTokens(ctx *gin.Context, tk string, page int) error {
 		return err
 	}
 
+	// Respond with the tokens list, page index and a flag indicating if there are more tokens
 	ctx.JSON(http.StatusOK, gin.H{
 		"page_index": page,
-		"more":       len(list) > pageSize,
+		"more":       more,
 		"tokens":     respList,
 	})
 	return nil
