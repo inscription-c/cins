@@ -1,0 +1,21 @@
+# OS
+.DS_Store
+Thumbs.db
+
+# Editor & IDE
+.idea/
+.vscode/
+.history/
+build/
+target
+target_*
+!.gitkeep
+
+# Vuepress
+node_modules
+.temp
+.cache
+
+# Local Netlify folder
+.netlify
+dist

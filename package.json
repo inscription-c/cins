@@ -1,0 +1,21 @@
+{
+  "name": "ins-c-proto",
+  "version": "1.0.0",
+  "author": "Link <link@d.id>",
+  "license": "MIT",
+  "private": false,
+  "main": "index.js",
+  "scripts": {
+    "dev": "vuepress dev docs",
+    "build": "vuepress build -d ./dist docs",
+    "deploy": "netlify deploy --build"
+  },
+  "devDependencies": {
+    "@vuepress/client": "2.0.0-rc.0",
+    "@vuepress/plugin-back-to-top": "2.0.0-rc.0",
+    "@vuepress/plugin-search": "2.0.0-rc.0",
+    "@vuepress/plugin-toc": "2.0.0-rc.0",
+    "vue": "^3.4.5",
+    "vuepress": "2.0.0-rc.0"
+  }
+}
