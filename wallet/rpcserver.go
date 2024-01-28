@@ -4,33 +4,17 @@ import (
 	"errors"
 	"github.com/btcsuite/btcwallet/rpc/legacyrpc"
 	"github.com/btcsuite/btcwallet/wallet"
-	"github.com/inscription-c/insc/internal/net/multilistener"
-	"github.com/inscription-c/insc/wallet/index"
 	"github.com/inscription-c/insc/wallet/log"
 	"net"
 	"runtime"
 	"strings"
 )
 
-// multiListen starts the wallet with the given options.
-func multiListen(network, address string) (net.Listener, error) {
-	l, err := net.Listen(network, address)
-	if err != nil {
-		return nil, err
-	}
-	multiListener, err := multilistener.New(l)
-	if err != nil {
-		return nil, err
-	}
-	go index.HandlerIndex(address, multiListener)
-	return l, nil
-}
-
 // startRPCServices starts all RPC servers provided by the wallet.
 func startRPCServers(walletLoader *wallet.Loader) (*legacyrpc.Server, error) {
 	var (
 		legacyServer *legacyrpc.Server
-		legacyListen = multiListen
+		legacyListen = net.Listen
 	)
 
 	if len(cfg.LegacyRPCListeners) != 0 {

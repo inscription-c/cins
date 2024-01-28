@@ -132,6 +132,7 @@ func NewDB(opts ...DBOption) (*DB, error) {
 
 	if !options.noEmbedDB {
 		go TIDB(options)
+
 		timeout := time.After(time.Second * 30)
 		ticker := time.NewTicker(time.Second)
 		defer ticker.Stop()
@@ -155,20 +156,26 @@ func NewDB(opts ...DBOption) (*DB, error) {
 			}
 			break
 		}
-		createDb := fmt.Sprintf("CREATE DATABASE IF NOT EXISTS %s;", options.dbName)
-		if err = db.Exec(createDb).Error; err != nil {
-			return nil, fmt.Errorf("gorm create database :%v", err)
+
+		if err := db.Exec(fmt.Sprintf("CREATE DATABASE IF NOT EXISTS %s;", options.dbName)).Error; err != nil {
+			return nil, err
+		}
+		dsn = fmt.Sprintf(conn, options.user, options.password, options.addr, options.dbName)
+		db, err = gorm.Open(gormMysqlDriver.Open(dsn), &gorm.Config{Logger: gormLog})
+		if err != nil {
+			return nil, fmt.Errorf("gorm open :%v", err)
 		}
 		if err := db.AutoMigrate(options.autoMigrateTables...); err != nil {
 			return nil, err
 		}
+	} else {
+		dsn = fmt.Sprintf(conn, options.user, options.password, options.addr, options.dbName)
+		db, err = gorm.Open(gormMysqlDriver.Open(dsn), &gorm.Config{Logger: gormLog})
+		if err != nil {
+			return nil, fmt.Errorf("gorm open :%v", err)
+		}
 	}
 
-	dsn = fmt.Sprintf(conn, options.user, options.password, options.addr, options.dbName)
-	db, err = gorm.Open(gormMysqlDriver.Open(dsn), &gorm.Config{Logger: gormLog})
-	if err != nil {
-		return nil, fmt.Errorf("gorm open :%v", err)
-	}
 	db = db.Debug()
 	sqlDB, err := db.DB()
 	if err != nil {
