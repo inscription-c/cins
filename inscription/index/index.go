@@ -3,6 +3,7 @@ package index
 import (
 	"bytes"
 	"errors"
+	"github.com/btcsuite/btcd/chaincfg/chainhash"
 	"github.com/btcsuite/btcd/rpcclient"
 	"github.com/btcsuite/btcd/wire"
 	"github.com/go-sql-driver/mysql"
@@ -62,12 +63,19 @@ func WithBatchClient(cli *rpcclient.Client) func(*Options) {
 	}
 }
 
+// WithIndexSats is a function that returns an Option.
+func WithIndexSats(indexSats bool) func(*Options) {
+	return func(options *Options) {
+		options.indexSats = indexSats
+	}
+}
+
 // Indexer is a struct that holds the configuration options and state for the Indexer.
 type Indexer struct {
 	// opts is a pointer to an Options struct which holds the configuration options for the Indexer.
 	opts *Options
 	// rangeCache is a map that caches the range of satoshis for each transaction.
-	rangeCache map[string]model.SatRange
+	rangeCache map[string][]*model.SatRange
 	// height is an uint32 that represents the current height of the blockchain being indexed.
 	height uint32
 	// satRangesSinceFlush is an uint32 that represents the number of satoshi ranges since the last flush.
@@ -78,6 +86,7 @@ type Indexer struct {
 	outputsInsertedSinceFlush uint64
 	// outputsTraversed is an uint32 that represents the number of outputs traversed.
 	outputsTraversed uint64
+	indexSpentSats   bool
 }
 
 // NewIndexer is a function that returns a pointer to a new Indexer instance.
@@ -92,8 +101,7 @@ func NewIndexer(opts ...Option) *Indexer {
 		v(idx.opts)
 	}
 	// Initialize the rangeCache map.
-	idx.rangeCache = make(map[string]model.SatRange)
-	// Return the pointer to the new Indexer instance.
+	idx.rangeCache = make(map[string][]*model.SatRange)
 	return idx
 }
 
@@ -238,6 +246,10 @@ func (idx *Indexer) indexBlock(
 		/*idx.height >= index.first_inscription_height && */ !idx.opts.noIndexInscriptions
 
 	// Get various statistics related to the indexing process.
+	lostSats, err := wtx.GetStatisticCountByName(tables.StatisticLostSats)
+	if err != nil {
+		return err
+	}
 	unboundInscriptions, err := wtx.GetStatisticCountByName(tables.StatisticUnboundInscriptions)
 	if err != nil {
 		return err
@@ -258,6 +270,7 @@ func (idx *Indexer) indexBlock(
 		wtx:                     wtx,
 		idx:                     idx,
 		valueCache:              valueCache,
+		lostSats:                &lostSats,
 		nextSequenceNumber:      &nextSequenceNumber,
 		unboundInscriptions:     &unboundInscriptions,
 		cursedInscriptionCount:  &cursedInscriptions,
@@ -267,11 +280,111 @@ func (idx *Indexer) indexBlock(
 
 	// If the indexer is configured to index satoshis, index the satoshis in the block.
 	if idx.opts.indexSats {
-		//coinbaseInputs := make([]byte, 0)
-		//h := Height{Height: idx.height}
-		//if h.Subsidy() > 0 {
-		//
-		//}
+		coinbaseInputs := make([]*model.SatRange, 0)
+		h := NewHeight(idx.height)
+		if h.Subsidy() > 0 {
+			start := h.StartingSat()
+			end := Sat(start.N() + h.Subsidy())
+			coinbaseInputs = append([]*model.SatRange{
+				{
+					Start: start.N(),
+					End:   end.N(),
+				},
+			}, coinbaseInputs...)
+			idx.satRangesSinceFlush++
+		}
+
+		for _, tx := range block.Transactions[1:] {
+			inputSatRanges := make([]*model.SatRange, 0)
+			for _, input := range tx.TxIn {
+				key := input.PreviousOutPoint.Hash.String()
+				var satRanges []*model.SatRange
+				if idx.indexSpentSats {
+					satRanges = idx.rangeCache[key]
+				} else {
+					satRanges = idx.rangeCache[key]
+					delete(idx.rangeCache, key)
+				}
+				if satRanges != nil {
+					idx.outputsCached++
+				} else {
+					inputSatRanges, err = idx.DB().OutpointToSatRanges(key)
+					if err != nil {
+						return err
+					}
+					if !idx.indexSpentSats {
+						if _, err := wtx.DelSatPointByOutpoint(key); err != nil {
+							return err
+						}
+					}
+				}
+				for i := range satRanges {
+					inputSatRanges = append(inputSatRanges, satRanges[i])
+				}
+			}
+			inputSatRages, err := idx.indexTransactionSats(
+				wtx,
+				tx,
+				inputSatRanges,
+				&satRangesWritten,
+				&outputsInBlock,
+				inscriptionUpdater,
+				indexInscriptions,
+			)
+			if err != nil {
+				return err
+			}
+			coinbaseInputs = append(coinbaseInputs, inputSatRages...)
+		}
+
+		coinbaseInputs, err := idx.indexTransactionSats(
+			wtx,
+			block.Transactions[0],
+			coinbaseInputs,
+			&satRangesWritten,
+			&outputsInBlock,
+			inscriptionUpdater,
+			indexInscriptions,
+		)
+		if err != nil {
+			return err
+		}
+
+		if len(coinbaseInputs) > 0 {
+			emptyOutpoint := &wire.OutPoint{
+				Hash:  chainhash.Hash{},
+				Index: 0,
+			}
+			lostSatRanges, err := wtx.DelSatPointByOutpoint(emptyOutpoint.String())
+			if err != nil {
+				return err
+			}
+			for _, coinBase := range coinbaseInputs {
+				start := Sat(coinBase.Start)
+				if !start.Common() {
+					if err := wtx.SatToSatPointCreate(&tables.SatSatPoint{
+						Sat:      start.N(),
+						Outpoint: emptyOutpoint.String(),
+						Offset:   lostSats,
+					}); err != nil {
+						return err
+					}
+				}
+
+				lostSatRanges = append(lostSatRanges, &model.SatRange{
+					Start: coinBase.Start,
+					End:   coinBase.End,
+				})
+				lostSats += coinBase.End - coinBase.Start
+			}
+
+			if err := wtx.SetOutpointToSatRange(map[string][]*model.SatRange{
+				emptyOutpoint.String(): lostSatRanges,
+			}); err != nil {
+				return err
+			}
+		}
+
 	} else if indexInscriptions {
 		// If the indexer is configured to index inscriptions, index the inscriptions in the block.
 		txs := append(block.Transactions[1:], block.Transactions[0])
@@ -299,14 +412,22 @@ func (idx *Indexer) indexBlock(
 		}
 	}
 
-	// Update various statistics related to the indexing process.
-	if err := wtx.IncrementStatistic(tables.StatisticCursedInscriptions, *inscriptionUpdater.cursedInscriptionCount); err != nil {
+	if idx.opts.indexSats {
+		if err := wtx.SetStatistic(tables.StatisticLostSats, lostSats); err != nil {
+			return err
+		}
+	} else {
+		if err := wtx.SetStatistic(tables.StatisticLostSats, *inscriptionUpdater.lostSats); err != nil {
+			return err
+		}
+	}
+	if err := wtx.SetStatistic(tables.StatisticCursedInscriptions, *inscriptionUpdater.cursedInscriptionCount); err != nil {
 		return err
 	}
-	if err := wtx.IncrementStatistic(tables.StatisticBlessedInscriptions, *inscriptionUpdater.blessedInscriptionCount); err != nil {
+	if err := wtx.SetStatistic(tables.StatisticBlessedInscriptions, *inscriptionUpdater.blessedInscriptionCount); err != nil {
 		return err
 	}
-	if err := wtx.IncrementStatistic(tables.StatisticUnboundInscriptions, *inscriptionUpdater.unboundInscriptions); err != nil {
+	if err := wtx.SetStatistic(tables.StatisticUnboundInscriptions, *inscriptionUpdater.unboundInscriptions); err != nil {
 		return err
 	}
 
@@ -424,12 +545,80 @@ func (idx *Indexer) getBlockWithRetries(height uint32) (*wire.MsgBlock, error) {
 			if errors.Is(err, rpcclient.ErrClientShutdown) {
 				return nil, signal.ErrInterrupted
 			}
-			for _, tx := range block.Transactions {
-				for _, txIn := range tx.TxIn {
-					txIn.Witness = nil
-				}
-			}
 			return block, nil
 		}
 	}
+}
+
+func (idx *Indexer) indexTransactionSats(
+	wtx *dao.DB,
+	tx *wire.MsgTx,
+	inputSatRanges []*model.SatRange,
+	satRangesWritten *uint64,
+	outputsInBlock *uint64,
+	inscriptionUpdater *InscriptionUpdater,
+	indexInscriptions bool,
+) (list []*model.SatRange, err error) {
+	if indexInscriptions {
+		if err = inscriptionUpdater.indexEnvelopers(tx, inputSatRanges); err != nil {
+			return
+		}
+	}
+
+	for i, txOut := range tx.TxOut {
+		outpoint := wire.OutPoint{
+			Hash:  tx.TxHash(),
+			Index: uint32(i),
+		}
+		sats := make([]*model.SatRange, 0)
+
+		remaining := uint64(txOut.Value)
+		for remaining > 0 {
+			if len(inputSatRanges) == 0 {
+				return
+			}
+			firstRange := inputSatRanges[0]
+			startSat := Sat(firstRange.Start)
+
+			if !startSat.Common() {
+				if err := wtx.SatToSatPointCreate(&tables.SatSatPoint{
+					Sat:       firstRange.Start,
+					Outpoint:  outpoint.String(),
+					Offset:    uint64(txOut.Value) - remaining,
+					CreatedAt: time.Time{},
+					UpdatedAt: time.Time{},
+				}); err != nil {
+					return nil, err
+				}
+			}
+
+			count := firstRange.End - firstRange.Start
+			assigned := firstRange
+			if count > remaining {
+				idx.satRangesSinceFlush++
+				middle := firstRange.Start + remaining
+				inputSatRanges = append([]*model.SatRange{
+					{
+						Start: middle,
+						End:   firstRange.End,
+					},
+				}, inputSatRanges...)
+				assigned.Start = firstRange.Start
+				assigned.End = middle
+			}
+
+			sats = append(sats, assigned)
+
+			remaining -= assigned.End - assigned.Start
+			*satRangesWritten++
+		}
+
+		*outputsInBlock++
+
+		idx.rangeCache[outpoint.String()] = sats
+		idx.outputsInsertedSinceFlush++
+	}
+
+	list = inputSatRanges
+	return
 }

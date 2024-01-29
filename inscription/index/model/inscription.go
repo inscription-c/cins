@@ -4,7 +4,7 @@ type Inscription struct {
 	Body            []byte
 	ContentEncoding []byte
 	ContentType     []byte
-	DstChain        []byte
+	ContractDesc    []byte
 	Metadata        []byte
 	Pointer         []byte
 

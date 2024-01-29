@@ -1,6 +1,7 @@
 package handle
 
 import (
+	"encoding/json"
 	"errors"
 	"github.com/gin-gonic/gin"
 	"github.com/inscription-c/insc/constants"
@@ -36,13 +37,13 @@ func (h *Handler) doBRC20CToken(ctx *gin.Context, tkid string) error {
 		ctx.Status(http.StatusNotFound)
 		return nil
 	}
-	if token.Protocol != constants.ProtocolBRC20C {
+	if token.Protocol != constants.ProtocolCBRC20 {
 		ctx.Status(http.StatusNotFound)
 		return nil
 	}
 
 	if token.Operator == constants.OperationMint {
-		inscriptionId := tables.StringToInscriptionId(token.TkID)
+		//inscriptionId := tables.StringToInscriptionId(token.TkID)
 		token, err = h.DB().GetProtocolByInscriptionId(inscriptionId)
 		if err != nil {
 			return err
@@ -82,31 +83,13 @@ func (h *Handler) GetBRC20TokenInfo(token *tables.Protocol) (gin.H, error) {
 			return errors.New("inscription not found")
 		}
 
+		m := make(gin.H)
+		if err := json.Unmarshal([]byte(inscription.ContractDesc), &m); err != nil {
+			return err
+		}
 		lock.Lock()
-		resp["dst_chain"] = inscription.DstChain
+		resp["contract_desc"] = m
 		//resp["metadata"] = hex.EncodeToString(inscription.Metadata)
-		lock.Unlock()
-		return nil
-	})
-
-	errWg.Go(func() error {
-		amount, err := h.DB().SumProtocolAmount(constants.ProtocolBRC20C, token.Ticker, constants.OperationMint, token.String())
-		if err != nil {
-			return err
-		}
-		lock.Lock()
-		resp["circulating_supply"] = amount
-		lock.Unlock()
-		return nil
-	})
-
-	errWg.Go(func() error {
-		holders, err := h.DB().SumAddressNum(constants.ProtocolBRC20C, token.Ticker, constants.OperationMint, token.String())
-		if err != nil {
-			return err
-		}
-		lock.Lock()
-		resp["holders"] = holders
 		lock.Unlock()
 		return nil
 	})

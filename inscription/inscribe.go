@@ -1,15 +1,18 @@
 package inscription
 
 import (
+	"encoding/json"
 	"errors"
 	"fmt"
 	"github.com/btcsuite/btcd/btcutil"
+	"github.com/btcsuite/btcwallet/netparams"
 	"github.com/inscription-c/insc/btcd"
 	"github.com/inscription-c/insc/constants"
 	"github.com/inscription-c/insc/inscription/index/dao"
 	"github.com/inscription-c/insc/inscription/log"
 	"github.com/inscription-c/insc/inscription/server"
 	"github.com/inscription-c/insc/internal/signal"
+	"github.com/inscription-c/insc/internal/util"
 	"github.com/spf13/cobra"
 	"os"
 	"path/filepath"
@@ -20,7 +23,6 @@ var (
 	password             string
 	walletPass           string
 	testnet              bool
-	rpcCert              string
 	inscriptionsFilePath string
 	rpcConnect           string
 	postage              = uint64(constants.DefaultPostage)
@@ -28,9 +30,9 @@ var (
 	cborMetadata         string
 	jsonMetadata         string
 	dryRun               bool
-	brc20c               bool
-	dstChain             string
+	cbrc20               bool
 	destination          string
+	contractDesc         string
 	dbAddr               string
 	dbUser               string
 	dbPass               string
@@ -45,15 +47,15 @@ func init() {
 	Cmd.Flags().StringVarP(&walletPass, "walletpass", "", "", "wallet password for master private key")
 	Cmd.Flags().BoolVarP(&testnet, "testnet", "t", false, "bitcoin testnet3")
 	Cmd.Flags().StringVarP(&inscriptionsFilePath, "filepath", "f", "", "inscription file path")
+	Cmd.Flags().StringVarP(&contractDesc, "contractdesc", "d", "", "destination contract description file path.")
+	Cmd.Flags().StringVarP(&destination, "dest", "", "", "Send inscription to <DESTINATION> address.")
 	Cmd.Flags().StringVarP(&rpcConnect, "rpcconnect", "s", "localhost:8332", "the URL of wallet RPC server to connect to (default localhost:8332, testnet: localhost:18332)")
 	Cmd.Flags().Uint64VarP(&postage, "postage", "p", constants.DefaultPostage, "Amount of postage to include in the inscription. Default `10000sat`.")
 	Cmd.Flags().BoolVarP(&compress, "compress", "", false, "Compress inscription content with brotli.")
 	Cmd.Flags().StringVarP(&cborMetadata, "cbormetadata", "", "", "Include CBOR in file at <METADATA> as inscription metadata")
 	Cmd.Flags().StringVarP(&jsonMetadata, "jsonmetadata", "", "", "Include JSON in file at <METADATA> converted to CBOR as inscription metadata")
 	Cmd.Flags().BoolVarP(&dryRun, "dryrun", "", false, "Don't sign or broadcast transactions.")
-	Cmd.Flags().BoolVarP(&brc20c, "brc20c", "", false, "is brc-20-c protocol, add this flag will auto check protocol content effectiveness")
-	Cmd.Flags().StringVarP(&dstChain, "dstchain", "", "", "target chain coin_type for https://github.com/satoshilabs/slips/blob/master/slip-0044.md")
-	Cmd.Flags().StringVarP(&destination, "destination", "", "", "Send inscription to <DESTINATION> address.")
+	Cmd.Flags().BoolVarP(&cbrc20, "cbrc20", "", false, "is c-brc-20 protocol, add this flag will auto check protocol content effectiveness")
 	Cmd.Flags().StringVarP(&dbAddr, "dbaddr", "", fmt.Sprintf("localhost:%s", constants.DefaultDBListenPort), "index server database address")
 	Cmd.Flags().StringVarP(&dbUser, "dbuser", "", "root", "index server database user")
 	Cmd.Flags().StringVarP(&dbPass, "dbpass", "", "", "index server database password")
@@ -61,11 +63,11 @@ func init() {
 		fmt.Println(err)
 		os.Exit(1)
 	}
-	if err := Cmd.MarkFlagRequired("dstchain"); err != nil {
+	if err := Cmd.MarkFlagRequired("dest"); err != nil {
 		fmt.Println(err)
 		os.Exit(1)
 	}
-	if err := Cmd.MarkFlagRequired("destination"); err != nil {
+	if err := Cmd.MarkFlagRequired("contractdesc"); err != nil {
 		fmt.Println(err)
 		os.Exit(1)
 	}
@@ -74,10 +76,12 @@ func init() {
 func configCheck() error {
 	if testnet {
 		rpcConnect = "localhost:18332"
+		util.ActiveNet = &netparams.TestNet3Params
 	}
-	if postage < constants.DustLimit {
-		return fmt.Errorf("postage must be greater than or equal %d", constants.DustLimit)
-	}
+	
+	//if postage < constants.DustLimit {
+	//	return fmt.Errorf("postage must be greater than or equal %d", constants.DustLimit)
+	//}
 	if postage > constants.MaxPostage {
 		return fmt.Errorf("postage must be less than or equal %d", constants.MaxPostage)
 	}
@@ -146,12 +150,23 @@ func inscribe() error {
 		return err
 	}
 
+	contractDescFile, err := os.Open(contractDesc)
+	if err != nil {
+		return err
+	}
+	defer contractDescFile.Close()
+
+	contractDesc := &ContractDesc{}
+	if err := json.NewDecoder(contractDescFile).Decode(contractDesc); err != nil {
+		return err
+	}
+
 	// Create a new inscription from the file path
 	inscription, err := NewFromPath(inscriptionsFilePath,
 		WithDB(db),
 		WithWalletClient(walletCli),
 		WithPostage(postage),
-		WithDstChain(dstChain),
+		WithContractDesc(contractDesc),
 		WithWalletPass(walletPass),
 		WithCborMetadata(cborMetadata),
 		WithJsonMetadata(jsonMetadata),

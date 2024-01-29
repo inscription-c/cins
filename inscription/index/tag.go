@@ -1,7 +1,7 @@
 package index
 
 import (
-	"github.com/gogf/gf/v2/util/gconv"
+	"fmt"
 	"github.com/inscription-c/insc/constants"
 )
 
@@ -19,7 +19,7 @@ const (
 	TagMetaprotocol
 	TagContentEncoding
 	TagDelegate
-	TagDstChain
+	TagContractDesc
 
 	TagNop
 )
@@ -48,8 +48,8 @@ func TagFromBytes(bs []byte) TagType {
 	case 255:
 		return TagNop
 	default:
-		if string(bs) == gconv.String(constants.DstChain) {
-			return TagDstChain
+		if string(bs) == fmt.Sprint(constants.ContractDesc) {
+			return TagContractDesc
 		}
 		return TagNop
 	}
@@ -78,8 +78,8 @@ func (t TagType) Bytes() []byte {
 		return []byte{11}
 	case TagNop:
 		return []byte{255}
-	case TagDstChain:
-		return []byte(gconv.String(constants.DstChain))
+	case TagContractDesc:
+		return []byte(fmt.Sprint(constants.ContractDesc))
 	default:
 		return []byte{}
 	}

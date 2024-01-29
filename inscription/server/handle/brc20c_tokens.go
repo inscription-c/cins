@@ -31,7 +31,7 @@ func (h *Handler) BRC20CTokens(ctx *gin.Context) {
 // It retrieves the tokens of a specific BRC20C token and returns them in the response.
 func (h *Handler) doBRC20CTokens(ctx *gin.Context, tk string, page int) error {
 	pageSize := 100
-	list, err := h.DB().FindTokenPageByTicker(constants.ProtocolBRC20C, tk, constants.OperationDeploy, page, pageSize)
+	list, err := h.DB().FindTokenPageByTicker(constants.ProtocolCBRC20, tk, constants.OperationDeploy, page, pageSize)
 	if err != nil {
 		return err
 	}

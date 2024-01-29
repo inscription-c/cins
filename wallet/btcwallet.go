@@ -4,6 +4,9 @@ import (
 	"errors"
 	"fmt"
 	"github.com/btcsuite/btcd/btcutil"
+	"github.com/btcsuite/btcwallet/chain"
+	"github.com/btcsuite/btcwallet/rpc/legacyrpc"
+	"github.com/btcsuite/btcwallet/wallet"
 	"github.com/inscription-c/insc/btcd"
 	"github.com/inscription-c/insc/constants"
 	"github.com/inscription-c/insc/inscription/index"
@@ -20,10 +23,6 @@ import (
 	"os"
 	"path/filepath"
 	"sync"
-
-	"github.com/btcsuite/btcwallet/chain"
-	"github.com/btcsuite/btcwallet/rpc/legacyrpc"
-	"github.com/btcsuite/btcwallet/wallet"
 )
 
 const (
@@ -39,6 +38,7 @@ var (
 	testnet      bool
 	rpcConnect   string
 	dbListenPort string
+	indexSats    bool
 )
 
 var Cmd = &cobra.Command{
@@ -60,6 +60,7 @@ func init() {
 	Cmd.Flags().BoolVarP(&testnet, "testnet", "t", false, "bitcoin testnet3")
 	Cmd.Flags().StringVarP(&rpcConnect, "rpcconnect", "", "", "Hostname/IP and port of btcd RPC server to connect to (default localhost:8334, testnet: localhost:18334)")
 	Cmd.Flags().StringVarP(&dbListenPort, "dblistenport", "", constants.DefaultDBListenPort, "db listen port")
+	Cmd.Flags().BoolVarP(&indexSats, "indexsats", "", true, "index sats")
 	if err := Cmd.MarkFlagRequired("user"); err != nil {
 		fmt.Println(err)
 		os.Exit(1)
@@ -131,6 +132,7 @@ func Main() error {
 	indexer := index.NewIndexer(
 		index.WithDB(db),
 		index.WithClient(cli),
+		index.WithIndexSats(indexSats),
 		index.WithBatchClient(batchCli),
 	)
 	indexer.Start()

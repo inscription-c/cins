@@ -11,7 +11,6 @@ import (
 	"github.com/btcsuite/btcd/btcec/v2/schnorr"
 	"github.com/btcsuite/btcd/btcjson"
 	"github.com/btcsuite/btcd/btcutil"
-	"github.com/btcsuite/btcd/chaincfg"
 	"github.com/btcsuite/btcd/chaincfg/chainhash"
 	"github.com/btcsuite/btcd/rpcclient"
 	"github.com/btcsuite/btcd/txscript"
@@ -98,9 +97,9 @@ type Inscription struct {
 // It contains the destination chain, the content type, the content encoding,
 // the pointer, and the metadata.
 type Header struct {
-	// DstChain is the destination chain for the inscription.
+	// ContractDesc is the destination chain for the inscription.
 	// It follows the coin_type from https://github.com/satoshilabs/slips/blob/master/slip-0044.md
-	DstChain string `json:"dst_chain"`
+	ContractDesc *ContractDesc `json:"contract_desc"`
 
 	// ContentType is the content type of the inscription.
 	ContentType constants.ContentType `json:"content_type"`
@@ -131,13 +130,24 @@ type options struct {
 	walletPass string `validate:"required"`
 
 	// dstChain is the destination chain for the inscription.
-	dstChain string `validate:"required"`
+	contractDesc *ContractDesc
 
 	// cborMetadata is the CBOR metadata for the inscription.
 	cborMetadata string
 
 	// jsonMetadata is the JSON metadata for the inscription.
 	jsonMetadata string
+}
+
+type ContractDesc struct {
+	Type     string `json:"type"`
+	Chain    string `json:"chain"`
+	Contract string `json:"contract"`
+}
+
+func (c *ContractDesc) Bytes() []byte {
+	d, _ := json.Marshal(c)
+	return d
 }
 
 // Option is a function type that takes a pointer to an options' struct.
@@ -180,12 +190,12 @@ func WithJsonMetadata(jsonMetadata string) func(*options) {
 	}
 }
 
-// WithDstChain is a function that sets the destination chain option for an Inscription.
+// WithContractDesc is a function that sets the destination chain option for an Inscription.
 // It takes a string representing the destination chain and returns a function that sets
 // the destination chain in the options of an Inscription.
-func WithDstChain(dstChain string) func(*options) {
+func WithContractDesc(contractDesc *ContractDesc) func(*options) {
 	return func(options *options) {
-		options.dstChain = dstChain
+		options.contractDesc = contractDesc
 	}
 }
 
@@ -252,8 +262,8 @@ func NewFromPath(path string, inputOpts ...Option) (*Inscription, error) {
 	// Create a new Inscription with the provided options
 	inscription := &Inscription{
 		Header: Header{
-			DstChain: opts.dstChain,
-			Metadata: &util.Reader{},
+			ContractDesc: opts.contractDesc,
+			Metadata:     &util.Reader{},
 		},
 		options: opts,
 	}
@@ -314,8 +324,8 @@ func NewFromPath(path string, inputOpts ...Option) (*Inscription, error) {
 
 	// Initialize the body protocol of the Inscription
 	var incBody util.Protocol
-	if brc20c {
-		incBody = &util.BRC20C{}
+	if cbrc20 {
+		incBody = &util.CBRC20{}
 	} else {
 		incBody = &util.DefaultProtocol{}
 	}
@@ -399,7 +409,7 @@ func (i *Inscription) rawTx(tx *wire.MsgTx, noWitness ...bool) string {
 			return ""
 		}
 	}
-	return buf.String()
+	return hex.EncodeToString(buf.Bytes())
 }
 
 // CreateInscriptionTx is a method of the Inscription struct. It is responsible for
@@ -446,7 +456,7 @@ func (i *Inscription) BuildCommitTx() error {
 
 	// input begin
 	for _, v := range i.utxo {
-		script, err := util.AddressScript(v.Address, getNetParams())
+		script, err := util.AddressScript(v.Address, util.ActiveNet.Params)
 		if err != nil {
 			return err
 		}
@@ -464,7 +474,7 @@ func (i *Inscription) BuildCommitTx() error {
 	// input end
 
 	// output begin
-	recipientScript, err := util.AddressScript(i.revealTxAddress.String(), getNetParams())
+	recipientScript, err := util.AddressScript(i.revealTxAddress.String(), util.ActiveNet.Params)
 	if err != nil {
 		return err
 	}
@@ -483,7 +493,7 @@ func (i *Inscription) BuildCommitTx() error {
 	if err != nil {
 		return err
 	}
-	changeScript, err := util.AddressScript(commitTxChangeAddr.String(), getNetParams())
+	changeScript, err := util.AddressScript(commitTxChangeAddr.String(), util.ActiveNet.Params)
 	if err != nil {
 		return err
 	}
@@ -554,7 +564,7 @@ func (i *Inscription) BuildRevealTx() error {
 	}
 
 	// Create the transaction output
-	destAddrScript, err := util.AddressScript(strings.TrimSpace(destination), getNetParams())
+	destAddrScript, err := util.AddressScript(strings.TrimSpace(destination), util.ActiveNet.Params)
 	if err != nil {
 		return err
 	}
@@ -597,7 +607,7 @@ func (i *Inscription) SignCommitTx() error {
 		utxo := i.utxo[j]
 
 		// It decodes the address of the UTXO.
-		address, err := btcutil.DecodeAddress(utxo.Address, getNetParams())
+		address, err := btcutil.DecodeAddress(utxo.Address, util.ActiveNet.Params)
 		if err != nil {
 			return err
 		}
@@ -643,7 +653,7 @@ func (i *Inscription) SignCommitTx() error {
 		wif := priKeyMap[outpoint.String()]
 
 		// It converts the address of the UTXO to a script.
-		pkScript, err := util.AddressScript(utxo.Address, getNetParams())
+		pkScript, err := util.AddressScript(utxo.Address, util.ActiveNet.Params)
 		if err != nil {
 			return err
 		}
@@ -720,10 +730,10 @@ func (i *Inscription) AppendInscriptionContentToBuilder() error {
 		AddOp(txscript.OP_FALSE).
 		AddOp(txscript.OP_IF).
 		AddData([]byte(constants.ProtocolId)).
+		AddData([]byte(fmt.Sprint(constants.ContractDesc))).
+		AddData(i.Header.ContractDesc.Bytes()).
 		AddOp(txscript.OP_1).
-		AddData(i.Header.ContentType.Bytes()).
-		AddData([]byte(fmt.Sprint(constants.DstChain))).
-		AddData([]byte(i.Header.DstChain))
+		AddData(i.Header.ContentType.Bytes())
 
 	// If metadata exists, add it to the script builder
 	// The metadata is divided into chunks of 520 bytes and each chunk is added to the script builder
@@ -803,10 +813,7 @@ func (i *Inscription) RevealScriptAddress() error {
 	controlBlock.OutputKeyYIsOdd = yIsOdd
 
 	// Generate the taproot address
-	taprootAddress, err := btcutil.NewAddressTaproot(
-		schnorr.SerializePubKey(outputKey),
-		getNetParams(),
-	)
+	taprootAddress, err := btcutil.NewAddressTaproot(schnorr.SerializePubKey(outputKey), util.ActiveNet.Params)
 	i.revealTxAddress = taprootAddress
 	return nil
 }
@@ -885,15 +892,4 @@ func calculateTxFee(tx *wire.MsgTx, feeRate int64) int64 {
 		fee = constants.DustLimit
 	}
 	return fee
-}
-
-// getNetParams is a function that returns the network parameters based on the configuration.
-// If the configuration is set to testnet, it returns the testnet parameters.
-// Otherwise, it returns the mainnet parameters.
-func getNetParams() *chaincfg.Params {
-	netParams := &chaincfg.MainNetParams
-	if testnet {
-		netParams = &chaincfg.TestNet3Params
-	}
-	return netParams
 }

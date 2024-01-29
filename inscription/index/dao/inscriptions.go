@@ -39,7 +39,7 @@ func (d *DB) GetInscriptionById(inscriptionId *tables.InscriptionId) (ins tables
 
 // GetInscriptionByOutpoint retrieves an inscription by its outpoint.
 func (d *DB) GetInscriptionByOutpoint(outpoint *model.OutPoint) (list []*tables.InscriptionId, err error) {
-	err = d.Where("tx_id=? and index=?", outpoint.Hash.String(), outpoint.Index).Find(&list).Error
+	err = d.Model(&tables.Inscriptions{}).Where("tx_id=? and `index`=?", outpoint.Hash.String(), outpoint.Index).Find(&list).Error
 	if errors.Is(err, gorm.ErrRecordNotFound) {
 		err = nil
 	}

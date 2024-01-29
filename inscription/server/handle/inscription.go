@@ -2,7 +2,6 @@ package handle
 
 import (
 	"errors"
-	"github.com/btcsuite/btcd/txscript"
 	"github.com/btcsuite/btcd/wire"
 	"github.com/gin-gonic/gin"
 	"github.com/inscription-c/insc/constants"
@@ -23,7 +22,7 @@ type RespInscription struct {
 	InscriptionNum  int64    `json:"inscription_number"`
 	Next            string   `json:"next"`
 	Previous        string   `json:"previous"`
-	Address         string   `json:"address"`
+	Owner           string   `json:"address"`
 	Sat             uint64   `json:"sat"`
 	ContentLength   int      `json:"content_length"`
 	ContentType     string   `json:"content_type"`
@@ -32,7 +31,7 @@ type RespInscription struct {
 	OutputValue     int64    `json:"output_value"`
 	SatPoint        string   `json:"satpoint"`
 	Timestamp       int64    `json:"timestamp"`
-	DstChain        string   `json:"dst_chain"`
+	ContractDesc    string   `json:"contract_desc"`
 	ContentProtocol string   `json:"content_protocol"`
 }
 
@@ -109,16 +108,6 @@ func (h *Handler) doInscription(ctx *gin.Context, query string) error {
 		return err
 	}
 
-	tx, err := h.RpcClient().GetRawTransaction(&outpoint.OutPoint.Hash)
-	if err != nil {
-		return err
-	}
-	pkScript := tx.MsgTx().TxOut[inscription.Index].PkScript
-	_, address, _, err := txscript.ExtractPkScriptAddrs(pkScript, h.GetChainParams())
-	if err != nil {
-		return err
-	}
-
 	satPoint, err := h.DB().GetSatPointBySat(inscription.Sat)
 	if err != nil {
 		return err
@@ -128,11 +117,11 @@ func (h *Handler) doInscription(ctx *gin.Context, query string) error {
 		satPointStr = model.FormatSatPoint(satPoint.Outpoint, satPoint.Offset)
 	}
 
-	brc20c := &util.BRC20C{}
+	brc20c := &util.CBRC20{}
 	brc20c.Reset(inscription.Body)
 	contentProtocol := ""
 	if brc20c.Check() == nil {
-		contentProtocol = constants.ProtocolBRC20C
+		contentProtocol = constants.ProtocolCBRC20
 	}
 
 	resp := &RespInscription{
@@ -142,13 +131,13 @@ func (h *Handler) doInscription(ctx *gin.Context, query string) error {
 		GenesisHeight:   inscription.Height,
 		GenesisFee:      inscription.Fee,
 		OutputValue:     value,
-		Address:         address[0].String(),
+		Owner:           inscription.Owner,
 		Sat:             inscription.Sat,
 		SatPoint:        satPointStr,
 		ContentType:     inscription.ContentType,
 		ContentLength:   len(inscription.Body),
 		Timestamp:       inscription.Timestamp,
-		DstChain:        inscription.DstChain,
+		ContractDesc:    inscription.ContractDesc,
 		ContentProtocol: contentProtocol,
 		Previous:        preInscriptionId,
 		Next:            nextInscriptionId,

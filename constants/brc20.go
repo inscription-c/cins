@@ -1,7 +1,7 @@
 package constants
 
 const (
-	ProtocolBRC20C  = "brc-20-c"
+	ProtocolCBRC20  = "c-brc-20"
 	OperationDeploy = "deploy"
 	OperationMint   = "mint"
 	DecimalsDefault = "18"

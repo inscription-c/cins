@@ -1,6 +1,7 @@
 package handle
 
 import (
+	"encoding/json"
 	"github.com/gin-gonic/gin"
 	"github.com/gogf/gf/v2/util/gconv"
 	"github.com/inscription-c/insc/constants"
@@ -36,7 +37,7 @@ func (h *Handler) doBRC20CMintHistory(ctx *gin.Context, tkidOrAddr string, page 
 	tkid := tables.StringToInscriptionId(tkidOrAddr)
 	if tkid == nil {
 		address := tkidOrAddr
-		res, err = h.DB().SumMintAmountByAddress(address, constants.ProtocolBRC20C, page, pageSize)
+		res, err = h.DB().SumMintAmountByAddress(address, constants.ProtocolCBRC20, page, pageSize)
 		if err != nil {
 			return err
 		}
@@ -53,7 +54,7 @@ func (h *Handler) doBRC20CMintHistory(ctx *gin.Context, tkidOrAddr string, page 
 		return nil
 	}
 
-	list, err := h.DB().FindMintHistoryByTkId(tkid.String(), constants.ProtocolBRC20C, constants.OperationMint, page, pageSize)
+	list, err := h.DB().FindMintHistoryByTkId(tkid.String(), constants.ProtocolCBRC20, constants.OperationMint, page, pageSize)
 	if err != nil {
 		return err
 	}
@@ -67,12 +68,17 @@ func (h *Handler) doBRC20CMintHistory(ctx *gin.Context, tkidOrAddr string, page 
 		return err
 	}
 
+	contractDesc := make(gin.H)
+	if err := json.Unmarshal([]byte(deploy.ContractDesc), &contractDesc); err != nil {
+		return err
+	}
+
 	ctx.JSON(http.StatusOK, gin.H{
-		"chain":        deploy.DstChain,
-		"ticker_id":    deploy.InscriptionId,
-		"page_index":   page,
-		"more":         more,
-		"mint_history": list,
+		"contract_desc": contractDesc,
+		"ticker_id":     deploy.InscriptionId,
+		"page_index":    page,
+		"more":          more,
+		"mint_history":  list,
 	})
 	return nil
 }

@@ -7,6 +7,7 @@ import (
 	"github.com/gogf/gf/v2/util/gutil"
 	"github.com/inscription-c/insc/constants"
 	"github.com/inscription-c/insc/inscription/index/model"
+	"github.com/inscription-c/insc/internal/util"
 )
 
 // Witness is a struct that represents a witness in a transaction.
@@ -35,7 +36,7 @@ func (w *Witness) IsTaprootScript() bool {
 	// Get the length of the witness
 	l := len(w.TxWitness)
 	// Get the last element of the witness
-	lastElement := w.TxWitness[len(w.TxWitness)-1]
+	lastElement := w.TxWitness[l-1]
 	// Check if the last element is an annex
 	isAnnex := l >= 2 && len(lastElement) > 0 && lastElement[0] == txscript.TaprootAnnexTag
 	// If the last element is an annex, set the position from last to 3
@@ -67,11 +68,12 @@ func (w *Witness) ScriptTokenizer() *txscript.ScriptTokenizer {
 // - stutter: a boolean that indicates whether the envelope is stuttered.
 // - payload: a pointer to an Inscription struct that represents the payload of the envelope.
 type Envelope struct {
-	index   uint32             // The index of the input in the transaction
-	offset  uint32             // The offset of the envelope in the transaction
-	pushNum bool               // Indicates whether the envelope is a push number envelope
-	stutter bool               // Indicates whether the envelope is stuttered
-	payload *model.Inscription // The payload of the envelope
+	index   uint32
+	owner   string
+	offset  uint32
+	pushNum bool
+	stutter bool
+	payload *model.Inscription
 }
 
 // Envelopes is a slice of pointers to Envelope.
@@ -96,7 +98,7 @@ func EnvelopeFromRawEnvelope(raw RawEnvelopes) Envelopes {
 			envelopes = append(envelopes, envelope)
 		}
 	}
-	return envelopes // Return the slice of envelopes
+	return envelopes
 }
 
 // fromRawEnvelope is a function that creates an envelope from a raw envelope.
@@ -170,7 +172,7 @@ func fromRawEnvelope(r *RawEnvelope) *Envelope {
 	contentType := TagContentType.RemoveField(fields)
 	metadata := TagMetadata.RemoveField(fields)
 	pointer := TagPointer.RemoveField(fields)
-	dstChain := TagDstChain.RemoveField(fields)
+	contractDesc := TagContractDesc.RemoveField(fields)
 
 	// Check for unrecognized even fields in the remaining map
 	unrecognizedEvenField := false
@@ -182,6 +184,7 @@ func fromRawEnvelope(r *RawEnvelope) *Envelope {
 	}
 
 	return &Envelope{
+		owner:   r.owner,
 		index:   r.index,
 		offset:  r.offset,
 		pushNum: r.pushNum,
@@ -190,7 +193,7 @@ func fromRawEnvelope(r *RawEnvelope) *Envelope {
 			Body:                  body,
 			ContentEncoding:       contentEncoding,
 			ContentType:           contentType,
-			DstChain:              dstChain,
+			ContractDesc:          contractDesc,
 			Metadata:              metadata,
 			Pointer:               pointer,
 			UnRecognizedEvenField: unrecognizedEvenField,
@@ -211,11 +214,12 @@ type RawEnvelopes []*RawEnvelope
 // - pushNum: a boolean that indicates whether the envelope is a push number envelope.
 // - stutter: a boolean that indicates whether the envelope is stuttered.
 type RawEnvelope struct {
-	payload [][]byte // The payload of the envelope
-	index   uint32   // The index of the input in the transaction
-	offset  uint32   // The offset of the envelope in the transaction
-	pushNum bool     // Indicates whether the envelope is a push number envelope
-	stutter bool     // Indicates whether the envelope is stuttered
+	payload [][]byte
+	owner   string
+	index   uint32
+	offset  uint32
+	pushNum bool
+	stutter bool
 }
 
 // RawEnvelopeFromTransaction is a function that creates raw envelopes from a transaction.
@@ -234,14 +238,25 @@ func RawEnvelopeFromTransaction(tx *wire.MsgTx) RawEnvelopes {
 		if !w.IsTaprootScript() {
 			continue
 		}
+
 		stuttered := false
+		var owner string
+		if index == 0 {
+			_, address, _, err := txscript.ExtractPkScriptAddrs(tx.TxOut[index].PkScript, util.ActiveNet.Params)
+			if err != nil {
+				continue
+			}
+			if len(address) > 0 {
+				owner = address[0].String()
+			}
+		}
 		tokenizer := w.ScriptTokenizer()
 		for tokenizer.Next() {
 			// Create a raw envelope from the instructions
 			envelope, stutter := fromInstructions(tokenizer, uint32(index), uint32(len(envelopes)), stuttered)
 			// Check if the envelope is not nil
 			if envelope != nil {
-				// If not, append the envelope to the slice of envelopes
+				envelope.owner = owner
 				envelopes = append(envelopes, envelope)
 			} else {
 				// If the envelope is nil, set the stuttered flag to the value of stutter
@@ -260,10 +275,10 @@ type PushBytes []byte
 // It returns a pointer to a RawEnvelope and a boolean value.
 // The boolean value indicates whether the opcode is a push bytes opcode.
 func fromInstructions(
-	instructions *txscript.ScriptTokenizer, // The script tokenizer to process
-	index uint32, // The index of the input
-	offset uint32, // The offset for the envelope
-	stutter bool, // A flag indicating whether the envelope is stuttered
+	instructions *txscript.ScriptTokenizer,
+	index uint32,
+	offset uint32,
+	stutter bool,
 ) (*RawEnvelope, bool) {
 	// If the opcode does not match OP_IF, return nil and whether the opcode is a push bytes opcode
 	if !accept(instructions, txscript.OP_IF) {
@@ -345,6 +360,7 @@ func fromInstructions(
 			if !isPushBytes(instructions.Opcode()) {
 				return nil, false
 			}
+			pushNum = false
 			payload = append(payload, instructions.Data())
 		}
 	}
@@ -354,9 +370,10 @@ func fromInstructions(
 // accept checks if the tokenizers opcode matches the instruction.
 func accept(tokenizer *txscript.ScriptTokenizer, instruction interface{}) bool {
 	switch instruction.(type) {
-	case byte:
-		opCode := instruction.(byte)
-		return tokenizer.Opcode() == opCode
+	case int:
+		tokenOpCode := tokenizer.Opcode()
+		opCode := byte(instruction.(int))
+		return tokenOpCode == opCode
 	case PushBytes:
 		pushBytes := instruction.(PushBytes)
 		if len(pushBytes) > 0 && bytes.Compare(tokenizer.Data(), pushBytes) != 0 {

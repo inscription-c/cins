@@ -6,9 +6,9 @@ import (
 )
 
 const (
-	AppName    = "insc"
-	ProtocolId = "ins-c"
-	DstChain   = 10_000
+	AppName      = "cins"
+	ProtocolId   = "c-ins"
+	ContractDesc = -1
 
 	DefaultPostage = 10_000
 	MaxPostage     = 20_000

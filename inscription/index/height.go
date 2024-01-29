@@ -30,3 +30,11 @@ func (h *Height) N() uint32 {
 func (h *Height) Subsidy() uint64 {
 	return NewEpochFrom(h).Subsidy() // Return the subsidy of the Epoch created from the Height
 }
+
+// StartingSat  is a method that gets the starting Sat of a Height.
+func (h *Height) StartingSat() Sat {
+	epoch := NewEpochFrom(h)
+	epochStartingSat := epoch.StartingSat()
+	epochStartingHeight := epoch.StartingHeight()
+	return epochStartingSat + Sat(uint64(h.N()-epochStartingHeight.N())*epoch.Subsidy())
+}

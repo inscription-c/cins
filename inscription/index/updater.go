@@ -2,9 +2,7 @@ package index
 
 import (
 	"errors"
-	"github.com/btcsuite/btcd/chaincfg/chainhash"
 	"github.com/btcsuite/btcd/rpcclient"
-	"github.com/btcsuite/btcd/txscript"
 	"github.com/btcsuite/btcd/wire"
 	"github.com/gogf/gf/v2/util/gconv"
 	"github.com/gogf/gf/v2/util/gutil"
@@ -104,7 +102,7 @@ type InscriptionUpdater struct {
 	flotsam []*Flotsam
 
 	// lostSats is an uint64 that represents the total number of lost Satoshis.
-	lostSats uint64
+	lostSats *uint64
 
 	// reward is an uint64 that represents the total reward for mining a block.
 	reward uint64
@@ -513,13 +511,13 @@ func (u *InscriptionUpdater) indexEnvelopers(
 	if isCoinBase {
 		for _, flotsam := range floatingInscriptions {
 			newSatpoint := &model.SatPoint{
-				Offset: u.lostSats + flotsam.Offset - outputValue,
+				Offset: *u.lostSats + flotsam.Offset - outputValue,
 			}
 			if err := u.updateInscriptionLocation(inputSatRange, flotsam, newSatpoint); err != nil {
 				return err
 			}
 		}
-		u.lostSats += u.reward - outputValue
+		*u.lostSats += u.reward - outputValue
 		return nil
 	}
 
@@ -576,7 +574,7 @@ func (u *InscriptionUpdater) updateInscriptionLocation(
 			if !atomic.CompareAndSwapUint64(u.blessedInscriptionCount, number, number+1) {
 				return errors.New("blessedInscriptionCount compare and swap failed")
 			}
-			inscriptionNumber = int64(number) + 1
+			inscriptionNumber = int64(number)
 		}
 		// Increment the sequence number.
 		sequenceNumber = *u.nextSequenceNumber
@@ -650,6 +648,8 @@ func (u *InscriptionUpdater) updateInscriptionLocation(
 			Index:           inscription.index,
 			SequenceNum:     sequenceNumber,
 			InscriptionNum:  inscriptionNumber,
+			Owner:           inscription.owner,
+			ContractDesc:    string(inscription.payload.ContractDesc),
 			Charms:          charms,
 			Fee:             uint64(flotsam.Origin.New.Fee),
 			Height:          u.idx.height,
@@ -657,7 +657,7 @@ func (u *InscriptionUpdater) updateInscriptionLocation(
 			Body:            inscription.payload.Body,
 			ContentEncoding: string(inscription.payload.ContentEncoding),
 			ContentType:     string(inscription.payload.ContentType),
-			DstChain:        string(inscription.payload.DstChain),
+			ContentSize:     uint32(len(inscription.payload.Body)),
 			Metadata:        inscription.payload.Metadata,
 			Pointer:         gconv.Int32(string(inscription.payload.Pointer)),
 		}
@@ -670,29 +670,8 @@ func (u *InscriptionUpdater) updateInscriptionLocation(
 		if err := u.wtx.CreateInscription(entry); err != nil {
 			return err
 		}
-		txHash, err := chainhash.NewHashFromStr(inscriptionId.TxId)
-		if err != nil {
-			return err
-		}
-		tx, err := u.idx.opts.cli.GetRawTransaction(txHash)
-		if err != nil {
-			return err
-		}
-
-		preOutpoint := &tx.MsgTx().TxIn[inscription.index].PreviousOutPoint
-		tx, err = u.idx.opts.cli.GetRawTransaction(&preOutpoint.Hash)
-		if err != nil {
-			return err
-		}
-		_, addrs, _, err := txscript.ExtractPkScriptAddrs(tx.MsgTx().TxOut[preOutpoint.Index].PkScript, util.ActiveNet.Params)
-		if err != nil {
-			return err
-		}
-		if len(addrs) == 0 {
-			return errors.New("no address found")
-		}
 		// Create protocol entry
-		p := NewProtocol(u.wtx, entry, addrs[0].String())
+		p := NewProtocol(u.wtx, entry)
 		if err := p.SaveProtocol(); err != nil {
 			return err
 		}

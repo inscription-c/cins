@@ -23,6 +23,10 @@ func AmountToSat(amount float64) Sat {
 // Sat represents a uint64 value of Sat.
 type Sat uint64
 
+func (s *Sat) N() uint64 {
+	return uint64(*s)
+}
+
 // Sat converts an Amount to Sat.
 // It multiplies the Amount by OneBtc and returns the integer part.
 func (a Amount) Sat() Sat {
@@ -77,4 +81,10 @@ func (s *Sat) EpochPosition() Sat {
 // It calculates the third by taking the modulus of the epoch position with the epoch subsidy.
 func (s *Sat) Third() uint64 {
 	return uint64(s.EpochPosition()) % s.Epoch().Subsidy()
+}
+
+func (s *Sat) Common() bool {
+	epoch := s.Epoch()
+	startingSat := epoch.StartingSat()
+	return (s.N()-startingSat.N())%epoch.Subsidy() != 0
 }

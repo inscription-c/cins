@@ -5,21 +5,20 @@ import (
 	"errors"
 	"fmt"
 	"github.com/inscription-c/insc/constants"
-	"github.com/inscription-c/insc/inscription/index/tables"
 	"regexp"
 	"strconv"
 )
 
 func init() {
-	RegisterProtocol(&BRC20C{})
+	RegisterProtocol(&CBRC20{})
 }
 
 // tickNameRegexp is a regular expression that matches valid tick names.
 var tickNameRegexp = regexp.MustCompile(`^[a-zA-Z0-9-]+$`)
 
-// BRC20C is a struct that represents a BRC20C protocol.
+// CBRC20 is a struct that represents a BRC20C protocol.
 // It contains the protocol name, operation, tick, max, limit, decimals, tkId, amount, and to.
-type BRC20C struct {
+type CBRC20 struct {
 	DefaultProtocol
 
 	Protocol  string `json:"p"`
@@ -30,15 +29,15 @@ type BRC20C struct {
 	Limit    string `json:"lim,omitempty"`
 	Decimals string `json:"dec,omitempty"`
 
-	TkId   string `json:"tkid,omitempty"` // mint
-	Amount string `json:"amt,omitempty"`
-	To     string `json:"to,omitempty"`
+	//TkId   string `json:"tkid,omitempty"` // mint
+	//Amount string `json:"amt,omitempty"`
+	//To     string `json:"to,omitempty"`
 }
 
 // Name is a method of the BRC20C struct.
 // It returns the name of the BRC20C protocol.
-func (b *BRC20C) Name() string {
-	return constants.ProtocolBRC20C
+func (b *CBRC20) Name() string {
+	return constants.ProtocolCBRC20
 }
 
 // Check is a method of the BRC20C struct.
@@ -47,12 +46,12 @@ func (b *BRC20C) Name() string {
 // If the operation is "deploy", it checks the max, limit, and decimals.
 // If the operation is "mint", it checks the tkId.
 // If the operation is not supported, it returns an error.
-func (b *BRC20C) Check() error {
-	p := &BRC20C{}
+func (b *CBRC20) Check() error {
+	p := &CBRC20{}
 	if err := json.Unmarshal(b.Data(), p); err != nil {
 		return err
 	}
-	if p.Protocol != constants.ProtocolBRC20C {
+	if p.Protocol != constants.ProtocolCBRC20 {
 		return errors.New("protocol not match")
 	}
 	if !tickNameRegexp.MatchString(p.Tick) {
@@ -61,9 +60,6 @@ func (b *BRC20C) Check() error {
 
 	switch p.Operation {
 	case constants.OperationDeploy:
-		p.TkId = ""
-		p.Amount = ""
-		p.To = ""
 		var err error
 		var tokenMax uint64
 		if p.Max != "" {
@@ -91,13 +87,13 @@ func (b *BRC20C) Check() error {
 				return err
 			}
 		}
-	case constants.OperationMint:
-		p.Max = ""
-		p.Limit = ""
-		p.Decimals = ""
-		if tables.StringToInscriptionId(p.TkId) == nil {
-			return errors.New("tkid invalid")
-		}
+	//case constants.OperationMint:
+	//	p.Max = ""
+	//	p.Limit = ""
+	//	p.Decimals = ""
+	//	if tables.StringToInscriptionId(p.TkId) == nil {
+	//		return errors.New("tkid invalid")
+	//	}
 	default:
 		return fmt.Errorf("op `%s` not support", p.Operation)
 	}
@@ -108,6 +104,6 @@ func (b *BRC20C) Check() error {
 }
 
 // Clone returns a new DefaultProtocol.
-func (b *BRC20C) Clone() Protocol {
-	return &BRC20C{}
+func (b *CBRC20) Clone() Protocol {
+	return &CBRC20{}
 }

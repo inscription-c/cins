@@ -40,14 +40,14 @@ func (h *Handler) doBRC20CHolders(ctx *gin.Context, tkid string, page int) error
 	if err != nil {
 		return err
 	}
-	if protocol.Id == 0 || protocol.Protocol != constants.ProtocolBRC20C {
+	if protocol.Id == 0 || protocol.Protocol != constants.ProtocolCBRC20 {
 		ctx.Status(http.StatusNotFound)
 		return nil
 	}
 	if protocol.Operator == constants.OperationMint {
-		tkid = tables.StringToInscriptionId(protocol.TkID).String()
+		//tkid = tables.StringToInscriptionId(protocol.TkID).String()
 	}
-	list, err := h.DB().FindHoldersByTkId(tkid, constants.ProtocolBRC20C, constants.OperationMint, page, pageSize)
+	list, err := h.DB().FindHoldersByTkId(tkid, constants.ProtocolCBRC20, constants.OperationMint, page, pageSize)
 	if err != nil {
 		return err
 	}
