@@ -97,9 +97,9 @@ type Inscription struct {
 // It contains the destination chain, the content type, the content encoding,
 // the pointer, and the metadata.
 type Header struct {
-	// ContractDesc is the destination chain for the inscription.
+	// UnlockCondition is the destination chain for the inscription.
 	// It follows the coin_type from https://github.com/satoshilabs/slips/blob/master/slip-0044.md
-	ContractDesc *ContractDesc `json:"contract_desc"`
+	UnlockCondition *UnlockCondition `json:"unlock_condition"`
 
 	// ContentType is the content type of the inscription.
 	ContentType constants.ContentType `json:"content_type"`
@@ -129,8 +129,8 @@ type options struct {
 	// walletPass is the password for the wallet.
 	walletPass string `validate:"required"`
 
-	// dstChain is the destination chain for the inscription.
-	contractDesc *ContractDesc
+	// unlockCondition is the destination chain for the inscription.
+	unlockCondition *UnlockCondition
 
 	// cborMetadata is the CBOR metadata for the inscription.
 	cborMetadata string
@@ -139,13 +139,13 @@ type options struct {
 	jsonMetadata string
 }
 
-type ContractDesc struct {
+type UnlockCondition struct {
 	Type     string `json:"type"`
-	Chain    string `json:"chain"`
-	Contract string `json:"contract"`
+	CoinType string `json:"coin_type"`
+	Unlocker string `json:"unlocker"`
 }
 
-func (c *ContractDesc) Bytes() []byte {
+func (c *UnlockCondition) Bytes() []byte {
 	d, _ := json.Marshal(c)
 	return d
 }
@@ -190,12 +190,12 @@ func WithJsonMetadata(jsonMetadata string) func(*options) {
 	}
 }
 
-// WithContractDesc is a function that sets the destination chain option for an Inscription.
+// WithUnlockCondition is a function that sets the destination chain option for an Inscription.
 // It takes a string representing the destination chain and returns a function that sets
 // the destination chain in the options of an Inscription.
-func WithContractDesc(contractDesc *ContractDesc) func(*options) {
+func WithUnlockCondition(unlockCondition *UnlockCondition) func(*options) {
 	return func(options *options) {
-		options.contractDesc = contractDesc
+		options.unlockCondition = unlockCondition
 	}
 }
 
@@ -262,8 +262,8 @@ func NewFromPath(path string, inputOpts ...Option) (*Inscription, error) {
 	// Create a new Inscription with the provided options
 	inscription := &Inscription{
 		Header: Header{
-			ContractDesc: opts.contractDesc,
-			Metadata:     &util.Reader{},
+			UnlockCondition: opts.unlockCondition,
+			Metadata:        &util.Reader{},
 		},
 		options: opts,
 	}
@@ -730,8 +730,8 @@ func (i *Inscription) AppendInscriptionContentToBuilder() error {
 		AddOp(txscript.OP_FALSE).
 		AddOp(txscript.OP_IF).
 		AddData([]byte(constants.ProtocolId)).
-		AddData([]byte(fmt.Sprint(constants.ContractDesc))).
-		AddData(i.Header.ContractDesc.Bytes()).
+		AddData([]byte(constants.UnlockCondition)).
+		AddData(i.Header.UnlockCondition.Bytes()).
 		AddOp(txscript.OP_1).
 		AddData(i.Header.ContentType.Bytes())
 

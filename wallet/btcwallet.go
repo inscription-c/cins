@@ -31,14 +31,15 @@ const (
 )
 
 var (
-	cfg          *Config
-	username     string
-	password     string
-	walletPass   string
-	testnet      bool
-	rpcConnect   string
-	dbListenPort string
-	indexSats    bool
+	cfg            *Config
+	username       string
+	password       string
+	walletPass     string
+	testnet        bool
+	rpcConnect     string
+	dbListenPort   string
+	indexSats      string
+	indexSpendSats string
 )
 
 var Cmd = &cobra.Command{
@@ -60,7 +61,8 @@ func init() {
 	Cmd.Flags().BoolVarP(&testnet, "testnet", "t", false, "bitcoin testnet3")
 	Cmd.Flags().StringVarP(&rpcConnect, "rpcconnect", "", "", "Hostname/IP and port of btcd RPC server to connect to (default localhost:8334, testnet: localhost:18334)")
 	Cmd.Flags().StringVarP(&dbListenPort, "dblistenport", "", constants.DefaultDBListenPort, "db listen port")
-	Cmd.Flags().BoolVarP(&indexSats, "indexsats", "", true, "index sats")
+	Cmd.Flags().StringVarP(&indexSats, "indexsats", "", "", "index sats, true/false")
+	Cmd.Flags().StringVarP(&indexSats, "indexspendsats", "", "", "index spend sats, true/false")
 	if err := Cmd.MarkFlagRequired("user"); err != nil {
 		fmt.Println(err)
 		os.Exit(1)
@@ -134,6 +136,7 @@ func Main() error {
 		index.WithClient(cli),
 		index.WithIndexSats(indexSats),
 		index.WithBatchClient(batchCli),
+		index.WithIndexSpendSats(indexSpendSats),
 	)
 	indexer.Start()
 	signal.AddInterruptHandler(func() {

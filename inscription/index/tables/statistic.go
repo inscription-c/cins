@@ -19,6 +19,7 @@ const (
 	StatisticSatRanges           StatisticType = "SatRanges"
 	StatisticUnboundInscriptions StatisticType = "UnboundInscriptions"
 	StatisticIndexTransactions   StatisticType = "IndexTransactions"
+	StatisticIndexSpentSats      StatisticType = "IndexSpentSats"
 )
 
 type Statistic struct {

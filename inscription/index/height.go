@@ -20,7 +20,7 @@ func NewHeight(height uint32) *Height {
 // It takes no parameters and returns an uint32.
 // The method returns the height of the Height.
 func (h *Height) N() uint32 {
-	return h.height // Return the height of the Height
+	return h.height
 }
 
 // Subsidy is a method that gets the subsidy of a Height.
@@ -28,7 +28,7 @@ func (h *Height) N() uint32 {
 // The method creates an Epoch from the Height and gets the subsidy of the Epoch.
 // It then returns the subsidy.
 func (h *Height) Subsidy() uint64 {
-	return NewEpochFrom(h).Subsidy() // Return the subsidy of the Epoch created from the Height
+	return NewEpochFrom(h).Subsidy()
 }
 
 // StartingSat  is a method that gets the starting Sat of a Height.

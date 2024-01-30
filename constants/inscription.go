@@ -6,9 +6,9 @@ import (
 )
 
 const (
-	AppName      = "cins"
-	ProtocolId   = "c-ins"
-	ContractDesc = -1
+	AppName         = "cins"
+	ProtocolId      = "c-ins"
+	UnlockCondition = "10000"
 
 	DefaultPostage = 10_000
 	MaxPostage     = 20_000
@@ -67,6 +67,15 @@ const (
 	ContentTypeVideoMp4         ContentType = "video/mp4"
 	ContentTypeVideoWebm        ContentType = "video/webm"
 )
+
+func (t ContentType) MediaType() MediaType {
+	for _, media := range Medias {
+		if media.ContentType == t {
+			return media.MediaType
+		}
+	}
+	return MediaUnknown
+}
 
 type BrotliMode int
 

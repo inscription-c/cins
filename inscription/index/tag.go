@@ -1,7 +1,6 @@
 package index
 
 import (
-	"fmt"
 	"github.com/inscription-c/insc/constants"
 )
 
@@ -19,7 +18,7 @@ const (
 	TagMetaprotocol
 	TagContentEncoding
 	TagDelegate
-	TagContractDesc
+	TagUnlockCondition
 
 	TagNop
 )
@@ -48,8 +47,8 @@ func TagFromBytes(bs []byte) TagType {
 	case 255:
 		return TagNop
 	default:
-		if string(bs) == fmt.Sprint(constants.ContractDesc) {
-			return TagContractDesc
+		if string(bs) == constants.UnlockCondition {
+			return TagUnlockCondition
 		}
 		return TagNop
 	}
@@ -78,8 +77,8 @@ func (t TagType) Bytes() []byte {
 		return []byte{11}
 	case TagNop:
 		return []byte{255}
-	case TagContractDesc:
-		return []byte(fmt.Sprint(constants.ContractDesc))
+	case TagUnlockCondition:
+		return []byte(constants.UnlockCondition)
 	default:
 		return []byte{}
 	}

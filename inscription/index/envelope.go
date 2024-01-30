@@ -2,11 +2,13 @@ package index
 
 import (
 	"bytes"
+	"encoding/json"
 	"github.com/btcsuite/btcd/txscript"
 	"github.com/btcsuite/btcd/wire"
 	"github.com/gogf/gf/v2/util/gutil"
 	"github.com/inscription-c/insc/constants"
 	"github.com/inscription-c/insc/inscription/index/model"
+	"github.com/inscription-c/insc/inscription/index/tables"
 	"github.com/inscription-c/insc/internal/util"
 )
 
@@ -172,7 +174,7 @@ func fromRawEnvelope(r *RawEnvelope) *Envelope {
 	contentType := TagContentType.RemoveField(fields)
 	metadata := TagMetadata.RemoveField(fields)
 	pointer := TagPointer.RemoveField(fields)
-	contractDesc := TagContractDesc.RemoveField(fields)
+	unlockConditionData := TagUnlockCondition.RemoveField(fields)
 
 	// Check for unrecognized even fields in the remaining map
 	unrecognizedEvenField := false
@@ -180,6 +182,33 @@ func fromRawEnvelope(r *RawEnvelope) *Envelope {
 		if v%2 == 0 {
 			unrecognizedEvenField = true
 			break
+		}
+	}
+
+	var unlockCondition *tables.UnlockCondition
+	if len(unlockConditionData) > 0 {
+		conditionMap := make(map[string]string)
+		if err := json.Unmarshal(unlockConditionData, &conditionMap); err != nil {
+			unrecognizedEvenField = true
+		} else {
+			for k, v := range conditionMap {
+				if k != "type" && k != "coin_type" && k != "unlocker" {
+					unrecognizedEvenField = true
+					break
+				}
+				if unlockCondition == nil {
+					unlockCondition = &tables.UnlockCondition{}
+				}
+
+				switch k {
+				case "type":
+					unlockCondition.Type = v
+				case "coin_type":
+					unlockCondition.CoinType = v
+				case "unlocker":
+					unlockCondition.Unlocker = v
+				}
+			}
 		}
 	}
 
@@ -192,8 +221,8 @@ func fromRawEnvelope(r *RawEnvelope) *Envelope {
 		payload: &model.Inscription{
 			Body:                  body,
 			ContentEncoding:       contentEncoding,
-			ContentType:           contentType,
-			ContractDesc:          contractDesc,
+			ContentType:           constants.ContentType(contentType),
+			UnlockCondition:       unlockCondition,
 			Metadata:              metadata,
 			Pointer:               pointer,
 			UnRecognizedEvenField: unrecognizedEvenField,

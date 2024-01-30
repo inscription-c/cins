@@ -6,7 +6,9 @@ import (
 	"github.com/btcsuite/btcd/chaincfg/chainhash"
 	"github.com/btcsuite/btcd/rpcclient"
 	"github.com/btcsuite/btcd/wire"
+	"github.com/go-playground/validator/v10"
 	"github.com/go-sql-driver/mysql"
+	"github.com/gogf/gf/v2/util/gconv"
 	"github.com/inscription-c/insc/constants"
 	"github.com/inscription-c/insc/inscription/index/dao"
 	"github.com/inscription-c/insc/inscription/index/model"
@@ -16,6 +18,8 @@ import (
 	"sync/atomic"
 	"time"
 )
+
+var validate = validator.New()
 
 // Options is a struct that holds configuration options for the Indexer.
 type Options struct {
@@ -27,7 +31,9 @@ type Options struct {
 	batchCli *rpcclient.Client
 
 	// indexSats is a boolean that indicates whether to index satoshis or not.
-	indexSats bool
+	indexSats string
+	// indexSpentSats is a boolean that indicates whether to index spent satoshis or not.
+	indexSpentSats string
 	// indexTransaction is a boolean that indicates whether to index transactions or not.
 	indexTransaction bool
 	// noIndexInscriptions is a boolean that indicates whether to index inscriptions or not.
@@ -64,9 +70,16 @@ func WithBatchClient(cli *rpcclient.Client) func(*Options) {
 }
 
 // WithIndexSats is a function that returns an Option.
-func WithIndexSats(indexSats bool) func(*Options) {
+func WithIndexSats(indexSats string) func(*Options) {
 	return func(options *Options) {
 		options.indexSats = indexSats
+	}
+}
+
+// WithIndexSpendSats is a function that returns an Option.
+func WithIndexSpendSats(indexSpendSats string) func(*Options) {
+	return func(options *Options) {
+		options.indexSpentSats = indexSpendSats
 	}
 }
 
@@ -86,6 +99,7 @@ type Indexer struct {
 	outputsInsertedSinceFlush uint64
 	// outputsTraversed is an uint32 that represents the number of outputs traversed.
 	outputsTraversed uint64
+	indexSats        bool
 	indexSpentSats   bool
 }
 
@@ -100,7 +114,6 @@ func NewIndexer(opts ...Option) *Indexer {
 	for _, v := range opts {
 		v(idx.opts)
 	}
-	// Initialize the rangeCache map.
 	idx.rangeCache = make(map[string][]*model.SatRange)
 	return idx
 }
@@ -157,7 +170,37 @@ func (idx *Indexer) BatchRpcClient() *rpcclient.Client {
 // The method returns an error if there is any issue during the indexing process.
 func (idx *Indexer) UpdateIndex() error {
 	var err error
+	if idx.opts.indexSats != "" || idx.opts.indexSpentSats != "" {
+		if err := idx.DB().Transaction(func(tx *dao.DB) error {
+			indexSats := gconv.Uint64(gconv.Bool(idx.opts.indexSats) || gconv.Bool(idx.opts.indexSpentSats))
+			if err := tx.SetStatistic(tables.StatisticIndexSats, indexSats); err != nil {
+				return err
+			}
+			if idx.opts.indexSpentSats != "" {
+				if err := tx.SetStatistic(tables.StatisticIndexSpentSats, gconv.Uint64(gconv.Bool(idx.opts.indexSpentSats))); err != nil {
+					return err
+				}
+			}
+			return nil
+		}); err != nil {
+			return err
+		}
+	}
+
 	wtx := idx.Begin()
+
+	indexSats, err := wtx.GetStatisticCountByName(tables.StatisticIndexSats)
+	if err != nil {
+		return err
+	}
+	idx.indexSats = indexSats > 0
+
+	indexSpentSats, err := wtx.GetStatisticCountByName(tables.StatisticIndexSpentSats)
+	if err != nil {
+		return err
+	}
+	idx.indexSpentSats = indexSpentSats > 0
+
 	// Get the current block count from the database.
 	idx.height, err = wtx.BlockCount()
 	if err != nil {
@@ -239,7 +282,7 @@ func (idx *Indexer) indexBlock(
 		return err
 	}
 
-	start := time.Now()
+	startTime := time.Now()
 	satRangesWritten := uint64(0)
 	outputsInBlock := uint64(0)
 	indexInscriptions :=
@@ -266,10 +309,13 @@ func (idx *Indexer) indexBlock(
 	if err != nil {
 		return err
 	}
+	sequenceNumber := nextSequenceNumber
+
 	inscriptionUpdater := &InscriptionUpdater{
 		wtx:                     wtx,
 		idx:                     idx,
 		valueCache:              valueCache,
+		reward:                  NewHeight(idx.height).Subsidy(),
 		lostSats:                &lostSats,
 		nextSequenceNumber:      &nextSequenceNumber,
 		unboundInscriptions:     &unboundInscriptions,
@@ -279,7 +325,7 @@ func (idx *Indexer) indexBlock(
 	}
 
 	// If the indexer is configured to index satoshis, index the satoshis in the block.
-	if idx.opts.indexSats {
+	if idx.indexSats {
 		coinbaseInputs := make([]*model.SatRange, 0)
 		h := NewHeight(idx.height)
 		if h.Subsidy() > 0 {
@@ -308,7 +354,7 @@ func (idx *Indexer) indexBlock(
 				if satRanges != nil {
 					idx.outputsCached++
 				} else {
-					inputSatRanges, err = idx.DB().OutpointToSatRanges(key)
+					inputSatRanges, err = wtx.OutpointToSatRanges(key)
 					if err != nil {
 						return err
 					}
@@ -398,21 +444,23 @@ func (idx *Indexer) indexBlock(
 	}
 
 	if indexInscriptions {
-		// If the indexer is configured to index inscriptions, save the block information into the database.
 		buf := bytes.NewBufferString("")
 		if err := block.Header.Serialize(buf); err != nil {
 			return err
 		}
-		if err := wtx.SaveBlockInfo(&tables.BlockInfo{
-			Height:      idx.height,
-			SequenceNum: *inscriptionUpdater.nextSequenceNumber,
-			Header:      buf.Bytes(),
-		}); err != nil {
+		blockInfo := &tables.BlockInfo{
+			Height: idx.height,
+			Header: buf.Bytes(),
+		}
+		if *inscriptionUpdater.nextSequenceNumber > sequenceNumber {
+			blockInfo.SequenceNum = *inscriptionUpdater.nextSequenceNumber
+		}
+		if err := wtx.SaveBlockInfo(blockInfo); err != nil {
 			return err
 		}
 	}
 
-	if idx.opts.indexSats {
+	if idx.indexSats {
 		if err := wtx.SetStatistic(tables.StatisticLostSats, lostSats); err != nil {
 			return err
 		}
@@ -434,7 +482,7 @@ func (idx *Indexer) indexBlock(
 	// Increment the height of the indexer and the number of outputs traversed.
 	atomic.AddUint32(&idx.height, 1)
 	atomic.AddUint64(&idx.outputsTraversed, outputsInBlock)
-	log.Srv.Infof("Block Height %d Wrote %d sat ranges from %d outputs in %d ms", idx.height-1, satRangesWritten, outputsInBlock, time.Since(start).Milliseconds())
+	log.Srv.Infof("Block Height %d Wrote %d sat ranges from %d outputs in %d ms", idx.height-1, satRangesWritten, outputsInBlock, time.Since(startTime).Milliseconds())
 	return nil
 }
 
@@ -446,7 +494,7 @@ func (idx *Indexer) commit(wtx *dao.DB, valueCache *ValueCache) (err error) {
 	)
 
 	// If the indexer is configured to index satoshis, flush the satoshi range cache to the database.
-	if idx.opts.indexSats {
+	if idx.indexSats {
 		log.Srv.Infof(
 			"Flushing %d entries (%.1f%% resulting from %d insertions) from memory to database",
 			len(idx.rangeCache),
@@ -457,6 +505,7 @@ func (idx *Indexer) commit(wtx *dao.DB, valueCache *ValueCache) (err error) {
 			return err
 		}
 		idx.outputsInsertedSinceFlush = 0
+		idx.rangeCache = make(map[string][]*model.SatRange)
 	}
 
 	// Update the value cache.

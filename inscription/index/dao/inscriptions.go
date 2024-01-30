@@ -64,6 +64,16 @@ func (d *DB) CreateInscription(ins *tables.Inscriptions) error {
 	return d.DB.Create(ins).Error
 }
 
+// GetInscriptionByInscriptionNum retrieves an inscription by its sequence number.
+// It returns the inscription and any error encountered.
+func (d *DB) GetInscriptionByInscriptionNum(inscriptionNum int64) (ins tables.Inscriptions, err error) {
+	err = d.Where("inscription_num = ?", inscriptionNum).First(&ins).Error
+	if errors.Is(err, gorm.ErrRecordNotFound) {
+		err = nil
+	}
+	return
+}
+
 // GetInscriptionBySequenceNum retrieves an inscription by its sequence number.
 // It returns the inscription and any error encountered.
 func (d *DB) GetInscriptionBySequenceNum(sequenceNum uint64) (ins tables.Inscriptions, err error) {

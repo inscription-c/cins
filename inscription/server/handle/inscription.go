@@ -17,22 +17,22 @@ import (
 
 // RespInscription is a struct that represents the response for an inscription request.
 type RespInscription struct {
-	InscriptionId   string   `json:"inscription_id"`
-	Charms          []string `json:"charms"`
-	InscriptionNum  int64    `json:"inscription_number"`
-	Next            string   `json:"next"`
-	Previous        string   `json:"previous"`
-	Owner           string   `json:"address"`
-	Sat             uint64   `json:"sat"`
-	ContentLength   int      `json:"content_length"`
-	ContentType     string   `json:"content_type"`
-	GenesisFee      uint64   `json:"genesis_fee"`
-	GenesisHeight   uint32   `json:"genesis_height"`
-	OutputValue     int64    `json:"output_value"`
-	SatPoint        string   `json:"satpoint"`
-	Timestamp       int64    `json:"timestamp"`
-	ContractDesc    string   `json:"contract_desc"`
-	ContentProtocol string   `json:"content_protocol"`
+	InscriptionId   string                  `json:"inscription_id"`
+	Charms          []string                `json:"charms"`
+	InscriptionNum  int64                   `json:"inscription_number"`
+	Next            string                  `json:"next"`
+	Previous        string                  `json:"previous"`
+	Owner           string                  `json:"address"`
+	Sat             uint64                  `json:"sat"`
+	ContentLength   int                     `json:"content_length"`
+	ContentType     string                  `json:"content_type"`
+	GenesisFee      uint64                  `json:"genesis_fee"`
+	GenesisHeight   uint32                  `json:"genesis_height"`
+	OutputValue     int64                   `json:"output_value"`
+	SatPoint        string                  `json:"satpoint"`
+	Timestamp       int64                   `json:"timestamp"`
+	UnlockCondition *tables.UnlockCondition `json:"unlock_condition"`
+	ContentProtocol string                  `json:"content_protocol"`
 }
 
 // Inscription is a handler function for handling inscription requests.
@@ -65,13 +65,13 @@ func (h *Handler) doInscription(ctx *gin.Context, query string) error {
 			return err
 		}
 	} else {
-		var sequenceNum uint64
-		sequenceNum, err = strconv.ParseUint(query, 10, 64)
+		var inscriptionNum int64
+		inscriptionNum, err = strconv.ParseInt(query, 10, 64)
 		if err != nil {
 			ctx.Status(http.StatusBadRequest)
 			return nil
 		}
-		inscription, err = h.DB().GetInscriptionBySequenceNum(sequenceNum)
+		inscription, err = h.DB().GetInscriptionByInscriptionNum(inscriptionNum)
 		if err != nil {
 			return err
 		}
@@ -137,7 +137,7 @@ func (h *Handler) doInscription(ctx *gin.Context, query string) error {
 		ContentType:     inscription.ContentType,
 		ContentLength:   len(inscription.Body),
 		Timestamp:       inscription.Timestamp,
-		ContractDesc:    inscription.ContractDesc,
+		UnlockCondition: inscription.UnlockCondition,
 		ContentProtocol: contentProtocol,
 		Previous:        preInscriptionId,
 		Next:            nextInscriptionId,

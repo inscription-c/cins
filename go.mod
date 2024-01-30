@@ -4,14 +4,14 @@ go 1.21
 
 require (
 	github.com/andybalholm/brotli v1.1.0
-	github.com/btcsuite/btcd v0.24.0
+	github.com/btcsuite/btcd v0.24.1-0.20240116200649-17fdc5219b36
 	github.com/btcsuite/btcd/btcec/v2 v2.3.2
 	github.com/btcsuite/btcd/btcutil v1.1.5
 	github.com/btcsuite/btcd/chaincfg/chainhash v1.1.0
 	github.com/btcsuite/btclog v0.0.0-20170628155309-84c8d2346e9f
-	github.com/btcsuite/btcwallet v0.16.9
-	github.com/btcsuite/btcwallet/walletdb v1.4.0
-	github.com/btcsuite/btcwallet/wtxmgr v1.5.0
+	github.com/btcsuite/btcwallet v0.16.10-0.20240130014358-d356b543e83c
+	github.com/btcsuite/btcwallet/walletdb v1.4.2-0.20240130014358-d356b543e83c
+	github.com/btcsuite/btcwallet/wtxmgr v1.5.2-0.20240130014358-d356b543e83c
 	github.com/btcsuite/go-socks v0.0.0-20170105172521-4720035b7bfd
 	github.com/btcsuite/websocket v0.0.0-20150119174127-31079b680792
 	github.com/btcsuite/winsvc v1.0.0
@@ -26,7 +26,7 @@ require (
 	github.com/jessevdk/go-flags v1.5.0
 	github.com/jrick/logrotate v1.0.0
 	github.com/kataras/iris/v12 v12.2.0
-	github.com/lightninglabs/neutrino v0.15.0
+	github.com/lightninglabs/neutrino v0.16.0
 	github.com/nareix/joy4 v0.0.0-20200507095837-05a4ffbb5369
 	github.com/opentracing/opentracing-go v1.2.0
 	github.com/pingcap/failpoint v0.0.0-20220801062533-2eaa32854a6c
@@ -80,9 +80,9 @@ require (
 	github.com/beorn7/perks v1.0.1 // indirect
 	github.com/blacktear23/go-proxyprotocol v1.0.6 // indirect
 	github.com/btcsuite/btcd/btcutil/psbt v1.1.8 // indirect
-	github.com/btcsuite/btcwallet/wallet/txauthor v1.3.2 // indirect
-	github.com/btcsuite/btcwallet/wallet/txrules v1.2.0 // indirect
-	github.com/btcsuite/btcwallet/wallet/txsizes v1.2.3 // indirect
+	github.com/btcsuite/btcwallet/wallet/txauthor v1.3.4 // indirect
+	github.com/btcsuite/btcwallet/wallet/txrules v1.2.1 // indirect
+	github.com/btcsuite/btcwallet/wallet/txsizes v1.2.4 // indirect
 	github.com/bytedance/sonic v1.9.1 // indirect
 	github.com/carlmjohnson/flagext v0.21.0 // indirect
 	github.com/cespare/xxhash/v2 v2.2.0 // indirect
@@ -172,7 +172,7 @@ require (
 	github.com/lestrrat-go/jwx/v2 v2.0.17 // indirect
 	github.com/lestrrat-go/option v1.0.1 // indirect
 	github.com/lightninglabs/gozmq v0.0.0-20191113021534-d20a764486bf // indirect
-	github.com/lightninglabs/neutrino/cache v1.1.0 // indirect
+	github.com/lightninglabs/neutrino/cache v1.1.1 // indirect
 	github.com/lightningnetwork/lnd/clock v1.0.1 // indirect
 	github.com/lightningnetwork/lnd/queue v1.0.1 // indirect
 	github.com/lightningnetwork/lnd/ticker v1.0.0 // indirect
@@ -221,6 +221,7 @@ require (
 	github.com/soheilhy/cmux v0.1.5 // indirect
 	github.com/spf13/pflag v1.0.5 // indirect
 	github.com/spkg/bom v1.0.0 // indirect
+	github.com/stretchr/objx v0.5.0 // indirect
 	github.com/stretchr/testify v1.8.4 // indirect
 	github.com/syndtr/goleveldb v1.0.1-0.20210819022825-2ae1ddf74ef7 // indirect
 	github.com/tdewolff/minify/v2 v2.12.4 // indirect

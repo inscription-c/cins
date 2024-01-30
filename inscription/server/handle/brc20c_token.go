@@ -1,7 +1,6 @@
 package handle
 
 import (
-	"encoding/json"
 	"errors"
 	"github.com/gin-gonic/gin"
 	"github.com/inscription-c/insc/constants"
@@ -82,13 +81,8 @@ func (h *Handler) GetBRC20TokenInfo(token *tables.Protocol) (gin.H, error) {
 		if inscription.Id == 0 {
 			return errors.New("inscription not found")
 		}
-
-		m := make(gin.H)
-		if err := json.Unmarshal([]byte(inscription.ContractDesc), &m); err != nil {
-			return err
-		}
 		lock.Lock()
-		resp["contract_desc"] = m
+		resp["unlock_condition"] = inscription.UnlockCondition
 		//resp["metadata"] = hex.EncodeToString(inscription.Metadata)
 		lock.Unlock()
 		return nil

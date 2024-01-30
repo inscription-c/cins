@@ -32,7 +32,7 @@ var (
 	dryRun               bool
 	cbrc20               bool
 	destination          string
-	contractDesc         string
+	unlockCondition      string
 	dbAddr               string
 	dbUser               string
 	dbPass               string
@@ -47,7 +47,7 @@ func init() {
 	Cmd.Flags().StringVarP(&walletPass, "walletpass", "", "", "wallet password for master private key")
 	Cmd.Flags().BoolVarP(&testnet, "testnet", "t", false, "bitcoin testnet3")
 	Cmd.Flags().StringVarP(&inscriptionsFilePath, "filepath", "f", "", "inscription file path")
-	Cmd.Flags().StringVarP(&contractDesc, "contractdesc", "d", "", "destination contract description file path.")
+	Cmd.Flags().StringVarP(&unlockCondition, "unlockcondition", "d", "", "unlock condition file path.")
 	Cmd.Flags().StringVarP(&destination, "dest", "", "", "Send inscription to <DESTINATION> address.")
 	Cmd.Flags().StringVarP(&rpcConnect, "rpcconnect", "s", "localhost:8332", "the URL of wallet RPC server to connect to (default localhost:8332, testnet: localhost:18332)")
 	Cmd.Flags().Uint64VarP(&postage, "postage", "p", constants.DefaultPostage, "Amount of postage to include in the inscription. Default `10000sat`.")
@@ -67,7 +67,7 @@ func init() {
 		fmt.Println(err)
 		os.Exit(1)
 	}
-	if err := Cmd.MarkFlagRequired("contractdesc"); err != nil {
+	if err := Cmd.MarkFlagRequired("unlockcondition"); err != nil {
 		fmt.Println(err)
 		os.Exit(1)
 	}
@@ -78,7 +78,7 @@ func configCheck() error {
 		rpcConnect = "localhost:18332"
 		util.ActiveNet = &netparams.TestNet3Params
 	}
-	
+
 	//if postage < constants.DustLimit {
 	//	return fmt.Errorf("postage must be greater than or equal %d", constants.DustLimit)
 	//}
@@ -150,14 +150,14 @@ func inscribe() error {
 		return err
 	}
 
-	contractDescFile, err := os.Open(contractDesc)
+	contractDescFile, err := os.Open(unlockCondition)
 	if err != nil {
 		return err
 	}
 	defer contractDescFile.Close()
 
-	contractDesc := &ContractDesc{}
-	if err := json.NewDecoder(contractDescFile).Decode(contractDesc); err != nil {
+	unlockCondition := &UnlockCondition{}
+	if err := json.NewDecoder(contractDescFile).Decode(unlockCondition); err != nil {
 		return err
 	}
 
@@ -166,7 +166,7 @@ func inscribe() error {
 		WithDB(db),
 		WithWalletClient(walletCli),
 		WithPostage(postage),
-		WithContractDesc(contractDesc),
+		WithUnlockCondition(unlockCondition),
 		WithWalletPass(walletPass),
 		WithCborMetadata(cborMetadata),
 		WithJsonMetadata(jsonMetadata),

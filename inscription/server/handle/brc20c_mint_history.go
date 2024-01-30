@@ -1,7 +1,6 @@
 package handle
 
 import (
-	"encoding/json"
 	"github.com/gin-gonic/gin"
 	"github.com/gogf/gf/v2/util/gconv"
 	"github.com/inscription-c/insc/constants"
@@ -68,17 +67,12 @@ func (h *Handler) doBRC20CMintHistory(ctx *gin.Context, tkidOrAddr string, page 
 		return err
 	}
 
-	contractDesc := make(gin.H)
-	if err := json.Unmarshal([]byte(deploy.ContractDesc), &contractDesc); err != nil {
-		return err
-	}
-
 	ctx.JSON(http.StatusOK, gin.H{
-		"contract_desc": contractDesc,
-		"ticker_id":     deploy.InscriptionId,
-		"page_index":    page,
-		"more":          more,
-		"mint_history":  list,
+		"unlock_condition": deploy.UnlockCondition,
+		"ticker_id":        deploy.InscriptionId,
+		"page_index":       page,
+		"more":             more,
+		"mint_history":     list,
 	})
 	return nil
 }
