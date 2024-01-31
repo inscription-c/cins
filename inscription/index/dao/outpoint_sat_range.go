@@ -2,7 +2,6 @@ package dao
 
 import (
 	"errors"
-	"github.com/inscription-c/insc/inscription/index/model"
 	"github.com/inscription-c/insc/inscription/index/tables"
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
@@ -11,7 +10,7 @@ import (
 // SetOutpointToSatRange sets the satoshi range for a set of outpoints.
 // It takes a map where the keys are outpoints and the values are the corresponding satoshi ranges.
 // It returns any error encountered during the operation.
-func (d *DB) SetOutpointToSatRange(rangeCache map[string][]*model.SatRange) (err error) {
+func (d *DB) SetOutpointToSatRange(rangeCache map[string][]*tables.SatRange) (err error) {
 	list := make([]*tables.OutpointSatRange, 0, len(rangeCache))
 
 	for outpoint, satRanges := range rangeCache {
@@ -27,7 +26,7 @@ func (d *DB) SetOutpointToSatRange(rangeCache map[string][]*model.SatRange) (err
 }
 
 // OutpointToSatRanges returns the satoshi ranges for a given outpoint.
-func (d *DB) OutpointToSatRanges(outpoint string) ([]*model.SatRange, error) {
+func (d *DB) OutpointToSatRanges(outpoint string) ([]*tables.SatRange, error) {
 	var list []*tables.OutpointSatRange
 	err := d.DB.Where("outpoint = ?", outpoint).Find(&list).Error
 	if err != nil {
@@ -37,9 +36,9 @@ func (d *DB) OutpointToSatRanges(outpoint string) ([]*model.SatRange, error) {
 		return nil, err
 	}
 
-	ranges := make([]*model.SatRange, 0, len(list))
+	ranges := make([]*tables.SatRange, 0, len(list))
 	for _, v := range list {
-		ranges = append(ranges, &model.SatRange{
+		ranges = append(ranges, &tables.SatRange{
 			Start: v.Start,
 			End:   v.End,
 		})
@@ -48,19 +47,19 @@ func (d *DB) OutpointToSatRanges(outpoint string) ([]*model.SatRange, error) {
 }
 
 // DelSatPointByOutpoint deletes the satoshi range for a given outpoint.
-func (d *DB) DelSatPointByOutpoint(outpoint string) ([]*model.SatRange, error) {
+func (d *DB) DelSatPointByOutpoint(outpoint string) ([]*tables.SatRange, error) {
 	var list []*tables.OutpointSatRange
 	err := d.DB.Clauses(clause.Returning{}).Where("outpoint = ?", outpoint).Delete(&list).Error
 	if errors.Is(err, gorm.ErrRecordNotFound) {
 		err = nil
 	}
 
-	result := make([]*model.SatRange, 0, len(list))
+	result := make([]*tables.SatRange, 0, len(list))
 	if len(list) == 0 {
 		return result, nil
 	}
 	for _, v := range list {
-		result = append(result, &model.SatRange{
+		result = append(result, &tables.SatRange{
 			Start: v.Start,
 			End:   v.End,
 		})

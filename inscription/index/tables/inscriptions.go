@@ -1,9 +1,11 @@
 package tables
 
 import (
+	"encoding/json"
 	"fmt"
 	"github.com/gogf/gf/v2/util/gconv"
 	"github.com/inscription-c/insc/constants"
+	"os"
 	"strings"
 	"time"
 )
@@ -36,6 +38,37 @@ type UnlockCondition struct {
 	Type     string `gorm:"column:type;type:varchar(255);default:'';NOT NULL" json:"type"` // blockchain/ordinals
 	CoinType string `gorm:"column:coin_type;type:varchar(255);default:'';NOT NULL" json:"coin_type"`
 	Unlocker string `gorm:"column:unlocker;type:varchar(255);index:idx_unlocker;default:'';NOT NULL" json:"unlocker"`
+}
+
+func (u *UnlockCondition) Data() []byte {
+	data, _ := json.Marshal(u)
+	return data
+}
+
+func UnlockConditionFromFile(file string) (*UnlockCondition, error) {
+	data, err := os.ReadFile(file)
+	if err != nil {
+		return nil, err
+	}
+	return UnlockConditionFromBytes(data)
+}
+
+func UnlockConditionFromBytes(data []byte) (*UnlockCondition, error) {
+	m := make(map[string]string)
+	if err := json.Unmarshal(data, &m); err != nil {
+		return nil, err
+	}
+	for k := range m {
+		if k != "type" && k != "coin_type" && k != "unlocker" {
+			return nil, fmt.Errorf("invalid unlock condition")
+		}
+	}
+
+	unlockCondition := &UnlockCondition{}
+	if err := gconv.Struct(m, unlockCondition); err != nil {
+		return nil, err
+	}
+	return unlockCondition, nil
 }
 
 func (i *Inscriptions) TableName() string {
@@ -73,4 +106,13 @@ func StringToInscriptionId(s string) *InscriptionId {
 		TxId:   insId[0],
 		Offset: gconv.Uint32(insId[1]),
 	}
+}
+
+type Outpoint struct {
+	TxId  string `gorm:"column:tx_id;type:varchar(255);index:idx_tx_id;default:'';NOT NULL" json:"txid"` // tx id
+	Index uint32 `gorm:"column:index;type:int unsigned;default:0;NOT NULL"`                              // outpoint index of tx
+}
+
+func (o *Outpoint) String() string {
+	return fmt.Sprintf("%s%s%d", o.TxId, constants.OutpointDelimiter, o.Index)
 }

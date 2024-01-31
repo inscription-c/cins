@@ -87,7 +87,7 @@ type OriginNew struct {
 
 // OriginOld represents an old origin of an inscription.
 type OriginOld struct {
-	OldSatPoint model.SatPoint
+	OldSatPoint tables.SatPoint
 }
 
 // InscriptionUpdater is responsible for updating inscriptions.
@@ -189,14 +189,14 @@ type inscribedOffsetEntity struct {
 
 // locationsInscription represents the location of an inscription.
 type locationsInscription struct {
-	satpoint *model.SatPoint
+	satpoint *tables.SatPoint
 	flotsam  *Flotsam
 }
 
 // indexEnvelopers indexes the envelopers of a transaction.
 func (u *InscriptionUpdater) indexEnvelopers(
 	tx *wire.MsgTx,
-	inputSatRange []*model.SatRange) error {
+	inputSatRange []*tables.SatRange) error {
 
 	idCounter := uint32(0)
 
@@ -206,7 +206,10 @@ func (u *InscriptionUpdater) indexEnvelopers(
 
 	inscribedOffsets := make(map[uint64]*inscribedOffsetEntity)
 
-	envelopes := ParsedEnvelopFromTransaction(tx)
+	envelopes, err := util.NewPeekable(ParsedEnvelopFromTransaction(tx))
+	if err != nil {
+		return err
+	}
 
 	totalOutputValue := int64(0)
 	for _, v := range tx.TxOut {
@@ -289,7 +292,11 @@ func (u *InscriptionUpdater) indexEnvelopers(
 		totalInputValue += currentInputValue
 
 		// Loop over each inscription in the input.
-		for _, inscription := range envelopes {
+		for v := envelopes.Peek(); ; v = envelopes.Peek() {
+			if v == nil {
+				break
+			}
+			inscription := v.(*Envelope)
 			if inscription.index != uint32(inputIndex) {
 				break
 			}
@@ -383,6 +390,7 @@ func (u *InscriptionUpdater) indexEnvelopers(
 			// Increment the count of the inscribed offset entity.
 			inscribedOffset.count++
 			idCounter++
+			envelopes.Next()
 		}
 	}
 
@@ -396,6 +404,9 @@ func (u *InscriptionUpdater) indexEnvelopers(
 
 	// still have to normalize over inscription size
 	for _, flotsam := range floatingInscriptions {
+		if flotsam.Origin.New == nil {
+			continue
+		}
 		flotsam.Origin.New.Fee = (totalInputValue - totalOutputValue) / int64(idCounter)
 	}
 
@@ -423,35 +434,37 @@ func (u *InscriptionUpdater) indexEnvelopers(
 	outputValue := uint64(0)
 
 	// Initialize a map to associate each range of Satoshis in the transaction outputs with the corresponding output index (vout).
-	rangeToVoutMap := make(map[model.SatRange]int)
+	rangeToVoutMap := make(map[tables.SatRange]int)
 
 	// Initialize a slice to store the new locations of the inscriptions.
 	newLocations := make([]*locationsInscription, 0)
 
-	var floatingIdx int
-
+	inscriptions, err := util.NewPeekable(floatingInscriptions)
+	if err != nil {
+		return err
+	}
 	for index, txOut := range tx.TxOut {
 		end := outputValue + uint64(txOut.Value)
 
-		for ; floatingIdx < len(floatingInscriptions); floatingIdx++ {
-			flotsam := floatingInscriptions[floatingIdx]
+		for v := inscriptions.Peek(); ; v = inscriptions.Peek() {
+			if v == nil {
+				break
+			}
+			flotsam := v.(*Flotsam)
 			if flotsam.Offset >= end {
 				break
 			}
-			newSatpoint := &model.SatPoint{
-				Outpoint: wire.OutPoint{
-					Hash:  tx.TxHash(),
-					Index: uint32(index),
-				},
-				Offset: flotsam.Offset - outputValue,
+			newSatpoint := &tables.SatPoint{
+				Outpoint: tables.FormatOutpoint(tx.TxHash().String(), uint32(index)),
+				Offset:   flotsam.Offset - outputValue,
 			}
 			newLocations = append(newLocations, &locationsInscription{
 				satpoint: newSatpoint,
-				flotsam:  flotsam,
+				flotsam:  inscriptions.Next().(*Flotsam),
 			})
 		}
 
-		rangeToVoutMap[model.SatRange{
+		rangeToVoutMap[tables.SatRange{
 			Start: outputValue,
 			End:   end,
 		}] = index
@@ -468,19 +481,18 @@ func (u *InscriptionUpdater) indexEnvelopers(
 		flotsam := location.flotsam
 		newSatpoint := location.satpoint
 
-		pointer := gconv.Uint64(string(flotsam.Origin.New.Pointer))
-		if len(flotsam.Origin.New.Pointer) > 0 && pointer < outputValue {
-			for rangeEntity, vout := range rangeToVoutMap {
-				if pointer < rangeEntity.Start || pointer >= rangeEntity.End {
-					continue
-				}
-				flotsam.Offset = pointer
-				newSatpoint = &model.SatPoint{
-					Outpoint: wire.OutPoint{
-						Hash:  tx.TxHash(),
-						Index: uint32(vout),
-					},
-					Offset: pointer - rangeEntity.Start,
+		if flotsam.Origin.New != nil {
+			pointer := gconv.Uint64(string(flotsam.Origin.New.Pointer))
+			if len(flotsam.Origin.New.Pointer) > 0 && pointer < outputValue {
+				for rangeEntity, vout := range rangeToVoutMap {
+					if pointer < rangeEntity.Start || pointer >= rangeEntity.End {
+						continue
+					}
+					flotsam.Offset = pointer
+					newSatpoint = &tables.SatPoint{
+						Outpoint: tables.FormatOutpoint(tx.TxHash().String(), uint32(vout)),
+						Offset:   pointer - rangeEntity.Start,
+					}
 				}
 			}
 		}
@@ -494,15 +506,18 @@ func (u *InscriptionUpdater) indexEnvelopers(
 	// If the transaction is a coinbase transaction,
 	// update the offset of each floating inscription
 	// and add them to the list of floating inscriptions in the updater.
-	inscriptions := floatingInscriptions[floatingIdx:]
 	if isCoinBase {
-		for _, flotsam := range inscriptions {
-			newSatpoint := &model.SatPoint{
+		if err := inscriptions.Range(func(i int, v interface{}) error {
+			flotsam := v.(*Flotsam)
+			newSatpoint := &tables.SatPoint{
 				Offset: *u.lostSats + flotsam.Offset - outputValue,
 			}
 			if err := u.updateInscriptionLocation(inputSatRange, flotsam, newSatpoint); err != nil {
 				return err
 			}
+			return nil
+		}); err != nil {
+			return err
 		}
 		*u.lostSats += u.reward - outputValue
 		return nil
@@ -511,11 +526,13 @@ func (u *InscriptionUpdater) indexEnvelopers(
 	// If the transaction is not a coinbase transaction,
 	// update the offset of each floating inscription
 	// and add them to the list of floating inscriptions in the updater.
-	if len(inscriptions) > 0 {
-		for _, inscription := range inscriptions {
-			inscription.Offset = u.reward + inscription.Offset - outputValue
-		}
-		u.flotsam = append(u.flotsam, inscriptions...)
+	if err := inscriptions.Range(func(i int, v interface{}) error {
+		flotsam := v.(*Flotsam)
+		flotsam.Offset = u.reward + flotsam.Offset - outputValue
+		u.flotsam = append(u.flotsam, flotsam)
+		return nil
+	}); err != nil {
+		return err
 	}
 	// Update the total reward by subtracting the total value
 	// of the outputs from the total value of the inputs.
@@ -526,28 +543,26 @@ func (u *InscriptionUpdater) indexEnvelopers(
 
 // updateInscriptionLocation updates the location of an inscription.
 func (u *InscriptionUpdater) updateInscriptionLocation(
-	inputSatRanges []*model.SatRange,
+	inputSatRanges []*tables.SatRange,
 	flotsam *Flotsam,
-	newSatPoint *model.SatPoint,
+	newSatPoint *tables.SatPoint,
 ) error {
 
 	// Initialize error, unbound flag, and sequence number.
-	var err error
 	var unbound bool
 	var sequenceNumber uint64
 	inscriptionId := flotsam.InscriptionId
 
 	// If the origin of the flotsam is old, delete all by SatPoint and delete the inscription by ID.
 	if flotsam.Origin.Old != nil {
-		// Delete all by SatPoint from the database.
 		if err := u.wtx.DeleteAllBySatPoint(&flotsam.Origin.Old.OldSatPoint); err != nil {
 			return err
 		}
-		// Delete the inscription by ID from the database.
-		sequenceNumber, err = u.wtx.DeleteInscriptionById(inscriptionId)
+		inscription, err := u.wtx.GetInscriptionById(inscriptionId)
 		if err != nil {
 			return err
 		}
+		sequenceNumber = inscription.SequenceNum
 	} else if flotsam.Origin.New != nil { // If the origin of the flotsam is new, process it.
 		unbound = flotsam.Origin.New.Unbound
 		inscriptionNumber := int64(0)
@@ -566,13 +581,13 @@ func (u *InscriptionUpdater) updateInscriptionLocation(
 				return errors.New("blessedInscriptionCount compare and swap failed")
 			}
 			inscriptionNumber = int64(number)
+
 		}
 		// Increment the sequence number.
 		sequenceNumber = *u.nextSequenceNumber
 		if !atomic.CompareAndSwapUint64(u.nextSequenceNumber, sequenceNumber, sequenceNumber+1) {
 			return errors.New("nextSequenceNumber compare and swap failed")
 		}
-		sequenceNumber++
 
 		// If the flotsam is not unbound, calculate its Sat.
 		var sat *Sat
@@ -616,7 +631,11 @@ func (u *InscriptionUpdater) updateInscriptionLocation(
 		}
 
 		// If the new newSatPoint is empty, set the lost charm.
-		if util.IsEmptyHash(newSatPoint.Outpoint.Hash) {
+		outpoint, err := wire.NewOutPointFromString(newSatPoint.Outpoint)
+		if err != nil {
+			return err
+		}
+		if util.IsEmptyHash(outpoint.Hash) {
 			CharmLost.Set(&charms)
 		}
 
@@ -669,14 +688,13 @@ func (u *InscriptionUpdater) updateInscriptionLocation(
 		}
 	}
 
-	// Set the newSatPoint to the sequence number in the database.
 	satPoint := newSatPoint
 	if unbound {
 		unboundNum := *u.unboundInscriptions
 		if !atomic.CompareAndSwapUint64(u.unboundInscriptions, unboundNum, unboundNum+1) {
 			return errors.New("unboundInscriptions compare and swap failed")
 		}
-		satPoint = &model.SatPoint{
+		satPoint = &tables.SatPoint{
 			Offset: unboundNum,
 		}
 	}
@@ -688,7 +706,7 @@ func (u *InscriptionUpdater) updateInscriptionLocation(
 
 // calculateSat calculates the Sat of an inscription.
 func (u *InscriptionUpdater) calculateSat(
-	inputSatRanges []*model.SatRange,
+	inputSatRanges []*tables.SatRange,
 	inputOffset uint64,
 ) *Sat {
 	// Initialize an offset counter starting from 0.

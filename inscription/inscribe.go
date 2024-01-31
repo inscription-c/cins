@@ -1,7 +1,6 @@
 package inscription
 
 import (
-	"encoding/json"
 	"errors"
 	"fmt"
 	"github.com/btcsuite/btcd/btcutil"
@@ -9,6 +8,7 @@ import (
 	"github.com/inscription-c/insc/btcd"
 	"github.com/inscription-c/insc/constants"
 	"github.com/inscription-c/insc/inscription/index/dao"
+	"github.com/inscription-c/insc/inscription/index/tables"
 	"github.com/inscription-c/insc/inscription/log"
 	"github.com/inscription-c/insc/inscription/server"
 	"github.com/inscription-c/insc/internal/signal"
@@ -32,7 +32,7 @@ var (
 	dryRun               bool
 	cbrc20               bool
 	destination          string
-	unlockCondition      string
+	unlockConditionFile  string
 	dbAddr               string
 	dbUser               string
 	dbPass               string
@@ -42,12 +42,12 @@ var (
 var InsufficientBalanceError = errors.New("InsufficientBalanceError")
 
 func init() {
-	Cmd.Flags().StringVarP(&username, "user", "u", "", "wallet rpc server username")
-	Cmd.Flags().StringVarP(&password, "password", "P", "", "wallet rpc server password")
-	Cmd.Flags().StringVarP(&walletPass, "walletpass", "", "", "wallet password for master private key")
+	Cmd.Flags().StringVarP(&username, "user", "u", "root", "wallet rpc server username")
+	Cmd.Flags().StringVarP(&password, "password", "P", "root", "wallet rpc server password")
+	Cmd.Flags().StringVarP(&walletPass, "walletpass", "", "root", "wallet password for master private key")
 	Cmd.Flags().BoolVarP(&testnet, "testnet", "t", false, "bitcoin testnet3")
 	Cmd.Flags().StringVarP(&inscriptionsFilePath, "filepath", "f", "", "inscription file path")
-	Cmd.Flags().StringVarP(&unlockCondition, "unlockcondition", "d", "", "unlock condition file path.")
+	Cmd.Flags().StringVarP(&unlockConditionFile, "unlockcondition", "d", "", "unlock condition file path.")
 	Cmd.Flags().StringVarP(&destination, "dest", "", "", "Send inscription to <DESTINATION> address.")
 	Cmd.Flags().StringVarP(&rpcConnect, "rpcconnect", "s", "localhost:8332", "the URL of wallet RPC server to connect to (default localhost:8332, testnet: localhost:18332)")
 	Cmd.Flags().Uint64VarP(&postage, "postage", "p", constants.DefaultPostage, "Amount of postage to include in the inscription. Default `10000sat`.")
@@ -90,6 +90,11 @@ func configCheck() error {
 	// logger variables may be used.
 	logFile := btcutil.AppDataDir(filepath.Join(constants.AppName, "inscription", "logs", "inscription.log"), false)
 	log.InitLogRotator(logFile)
+
+	// unlock condition check
+	if _, err := tables.UnlockConditionFromFile(unlockConditionFile); err != nil {
+		return err
+	}
 	return nil
 }
 
@@ -150,14 +155,9 @@ func inscribe() error {
 		return err
 	}
 
-	contractDescFile, err := os.Open(unlockCondition)
+	// Get the unlock condition from the file path
+	unlockCondition, err := tables.UnlockConditionFromFile(unlockConditionFile)
 	if err != nil {
-		return err
-	}
-	defer contractDescFile.Close()
-
-	unlockCondition := &UnlockCondition{}
-	if err := json.NewDecoder(contractDescFile).Decode(unlockCondition); err != nil {
 		return err
 	}
 

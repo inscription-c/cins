@@ -11,7 +11,7 @@ import (
 // Inscription is a struct that embeds tables.Inscriptions and util.SatPoint.
 type Inscription struct {
 	*tables.Inscriptions
-	*model.SatPoint
+	*tables.SatPoint
 }
 
 // NextSequenceNumber retrieves the next sequence number for inscriptions.
@@ -21,6 +21,7 @@ func (d *DB) NextSequenceNumber() (num uint64, err error) {
 	if err = d.Last(&ins).Error; err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			err = nil
+			return 1, nil
 		}
 		return
 	}

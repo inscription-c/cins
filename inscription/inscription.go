@@ -22,6 +22,7 @@ import (
 	"github.com/inscription-c/insc/inscription/index"
 	"github.com/inscription-c/insc/inscription/index/dao"
 	"github.com/inscription-c/insc/inscription/index/model"
+	"github.com/inscription-c/insc/inscription/index/tables"
 	"github.com/inscription-c/insc/inscription/log"
 	"github.com/inscription-c/insc/internal/util"
 	"github.com/shopspring/decimal"
@@ -99,7 +100,7 @@ type Inscription struct {
 type Header struct {
 	// UnlockCondition is the destination chain for the inscription.
 	// It follows the coin_type from https://github.com/satoshilabs/slips/blob/master/slip-0044.md
-	UnlockCondition *UnlockCondition `json:"unlock_condition"`
+	UnlockCondition *tables.UnlockCondition `json:"unlock_condition"`
 
 	// ContentType is the content type of the inscription.
 	ContentType constants.ContentType `json:"content_type"`
@@ -130,24 +131,13 @@ type options struct {
 	walletPass string `validate:"required"`
 
 	// unlockCondition is the destination chain for the inscription.
-	unlockCondition *UnlockCondition
+	unlockCondition *tables.UnlockCondition
 
 	// cborMetadata is the CBOR metadata for the inscription.
 	cborMetadata string
 
 	// jsonMetadata is the JSON metadata for the inscription.
 	jsonMetadata string
-}
-
-type UnlockCondition struct {
-	Type     string `json:"type"`
-	CoinType string `json:"coin_type"`
-	Unlocker string `json:"unlocker"`
-}
-
-func (c *UnlockCondition) Bytes() []byte {
-	d, _ := json.Marshal(c)
-	return d
 }
 
 // Option is a function type that takes a pointer to an options' struct.
@@ -193,7 +183,7 @@ func WithJsonMetadata(jsonMetadata string) func(*options) {
 // WithUnlockCondition is a function that sets the destination chain option for an Inscription.
 // It takes a string representing the destination chain and returns a function that sets
 // the destination chain in the options of an Inscription.
-func WithUnlockCondition(unlockCondition *UnlockCondition) func(*options) {
+func WithUnlockCondition(unlockCondition *tables.UnlockCondition) func(*options) {
 	return func(options *options) {
 		options.unlockCondition = unlockCondition
 	}
@@ -731,7 +721,7 @@ func (i *Inscription) AppendInscriptionContentToBuilder() error {
 		AddOp(txscript.OP_IF).
 		AddData([]byte(constants.ProtocolId)).
 		AddData([]byte(constants.UnlockCondition)).
-		AddData(i.Header.UnlockCondition.Bytes()).
+		AddData(i.Header.UnlockCondition.Data()).
 		AddOp(txscript.OP_1).
 		AddData(i.Header.ContentType.Bytes())
 
@@ -845,7 +835,7 @@ func (i *Inscription) getUtxo() error {
 	}
 
 	// Get wallet inscriptions UTXOs
-	walletInscriptions := make(map[string]struct{})
+	walletInscriptionsOutpoints := make(map[string]struct{})
 	for _, outpoint := range utoxTotal {
 		inscriptions, err := i.options.db.GetInscriptionByOutpoint(outpoint)
 		if err != nil && !errors.Is(err, gorm.ErrRecordNotFound) {
@@ -854,16 +844,17 @@ func (i *Inscription) getUtxo() error {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			continue
 		}
-		for _, v := range inscriptions {
-			walletInscriptions[v.String()] = struct{}{}
+		if len(inscriptions) == 0 {
+			continue
 		}
+		walletInscriptionsOutpoints[outpoint.String()] = struct{}{}
 	}
 
 	// Filter out UTXOs that are already used in inscriptions
 	utxo := make([]btcjson.ListUnspentResult, 0)
 	for _, v := range unspentUtxo {
 		outpoint := model.NewOutPoint(v.TxID, v.Vout)
-		if _, ok := walletInscriptions[outpoint.String()]; ok {
+		if _, ok := walletInscriptionsOutpoints[outpoint.String()]; ok {
 			continue
 		}
 		utxo = append(utxo, v)

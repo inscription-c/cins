@@ -5,6 +5,7 @@ import (
 	"github.com/btcsuite/btcd/wire"
 	"github.com/inscription-c/insc/inscription/index/tables"
 	"gorm.io/gorm"
+	"gorm.io/gorm/clause"
 )
 
 // BlockHeader retrieves the block header for a given block height.
@@ -82,16 +83,8 @@ func (d *DB) BlockCount() (count uint32, err error) {
 // If a block with the same height already exists, it updates the existing record.
 // It returns any error encountered.
 func (d *DB) SaveBlockInfo(block *tables.BlockInfo) error {
-	old := &tables.BlockInfo{}
-	// Check if a block with the same height already exists
-	err := d.DB.Where("height=?", block.Height).First(old).Error
-	if err != nil && !errors.Is(err, gorm.ErrRecordNotFound) {
-		return err
-	}
-	if err == nil {
-		// If a block with the same height exists, update the existing record
-		block.Id = old.Id
-	}
-	// Save the block info
-	return d.DB.Save(block).Error
+	return d.Clauses(clause.OnConflict{
+		Columns:   []clause.Column{{Name: "height"}},
+		DoUpdates: clause.AssignmentColumns([]string{"sequence_num", "header"}),
+	}).Create(block).Error
 }

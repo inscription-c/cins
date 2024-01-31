@@ -2,24 +2,27 @@ package dao
 
 import (
 	"errors"
-	"github.com/inscription-c/insc/inscription/index/model"
 	"github.com/inscription-c/insc/inscription/index/tables"
 	"gorm.io/gorm"
+	"gorm.io/gorm/clause"
 )
 
 // DeleteAllBySatPoint deletes all records by a given SatPoint.
 // It takes a SatPoint as a parameter.
 // It returns any error encountered during the operation.
-func (d *DB) DeleteAllBySatPoint(satpoint *model.SatPoint) error {
-	return d.Where("outpoint = ? AND offset = ?", satpoint.Outpoint.String(), satpoint.Offset).Delete(&tables.SatPoint{}).Error
+func (d *DB) DeleteAllBySatPoint(satpoint *tables.SatPoint) error {
+	return d.Where("outpoint = ? AND offset = ?", satpoint.Outpoint, satpoint.Offset).Delete(satpoint).Error
 }
 
 // SetSatPointToSequenceNum sets a SatPoint to a sequence number in the database.
 // It takes a SatPoint and a sequence number as parameters.
 // It returns any error encountered during the operation.
-func (d *DB) SetSatPointToSequenceNum(satPoint *model.SatPoint, sequenceNum uint64) error {
-	return d.Create(&tables.SatPoint{
-		Outpoint:    satPoint.Outpoint.String(),
+func (d *DB) SetSatPointToSequenceNum(satPoint *tables.SatPoint, sequenceNum uint64) error {
+	return d.Clauses(clause.OnConflict{
+		Columns:   []clause.Column{{Name: "outpoint"}, {Name: "offset"}},
+		DoUpdates: clause.AssignmentColumns([]string{"sequence_num"}),
+	}).Create(&tables.SatPoint{
+		Outpoint:    satPoint.Outpoint,
 		Offset:      satPoint.Offset,
 		SequenceNum: sequenceNum,
 	}).Error
@@ -57,8 +60,8 @@ func (d *DB) InscriptionsByOutpoint(outpoint string) (res []*Inscription, err er
 		satpoint := satpointMap[ins.SequenceNum]
 		res = append(res, &Inscription{
 			Inscriptions: ins,
-			SatPoint: &model.SatPoint{
-				Outpoint: model.StringToOutpoint(satpoint.Outpoint).OutPoint,
+			SatPoint: &tables.SatPoint{
+				Outpoint: satpoint.Outpoint,
 				Offset:   satpoint.Offset,
 			},
 		})

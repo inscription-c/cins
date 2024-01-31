@@ -2,6 +2,7 @@ package dao
 
 import (
 	"github.com/inscription-c/insc/inscription/index/tables"
+	"gorm.io/gorm/clause"
 )
 
 // GetValueByOutpoint retrieves the value associated with a given outpoint.
@@ -31,18 +32,17 @@ func (d *DB) DeleteValueByOutpoint(outpoints ...string) (err error) {
 // It takes a map where the keys are outpoints and the values are the corresponding values.
 // It returns any error encountered during the operation.
 func (d *DB) SetOutpointToValue(values map[string]int64) (err error) {
-	// Create a slice to hold the outpoint values
 	list := make([]*tables.OutpointValue, 0, len(values))
 
-	// Iterate over the values map
 	for outpoint, value := range values {
-		// Append a new OutpointValue to the list for each outpoint in the map
 		list = append(list, &tables.OutpointValue{
 			Outpoint: outpoint,
 			Value:    value,
 		})
 	}
 
-	// Create the OutpointValue records in the database
-	return d.DB.CreateInBatches(&list, 10_000).Error
+	return d.Clauses(clause.OnConflict{
+		Columns:   []clause.Column{{Name: "outpoint"}},
+		DoUpdates: clause.AssignmentColumns([]string{"value"}),
+	}).CreateInBatches(&list, 10_000).Error
 }
