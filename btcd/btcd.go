@@ -27,10 +27,11 @@ const (
 )
 
 type Options struct {
-	user      string
-	password  string
-	testnet   bool
-	rpcListen string
+	user        string
+	password    string
+	testnet     bool
+	rpcListen   string
+	miningAddrs []string
 }
 
 type Option func(*Options)
@@ -60,7 +61,8 @@ func init() {
 	Cmd.Flags().StringVarP(&options.user, "user", "u", "", "wallet api username")
 	Cmd.Flags().StringVarP(&options.password, "password", "P", "", "wallet api password")
 	Cmd.Flags().BoolVarP(&options.testnet, "testnet", "t", false, "bitcoin testnet3")
-	Cmd.Flags().StringVarP(&options.rpcListen, "rpclisten", "", ":8334", "Add an interface/port to listen for RPC connections (default port: 8334, testnet: 18334)")
+	Cmd.Flags().StringVarP(&options.rpcListen, "rpc_listen", "", ":8334", "Add an interface/port to listen for RPC connections (default port: 8334, testnet: 18334)")
+	Cmd.Flags().StringSliceVarP(&options.miningAddrs, "mining_addrs", "", []string{}, "Add the specified payment address to the list of addresses to use for generated blocks")
 	if err := Cmd.MarkFlagRequired("user"); err != nil {
 		btcdLog.Error(err)
 		os.Exit(1)
@@ -92,6 +94,12 @@ func WithTestnet(testnet bool) Option {
 func WithRpcListen(rpcListen string) Option {
 	return func(options *Options) {
 		options.rpcListen = rpcListen
+	}
+}
+
+func WithMiningAddr(addrs ...string) Option {
+	return func(o *Options) {
+		o.miningAddrs = addrs
 	}
 }
 

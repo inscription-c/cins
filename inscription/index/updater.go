@@ -196,7 +196,7 @@ type locationsInscription struct {
 // indexEnvelopers indexes the envelopers of a transaction.
 func (u *InscriptionUpdater) indexEnvelopers(
 	tx *wire.MsgTx,
-	inputSatRange []*tables.SatRange) error {
+	inputSatRange []*tables.OutpointSatRange) error {
 
 	idCounter := uint32(0)
 
@@ -509,10 +509,10 @@ func (u *InscriptionUpdater) indexEnvelopers(
 	if isCoinBase {
 		if err := inscriptions.Range(func(i int, v interface{}) error {
 			flotsam := v.(*Flotsam)
-			newSatpoint := &tables.SatPoint{
+			newSatPoint := &tables.SatPoint{
 				Offset: *u.lostSats + flotsam.Offset - outputValue,
 			}
-			if err := u.updateInscriptionLocation(inputSatRange, flotsam, newSatpoint); err != nil {
+			if err := u.updateInscriptionLocation(inputSatRange, flotsam, newSatPoint); err != nil {
 				return err
 			}
 			return nil
@@ -543,7 +543,7 @@ func (u *InscriptionUpdater) indexEnvelopers(
 
 // updateInscriptionLocation updates the location of an inscription.
 func (u *InscriptionUpdater) updateInscriptionLocation(
-	inputSatRanges []*tables.SatRange,
+	inputSatRanges []*tables.OutpointSatRange,
 	flotsam *Flotsam,
 	newSatPoint *tables.SatPoint,
 ) error {
@@ -706,7 +706,7 @@ func (u *InscriptionUpdater) updateInscriptionLocation(
 
 // calculateSat calculates the Sat of an inscription.
 func (u *InscriptionUpdater) calculateSat(
-	inputSatRanges []*tables.SatRange,
+	inputSatRanges []*tables.OutpointSatRange,
 	inputOffset uint64,
 ) *Sat {
 	// Initialize an offset counter starting from 0.

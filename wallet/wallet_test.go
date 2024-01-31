@@ -6,7 +6,8 @@ import (
 )
 
 func TestWallet(t *testing.T) {
-	testnet = true
+	Options.Testnet = true
+	Options.IndexSats = "true"
 	//indexNoSyncBlock = true
 	if err := Main(); err != nil {
 		t.Fatal(err)

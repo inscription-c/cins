@@ -284,14 +284,14 @@ func loadConfig() (*Config, []string, error) {
 		"::1":       {},
 	}
 
-	cfg.Username = username
-	cfg.Password = password
-	cfg.WalletPass = strings.TrimSpace(walletPass)
-	cfg.TestNet3 = testnet
-	cfg.RPCConnect = rpcConnect
+	cfg.Username = Options.Username
+	cfg.Password = Options.Password
+	cfg.WalletPass = strings.TrimSpace(Options.WalletPass)
+	cfg.TestNet3 = Options.Testnet
+	cfg.RPCConnect = Options.RpcConnect
 
 	if cfg.RPCConnect != "" {
-		rpcConnect, err := cfgutil.NormalizeAddress(rpcConnect, util.ActiveNet.RPCClientPort)
+		rpcConnect, err := cfgutil.NormalizeAddress(Options.RpcConnect, util.ActiveNet.RPCClientPort)
 		if err != nil {
 			return nil, nil, err
 		}

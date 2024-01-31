@@ -36,6 +36,7 @@ var (
 	dbAddr               string
 	dbUser               string
 	dbPass               string
+	noBackup             bool
 )
 
 // InsufficientBalanceError is an error that represents an insufficient balance.
@@ -44,21 +45,22 @@ var InsufficientBalanceError = errors.New("InsufficientBalanceError")
 func init() {
 	Cmd.Flags().StringVarP(&username, "user", "u", "root", "wallet rpc server username")
 	Cmd.Flags().StringVarP(&password, "password", "P", "root", "wallet rpc server password")
-	Cmd.Flags().StringVarP(&walletPass, "walletpass", "", "root", "wallet password for master private key")
+	Cmd.Flags().StringVarP(&walletPass, "wallet_pass", "", "root", "wallet password for master private key")
 	Cmd.Flags().BoolVarP(&testnet, "testnet", "t", false, "bitcoin testnet3")
 	Cmd.Flags().StringVarP(&inscriptionsFilePath, "filepath", "f", "", "inscription file path")
-	Cmd.Flags().StringVarP(&unlockConditionFile, "unlockcondition", "d", "", "unlock condition file path.")
+	Cmd.Flags().StringVarP(&unlockConditionFile, "unlock_condition", "d", "", "unlock condition file path.")
 	Cmd.Flags().StringVarP(&destination, "dest", "", "", "Send inscription to <DESTINATION> address.")
-	Cmd.Flags().StringVarP(&rpcConnect, "rpcconnect", "s", "localhost:8332", "the URL of wallet RPC server to connect to (default localhost:8332, testnet: localhost:18332)")
+	Cmd.Flags().StringVarP(&rpcConnect, "rpc_connect", "s", "localhost:8332", "the URL of wallet RPC server to connect to (default localhost:8332, testnet: localhost:18332)")
 	Cmd.Flags().Uint64VarP(&postage, "postage", "p", constants.DefaultPostage, "Amount of postage to include in the inscription. Default `10000sat`.")
 	Cmd.Flags().BoolVarP(&compress, "compress", "", false, "Compress inscription content with brotli.")
-	Cmd.Flags().StringVarP(&cborMetadata, "cbormetadata", "", "", "Include CBOR in file at <METADATA> as inscription metadata")
-	Cmd.Flags().StringVarP(&jsonMetadata, "jsonmetadata", "", "", "Include JSON in file at <METADATA> converted to CBOR as inscription metadata")
-	Cmd.Flags().BoolVarP(&dryRun, "dryrun", "", false, "Don't sign or broadcast transactions.")
-	Cmd.Flags().BoolVarP(&cbrc20, "cbrc20", "", false, "is c-brc-20 protocol, add this flag will auto check protocol content effectiveness")
-	Cmd.Flags().StringVarP(&dbAddr, "dbaddr", "", fmt.Sprintf("localhost:%s", constants.DefaultDBListenPort), "index server database address")
-	Cmd.Flags().StringVarP(&dbUser, "dbuser", "", "root", "index server database user")
-	Cmd.Flags().StringVarP(&dbPass, "dbpass", "", "", "index server database password")
+	Cmd.Flags().StringVarP(&cborMetadata, "cbor_metadata", "", "", "Include CBOR in file at <METADATA> as inscription metadata")
+	Cmd.Flags().StringVarP(&jsonMetadata, "json_metadata", "", "", "Include JSON in file at <METADATA> converted to CBOR as inscription metadata")
+	Cmd.Flags().BoolVarP(&dryRun, "dry_run", "", false, "Don't sign or broadcast transactions.")
+	Cmd.Flags().BoolVarP(&cbrc20, "c_brc_20", "", false, "is c-brc-20 protocol, add this flag will auto check protocol content effectiveness")
+	Cmd.Flags().StringVarP(&dbAddr, "db_addr", "", fmt.Sprintf("localhost:%s", constants.DefaultDBListenPort), "index server database address")
+	Cmd.Flags().StringVarP(&dbUser, "db_user", "", "root", "index server database user")
+	Cmd.Flags().StringVarP(&dbPass, "db_pass", "", "", "index server database password")
+	Cmd.Flags().BoolVarP(&noBackup, "no_backup", "", false, "Do not back up recovery key.")
 	if err := Cmd.MarkFlagRequired("filepath"); err != nil {
 		fmt.Println(err)
 		os.Exit(1)
@@ -67,7 +69,7 @@ func init() {
 		fmt.Println(err)
 		os.Exit(1)
 	}
-	if err := Cmd.MarkFlagRequired("unlockcondition"); err != nil {
+	if err := Cmd.MarkFlagRequired("unlock_condition"); err != nil {
 		fmt.Println(err)
 		os.Exit(1)
 	}
@@ -200,6 +202,17 @@ func inscribe() error {
 	// Sign the commit transaction
 	if err := inscription.SignCommitTx(); err != nil {
 		return err
+	}
+
+	// backup temporary private key
+	if !noBackup {
+		wif, err := btcutil.NewWIF(inscription.priKey, util.ActiveNet.Params, true)
+		if err != nil {
+			return err
+		}
+		if err := walletCli.ImportPrivKey(wif); err != nil {
+			return err
+		}
 	}
 
 	// Send the commit transaction

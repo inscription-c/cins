@@ -31,17 +31,23 @@ const (
 )
 
 var (
-	cfg              *Config
-	username         string
-	password         string
-	walletPass       string
-	testnet          bool
-	rpcConnect       string
-	dbListenPort     string
-	indexSats        string
-	indexSpendSats   string
-	indexNoSyncBlock bool
+	cfg *Config
 )
+
+type walletOptions struct {
+	Username         string
+	Password         string
+	WalletPass       string
+	Testnet          bool
+	RpcConnect       string
+	DbListenPort     string
+	IndexSats        string
+	IndexSpendSats   string
+	IndexNoSyncBlock bool
+	MiningAddrs      []string
+}
+
+var Options = &walletOptions{}
 
 var Cmd = &cobra.Command{
 	Use:   "wallet",
@@ -56,15 +62,16 @@ var Cmd = &cobra.Command{
 }
 
 func init() {
-	Cmd.Flags().StringVarP(&username, "user", "u", "root", "btcd rpc server username")
-	Cmd.Flags().StringVarP(&password, "password", "P", "root", "btcd rpc server password")
-	Cmd.Flags().StringVarP(&walletPass, "walletpass", "", "root", "wallet password")
-	Cmd.Flags().BoolVarP(&testnet, "testnet", "t", false, "bitcoin testnet3")
-	Cmd.Flags().StringVarP(&rpcConnect, "rpcconnect", "", "", "Hostname/IP and port of btcd RPC server to connect to (default localhost:8334, testnet: localhost:18334)")
-	Cmd.Flags().StringVarP(&dbListenPort, "dblistenport", "", constants.DefaultDBListenPort, "db listen port")
-	Cmd.Flags().StringVarP(&indexSats, "indexsats", "", "", "index sats, true/false")
-	Cmd.Flags().StringVarP(&indexSats, "indexspendsats", "", "", "index spend sats, true/false")
-	Cmd.Flags().BoolVarP(&indexNoSyncBlock, "indexnosyncblock", "", false, "index no sync block")
+	Cmd.Flags().StringVarP(&Options.Username, "user", "u", "root", "btcd rpc server username")
+	Cmd.Flags().StringVarP(&Options.Password, "password", "P", "root", "btcd rpc server password")
+	Cmd.Flags().StringVarP(&Options.WalletPass, "wallet_pass", "", "root", "wallet password")
+	Cmd.Flags().BoolVarP(&Options.Testnet, "testnet", "t", false, "bitcoin testnet3")
+	Cmd.Flags().StringVarP(&Options.RpcConnect, "rpc_connect", "", "", "Hostname/IP and port of btcd RPC server to connect to (default localhost:8334, testnet: localhost:18334)")
+	Cmd.Flags().StringVarP(&Options.DbListenPort, "db_listen_port", "", constants.DefaultDBListenPort, "db listen port")
+	Cmd.Flags().StringVarP(&Options.IndexSats, "index_sats", "", "", "Track location of all satoshis, true/false")
+	Cmd.Flags().StringVarP(&Options.IndexSpendSats, "index_spend_sats", "", "", "Keep sat index entries of spent outputs, true/false")
+	Cmd.Flags().BoolVarP(&Options.IndexNoSyncBlock, "index_no_sync_block", "", false, "index no sync block")
+	Cmd.Flags().StringSliceVarP(&Options.MiningAddrs, "mining_addrs", "", []string{}, "Add the specified payment address to the list of addresses to use for generated blocks")
 	if err := Cmd.MarkFlagRequired("user"); err != nil {
 		fmt.Println(err)
 		os.Exit(1)
@@ -73,24 +80,26 @@ func init() {
 		fmt.Println(err)
 		os.Exit(1)
 	}
-	if err := Cmd.MarkFlagRequired("walletpass"); err != nil {
+	if err := Cmd.MarkFlagRequired("wallet_pass"); err != nil {
 		fmt.Println(err)
 		os.Exit(1)
 	}
 }
 
 func Main() error {
-	if rpcConnect == "" {
+	if Options.RpcConnect == "" {
 		btcdRpcListen := btcdRpcListenMainNet
-		if testnet {
+		if Options.Testnet {
 			btcdRpcListen = btcdRpcListenTestNet
 		}
-		rpcConnect = btcdRpcListen
+		Options.RpcConnect = btcdRpcListen
 		if err := btcd.Btcd(nil,
-			btcd.WithUser(username),
-			btcd.WithPassword(password),
-			btcd.WithTestnet(testnet),
-			btcd.WithRpcListen(btcdRpcListen)); err != nil {
+			btcd.WithUser(Options.Username),
+			btcd.WithPassword(Options.Password),
+			btcd.WithTestnet(Options.Testnet),
+			btcd.WithRpcListen(btcdRpcListen),
+			btcd.WithMiningAddr(Options.MiningAddrs...),
+		); err != nil {
 			return err
 		}
 	}
@@ -103,11 +112,11 @@ func Main() error {
 	log2.InitLogRotator(logFile)
 
 	db, err := dao.NewDB(
-		dao.WithAddr(fmt.Sprintf("localhost:%s", dbListenPort)),
+		dao.WithAddr(fmt.Sprintf("localhost:%s", Options.DbListenPort)),
 		dao.WithUser(constants.DefaultDBUser),
 		dao.WithPassword(constants.DefaultDBPass),
 		dao.WithDBName(constants.DefaultDBName),
-		dao.WithDataDir(constants.DBDatDir(testnet)),
+		dao.WithDataDir(constants.DBDatDir(Options.Testnet)),
 		dao.WithServerPort(constants.DefaultDBListenPort),
 		dao.WithStatusPort(constants.DefaultDbStatusListenPort),
 		dao.WithAutoMigrateTables(tables.Tables...),
@@ -116,15 +125,15 @@ func Main() error {
 		return err
 	}
 
-	disableTls, err := util.DisableTls(rpcConnect, util.ActiveNet.RPCClientPort)
+	disableTls, err := util.DisableTls(Options.RpcConnect, util.ActiveNet.RPCClientPort)
 	if err != nil {
 		return err
 	}
-	cli, err := btcd.NewClient(rpcConnect, username, password, disableTls)
+	cli, err := btcd.NewClient(Options.RpcConnect, Options.Username, Options.Password, disableTls)
 	if err != nil {
 		return err
 	}
-	batchCli, err := btcd.NewBatchClient(rpcConnect, username, password, disableTls)
+	batchCli, err := btcd.NewBatchClient(Options.RpcConnect, Options.Username, Options.Password, disableTls)
 	if err != nil {
 		return err
 	}
@@ -136,10 +145,10 @@ func Main() error {
 	indexer := index.NewIndexer(
 		index.WithDB(db),
 		index.WithClient(cli),
-		index.WithIndexSats(indexSats),
+		index.WithIndexSats(Options.IndexSats),
 		index.WithBatchClient(batchCli),
-		index.WithIndexSpendSats(indexSpendSats),
-		index.WithNoSyncBLockInfo(indexNoSyncBlock),
+		index.WithIndexSpendSats(Options.IndexSpendSats),
+		index.WithNoSyncBLockInfo(Options.IndexNoSyncBlock),
 	)
 	indexer.Start()
 	signal.AddInterruptHandler(func() {

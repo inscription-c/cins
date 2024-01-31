@@ -10,59 +10,31 @@ import (
 // SetOutpointToSatRange sets the satoshi range for a set of outpoints.
 // It takes a map where the keys are outpoints and the values are the corresponding satoshi ranges.
 // It returns any error encountered during the operation.
-func (d *DB) SetOutpointToSatRange(rangeCache map[string][]*tables.SatRange) (err error) {
-	list := make([]*tables.OutpointSatRange, 0, len(rangeCache))
-
-	for outpoint, satRanges := range rangeCache {
-		for _, satRange := range satRanges {
-			list = append(list, &tables.OutpointSatRange{
-				Outpoint: outpoint,
-				Start:    satRange.Start,
-				End:      satRange.End,
-			})
-		}
-	}
-	return d.DB.CreateInBatches(&list, 10_000).Error
+func (d *DB) SetOutpointToSatRange(list []*tables.OutpointSatRange) (err error) {
+	return d.Clauses(clause.OnConflict{
+		Columns:   []clause.Column{{Name: "outpoint"}, {Name: "start"}},
+		DoUpdates: clause.AssignmentColumns([]string{"end"}),
+	}).CreateInBatches(&list, 10_000).Error
 }
 
 // OutpointToSatRanges returns the satoshi ranges for a given outpoint.
-func (d *DB) OutpointToSatRanges(outpoint string) ([]*tables.SatRange, error) {
-	var list []*tables.OutpointSatRange
-	err := d.DB.Where("outpoint = ?", outpoint).Find(&list).Error
-	if err != nil {
-		if errors.Is(err, gorm.ErrRecordNotFound) {
-			err = nil
-		}
-		return nil, err
-	}
-
-	ranges := make([]*tables.SatRange, 0, len(list))
-	for _, v := range list {
-		ranges = append(ranges, &tables.SatRange{
-			Start: v.Start,
-			End:   v.End,
-		})
-	}
-	return ranges, nil
-}
-
-// DelSatPointByOutpoint deletes the satoshi range for a given outpoint.
-func (d *DB) DelSatPointByOutpoint(outpoint string) ([]*tables.SatRange, error) {
-	var list []*tables.OutpointSatRange
-	err := d.DB.Clauses(clause.Returning{}).Where("outpoint = ?", outpoint).Delete(&list).Error
+func (d *DB) OutpointToSatRanges(outpoint string) (list []*tables.OutpointSatRange, err error) {
+	err = d.Where("outpoint = ?", outpoint).Find(&list).Error
 	if errors.Is(err, gorm.ErrRecordNotFound) {
 		err = nil
 	}
+	return
+}
 
-	result := make([]*tables.SatRange, 0, len(list))
+// DelSatRangesByOutpoint deletes the satoshi ranges for a given outpoint.
+func (d *DB) DelSatRangesByOutpoint(outpoint string) (list []*tables.OutpointSatRange, err error) {
+	list, err = d.OutpointToSatRanges(outpoint)
+	if err != nil {
+		return nil, err
+	}
 	if len(list) == 0 {
-		return result, nil
+		return
 	}
-	for _, v := range list {
-		result = append(result, &tables.SatRange{
-			Start: v.Start,
-			End:   v.End,
-		})
-	}
-	return result, nil
+	err = d.Where("outpoint = ?", outpoint).Delete(&tables.OutpointSatRange{}).Error
+	return
 }

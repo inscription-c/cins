@@ -112,9 +112,9 @@ func (h *Handler) doInscription(ctx *gin.Context, query string) error {
 	if err != nil {
 		return err
 	}
-	satPointStr := model.FormatSatPoint(wire.OutPoint{}.String(), 0)
+	satPointStr := tables.FormatSatPoint(wire.OutPoint{}.String(), 0)
 	if satPoint.Id > 0 {
-		satPointStr = model.FormatSatPoint(satPoint.Outpoint, satPoint.Offset)
+		satPointStr = tables.FormatSatPoint(satPoint.Outpoint, satPoint.Offset)
 	}
 
 	brc20c := &util.CBRC20{}

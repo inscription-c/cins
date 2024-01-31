@@ -162,7 +162,7 @@ func createWallet(cfg *Config) error {
 		return err
 	}
 	fmt.Println("Creating the wallet...")
-	w, err := loader.CreateNewWallet([]byte(cfg.WalletPass), []byte(walletPass), seed, time.Now())
+	w, err := loader.CreateNewWallet([]byte(cfg.WalletPass), []byte(Options.WalletPass), seed, time.Now())
 	if err != nil {
 		return err
 	}
