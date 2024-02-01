@@ -6,8 +6,8 @@ var Tables = []interface{}{
 	&OutpointSatRange{},
 	&OutpointValue{},
 	&Protocol{},
-	&Sat{},
-	&SatPoint{},
+	&SatToSequenceNum{},
+	&SatPointToSequenceNum{},
 	&SatSatPoint{},
 	&Statistic{},
 }

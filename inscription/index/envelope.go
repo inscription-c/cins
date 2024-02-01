@@ -2,7 +2,6 @@ package index
 
 import (
 	"bytes"
-	"encoding/json"
 	"github.com/btcsuite/btcd/txscript"
 	"github.com/btcsuite/btcd/wire"
 	"github.com/gogf/gf/v2/util/gutil"
@@ -185,31 +184,10 @@ func fromRawEnvelope(r *RawEnvelope) *Envelope {
 		}
 	}
 
-	var unlockCondition *tables.UnlockCondition
-	if len(unlockConditionData) > 0 {
-		conditionMap := make(map[string]string)
-		if err := json.Unmarshal(unlockConditionData, &conditionMap); err != nil {
-			unrecognizedEvenField = true
-		} else {
-			for k, v := range conditionMap {
-				if k != "type" && k != "coin_type" && k != "unlocker" {
-					unrecognizedEvenField = true
-					break
-				}
-				if unlockCondition == nil {
-					unlockCondition = &tables.UnlockCondition{}
-				}
-
-				switch k {
-				case "type":
-					unlockCondition.Type = v
-				case "coin_type":
-					unlockCondition.CoinType = v
-				case "unlocker":
-					unlockCondition.Unlocker = v
-				}
-			}
-		}
+	// Create an UnlockCondition from the unlock condition data
+	unlockCondition, err := tables.UnlockConditionFromBytes(unlockConditionData)
+	if err != nil {
+		unrecognizedEvenField = true
 	}
 
 	return &Envelope{

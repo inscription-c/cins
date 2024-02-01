@@ -5,4 +5,7 @@ const (
 	OperationDeploy = "deploy"
 	OperationMint   = "mint"
 	DecimalsDefault = "18"
+
+	UnlockConditionTypeBlockchain = "blockchain"
+	UnlockConditionTypeOrdinals   = "ordinals"
 )

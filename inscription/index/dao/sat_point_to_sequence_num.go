@@ -10,18 +10,18 @@ import (
 // DeleteAllBySatPoint deletes all records by a given SatPoint.
 // It takes a SatPoint as a parameter.
 // It returns any error encountered during the operation.
-func (d *DB) DeleteAllBySatPoint(satpoint *tables.SatPoint) error {
+func (d *DB) DeleteAllBySatPoint(satpoint *tables.SatPointToSequenceNum) error {
 	return d.Where("outpoint = ? AND offset = ?", satpoint.Outpoint, satpoint.Offset).Delete(satpoint).Error
 }
 
 // SetSatPointToSequenceNum sets a SatPoint to a sequence number in the database.
 // It takes a SatPoint and a sequence number as parameters.
 // It returns any error encountered during the operation.
-func (d *DB) SetSatPointToSequenceNum(satPoint *tables.SatPoint, sequenceNum uint64) error {
+func (d *DB) SetSatPointToSequenceNum(satPoint *tables.SatPointToSequenceNum, sequenceNum uint64) error {
 	return d.Clauses(clause.OnConflict{
 		Columns:   []clause.Column{{Name: "outpoint"}, {Name: "offset"}},
 		DoUpdates: clause.AssignmentColumns([]string{"sequence_num"}),
-	}).Create(&tables.SatPoint{
+	}).Create(&tables.SatPointToSequenceNum{
 		Outpoint:    satPoint.Outpoint,
 		Offset:      satPoint.Offset,
 		SequenceNum: sequenceNum,
@@ -32,7 +32,7 @@ func (d *DB) SetSatPointToSequenceNum(satPoint *tables.SatPoint, sequenceNum uin
 // It takes an outpoint as a parameter.
 // It returns a list of inscriptions and any error encountered.
 func (d *DB) InscriptionsByOutpoint(outpoint string) (res []*Inscription, err error) {
-	satpoints := make([]*tables.SatPoint, 0)
+	satpoints := make([]*tables.SatPointToSequenceNum, 0)
 	err = d.DB.Where("outpoint = ?", outpoint).Find(&satpoints).Error
 	if errors.Is(err, gorm.ErrRecordNotFound) {
 		err = nil
@@ -42,7 +42,7 @@ func (d *DB) InscriptionsByOutpoint(outpoint string) (res []*Inscription, err er
 		return
 	}
 
-	satpointMap := make(map[uint64]*tables.SatPoint)
+	satpointMap := make(map[uint64]*tables.SatPointToSequenceNum)
 	sequenceNums := make([]uint64, 0, len(satpoints))
 	for _, satpoint := range satpoints {
 		sequenceNums = append(sequenceNums, satpoint.SequenceNum)
@@ -60,7 +60,7 @@ func (d *DB) InscriptionsByOutpoint(outpoint string) (res []*Inscription, err er
 		satpoint := satpointMap[ins.SequenceNum]
 		res = append(res, &Inscription{
 			Inscriptions: ins,
-			SatPoint: &tables.SatPoint{
+			SatPointToSequenceNum: &tables.SatPointToSequenceNum{
 				Outpoint: satpoint.Outpoint,
 				Offset:   satpoint.Offset,
 			},

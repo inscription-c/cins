@@ -2,6 +2,7 @@ package tables
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"github.com/gogf/gf/v2/util/gconv"
 	"github.com/inscription-c/insc/constants"
@@ -9,6 +10,8 @@ import (
 	"strings"
 	"time"
 )
+
+var ErrInvalidUnlockConditionData = errors.New("invalid unlock condition data")
 
 type Inscriptions struct {
 	Id              uint64 `gorm:"column:id;primary_key;AUTO_INCREMENT;NOT NULL"` // this is sequence_num
@@ -54,19 +57,20 @@ func UnlockConditionFromFile(file string) (*UnlockCondition, error) {
 }
 
 func UnlockConditionFromBytes(data []byte) (*UnlockCondition, error) {
+	if len(data) == 0 {
+		return nil, ErrInvalidUnlockConditionData
+	}
 	m := make(map[string]string)
 	if err := json.Unmarshal(data, &m); err != nil {
 		return nil, err
 	}
-	for k := range m {
-		if k != "type" && k != "coin_type" && k != "unlocker" {
-			return nil, fmt.Errorf("invalid unlock condition")
-		}
-	}
-
 	unlockCondition := &UnlockCondition{}
 	if err := gconv.Struct(m, unlockCondition); err != nil {
 		return nil, err
+	}
+	if unlockCondition.Type == constants.UnlockConditionTypeBlockchain &&
+		unlockCondition.CoinType == "" || unlockCondition.Unlocker == "" {
+		return nil, ErrInvalidUnlockConditionData
 	}
 	return unlockCondition, nil
 }

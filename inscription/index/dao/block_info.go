@@ -85,6 +85,6 @@ func (d *DB) BlockCount() (count uint32, err error) {
 func (d *DB) SaveBlockInfo(block *tables.BlockInfo) error {
 	return d.Clauses(clause.OnConflict{
 		Columns:   []clause.Column{{Name: "height"}},
-		DoUpdates: clause.AssignmentColumns([]string{"sequence_num", "header"}),
+		DoUpdates: clause.AssignmentColumns([]string{"sequence_num", "header", "timestamp"}),
 	}).Create(block).Error
 }

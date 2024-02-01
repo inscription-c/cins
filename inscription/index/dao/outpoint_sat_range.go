@@ -4,17 +4,13 @@ import (
 	"errors"
 	"github.com/inscription-c/insc/inscription/index/tables"
 	"gorm.io/gorm"
-	"gorm.io/gorm/clause"
 )
 
 // SetOutpointToSatRange sets the satoshi range for a set of outpoints.
 // It takes a map where the keys are outpoints and the values are the corresponding satoshi ranges.
 // It returns any error encountered during the operation.
 func (d *DB) SetOutpointToSatRange(list []*tables.OutpointSatRange) (err error) {
-	return d.Clauses(clause.OnConflict{
-		Columns:   []clause.Column{{Name: "outpoint"}, {Name: "start"}},
-		DoUpdates: clause.AssignmentColumns([]string{"end"}),
-	}).CreateInBatches(&list, 10_000).Error
+	return d.CreateInBatches(&list, 10_000).Error
 }
 
 // OutpointToSatRanges returns the satoshi ranges for a given outpoint.

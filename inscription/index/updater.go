@@ -87,7 +87,7 @@ type OriginNew struct {
 
 // OriginOld represents an old origin of an inscription.
 type OriginOld struct {
-	OldSatPoint tables.SatPoint
+	OldSatPoint tables.SatPointToSequenceNum
 }
 
 // InscriptionUpdater is responsible for updating inscriptions.
@@ -189,7 +189,7 @@ type inscribedOffsetEntity struct {
 
 // locationsInscription represents the location of an inscription.
 type locationsInscription struct {
-	satpoint *tables.SatPoint
+	satpoint *tables.SatPointToSequenceNum
 	flotsam  *Flotsam
 }
 
@@ -239,7 +239,7 @@ func (u *InscriptionUpdater) indexEnvelopers(
 
 		// Loop over each fetched inscription.
 		for _, v := range inscriptions {
-			offset := uint64(totalInputValue) + v.SatPoint.Offset
+			offset := uint64(totalInputValue) + v.SatPointToSequenceNum.Offset
 			insId := &tables.InscriptionId{
 				TxId:   v.TxId,
 				Offset: v.Inscriptions.Offset,
@@ -248,7 +248,7 @@ func (u *InscriptionUpdater) indexEnvelopers(
 				InscriptionId: insId,
 				Offset:        offset,
 				Origin: Origin{
-					Old: &OriginOld{OldSatPoint: *v.SatPoint},
+					Old: &OriginOld{OldSatPoint: *v.SatPointToSequenceNum},
 				},
 			})
 
@@ -454,7 +454,7 @@ func (u *InscriptionUpdater) indexEnvelopers(
 			if flotsam.Offset >= end {
 				break
 			}
-			newSatpoint := &tables.SatPoint{
+			newSatpoint := &tables.SatPointToSequenceNum{
 				Outpoint: tables.FormatOutpoint(tx.TxHash().String(), uint32(index)),
 				Offset:   flotsam.Offset - outputValue,
 			}
@@ -489,7 +489,7 @@ func (u *InscriptionUpdater) indexEnvelopers(
 						continue
 					}
 					flotsam.Offset = pointer
-					newSatpoint = &tables.SatPoint{
+					newSatpoint = &tables.SatPointToSequenceNum{
 						Outpoint: tables.FormatOutpoint(tx.TxHash().String(), uint32(vout)),
 						Offset:   pointer - rangeEntity.Start,
 					}
@@ -509,7 +509,7 @@ func (u *InscriptionUpdater) indexEnvelopers(
 	if isCoinBase {
 		if err := inscriptions.Range(func(i int, v interface{}) error {
 			flotsam := v.(*Flotsam)
-			newSatPoint := &tables.SatPoint{
+			newSatPoint := &tables.SatPointToSequenceNum{
 				Offset: *u.lostSats + flotsam.Offset - outputValue,
 			}
 			if err := u.updateInscriptionLocation(inputSatRange, flotsam, newSatPoint); err != nil {
@@ -545,7 +545,7 @@ func (u *InscriptionUpdater) indexEnvelopers(
 func (u *InscriptionUpdater) updateInscriptionLocation(
 	inputSatRanges []*tables.OutpointSatRange,
 	flotsam *Flotsam,
-	newSatPoint *tables.SatPoint,
+	newSatPoint *tables.SatPointToSequenceNum,
 ) error {
 
 	// Initialize error, unbound flag, and sequence number.
@@ -694,7 +694,7 @@ func (u *InscriptionUpdater) updateInscriptionLocation(
 		if !atomic.CompareAndSwapUint64(u.unboundInscriptions, unboundNum, unboundNum+1) {
 			return errors.New("unboundInscriptions compare and swap failed")
 		}
-		satPoint = &tables.SatPoint{
+		satPoint = &tables.SatPointToSequenceNum{
 			Offset: unboundNum,
 		}
 	}

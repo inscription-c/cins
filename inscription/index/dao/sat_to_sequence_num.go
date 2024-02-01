@@ -10,7 +10,7 @@ import (
 // It takes a SAT and a sequence number as parameters, both of type uint64.
 // It returns any error encountered during the operation.
 func (d *DB) SaveSatToSequenceNumber(sat, sequenceNum uint64) error {
-	s := &tables.Sat{
+	s := &tables.SatToSequenceNum{
 		Sat:         sat,
 		SequenceNum: sequenceNum,
 	}

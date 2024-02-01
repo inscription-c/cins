@@ -11,7 +11,7 @@ import (
 // Inscription is a struct that embeds tables.Inscriptions and util.SatPoint.
 type Inscription struct {
 	*tables.Inscriptions
-	*tables.SatPoint
+	*tables.SatPointToSequenceNum
 }
 
 // NextSequenceNumber retrieves the next sequence number for inscriptions.
