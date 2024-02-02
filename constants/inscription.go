@@ -8,7 +8,7 @@ import (
 const (
 	AppName         = "cins"
 	ProtocolId      = "c-ins"
-	UnlockCondition = "10000"
+	UnlockCondition = "-1"
 
 	DefaultPostage = 10_000
 	MaxPostage     = 20_000

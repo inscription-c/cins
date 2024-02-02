@@ -236,6 +236,7 @@ func IndexSrv(opts ...SrvOption) error {
 		index.WithBatchClient(batchCli),
 		index.WithIndexSats(srvOptions.indexSats),
 		index.WithIndexSpendSats(srvOptions.indexSpendSats),
+		index.WithTidbSessionMemLimit(constants.TidbSessionMemLimit),
 	)
 	indexer.Start()
 	signal.AddInterruptHandler(func() {

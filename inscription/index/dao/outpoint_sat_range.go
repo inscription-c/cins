@@ -13,6 +13,11 @@ func (d *DB) SetOutpointToSatRange(list []*tables.OutpointSatRange) (err error) 
 	return d.CreateInBatches(&list, 10_000).Error
 }
 
+type OutpointToSatRangesResp struct {
+	List []*tables.OutpointSatRange
+	Err  error
+}
+
 // OutpointToSatRanges returns the satoshi ranges for a given outpoint.
 func (d *DB) OutpointToSatRanges(outpoint string) (list []*tables.OutpointSatRange, err error) {
 	err = d.Where("outpoint = ?", outpoint).Find(&list).Error

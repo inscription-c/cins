@@ -21,6 +21,7 @@ import (
 
 // DB is a struct that embeds gorm.DB to provide additional database functionality.
 type DB struct {
+	opts *DBOptions
 	*gorm.DB
 }
 
@@ -185,8 +186,13 @@ func NewDB(opts ...DBOption) (*DB, error) {
 	sqlDB.SetMaxIdleConns(50)
 
 	return &DB{
-		DB: db,
+		opts: options,
+		DB:   db,
 	}, nil
+}
+
+func (d *DB) EmbedDB() bool {
+	return !d.opts.noEmbedDB
 }
 
 // GormLogger is a struct that embeds btclog.Logger to provide additional logging functionality.

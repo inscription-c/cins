@@ -39,8 +39,8 @@ type Inscriptions struct {
 
 type UnlockCondition struct {
 	Type     string `gorm:"column:type;type:varchar(255);default:'';NOT NULL" json:"type"` // blockchain/ordinals
-	CoinType string `gorm:"column:coin_type;type:varchar(255);default:'';NOT NULL" json:"coin_type"`
-	Unlocker string `gorm:"column:unlocker;type:varchar(255);index:idx_unlocker;default:'';NOT NULL" json:"unlocker"`
+	Chain    string `gorm:"column:chain;type:varchar(255);index:idx_chain;default:'';NOT NULL" json:"chain"`
+	Contract string `gorm:"column:contract;type:varchar(255);index:idx_contract;default:'';NOT NULL" json:"contract"`
 }
 
 func (u *UnlockCondition) Data() []byte {
@@ -69,7 +69,7 @@ func UnlockConditionFromBytes(data []byte) (*UnlockCondition, error) {
 		return nil, err
 	}
 	if unlockCondition.Type == constants.UnlockConditionTypeBlockchain &&
-		unlockCondition.CoinType == "" || unlockCondition.Unlocker == "" {
+		unlockCondition.Chain == "" || unlockCondition.Contract == "" {
 		return nil, ErrInvalidUnlockConditionData
 	}
 	return unlockCondition, nil

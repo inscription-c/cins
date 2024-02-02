@@ -149,6 +149,7 @@ func Main() error {
 		index.WithBatchClient(batchCli),
 		index.WithIndexSpendSats(Options.IndexSpendSats),
 		index.WithNoSyncBLockInfo(Options.IndexNoSyncBlock),
+		index.WithTidbSessionMemLimit(constants.TidbSessionMemLimit),
 	)
 	indexer.Start()
 	signal.AddInterruptHandler(func() {

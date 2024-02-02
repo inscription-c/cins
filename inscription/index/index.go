@@ -38,6 +38,8 @@ type Options struct {
 	firstInscriptionHeight uint32
 	// no sync block info
 	noSyncBlock bool
+	// limit the tidb tx session memory, default 3GB
+	tidbSessionMemLimit int
 }
 
 // Option is a function type that takes a pointer to an Options struct.
@@ -84,6 +86,12 @@ func WithIndexSpendSats(indexSpendSats string) func(*Options) {
 func WithNoSyncBLockInfo(noSyncBlock bool) func(*Options) {
 	return func(options *Options) {
 		options.noSyncBlock = noSyncBlock
+	}
+}
+
+func WithTidbSessionMemLimit(tidbSessionMemLimit int) func(*Options) {
+	return func(options *Options) {
+		options.tidbSessionMemLimit = tidbSessionMemLimit
 	}
 }
 
@@ -157,7 +165,15 @@ func (idx *Indexer) DB() *dao.DB {
 
 // Begin is a method that starts a new transaction and returns a pointer to the dao.DB instance associated with the transaction.
 func (idx *Indexer) Begin() *dao.DB {
-	return &dao.DB{DB: idx.opts.db.DB.Begin()}
+	session := idx.opts.db.DB.Begin()
+	if idx.opts.db.EmbedDB() {
+		limit := 1
+		if idx.opts.tidbSessionMemLimit > limit {
+			limit = idx.opts.tidbSessionMemLimit
+		}
+		session.Exec(fmt.Sprintf("SET tidb_mem_quota_query = %d << 30;", limit))
+	}
+	return &dao.DB{DB: session}
 }
 
 // RpcClient is a method that returns a pointer to the rpcclient.Client instance associated with the Indexer.
@@ -235,7 +251,7 @@ func (idx *Indexer) UpdateIndex() error {
 		return err
 	}
 	if blocksCh == nil {
-		wtx.Rollback()
+		wtx.Commit()
 		return nil
 	}
 
@@ -253,6 +269,7 @@ func (idx *Indexer) UpdateIndex() error {
 
 		if unCommit >= constants.DefaultWithFlushNum ||
 			valueCache.Len() >= constants.DefaultFlushCacheNum ||
+			idx.outputsTraversed >= constants.DefaultFlushOutputTraversed ||
 			time.Since(startTime) > time.Minute*30 {
 
 			unCommit = 0
@@ -281,7 +298,7 @@ func (idx *Indexer) UpdateIndex() error {
 			return err
 		}
 	} else {
-		wtx.Rollback()
+		wtx.Commit()
 	}
 	return nil
 }
@@ -360,45 +377,54 @@ func (idx *Indexer) indexBlock(
 			idx.satRangesSinceFlush++
 		}
 
-		for _, tx := range block.Transactions[1:] {
+		txSatsIdxStart := time.Now()
+		latestSatsIdxStart := time.Now()
+		commonTx := block.Transactions[1:]
+		for i := range commonTx {
+			tx := commonTx[i]
 			inputSatRanges := make([]*tables.OutpointSatRange, 0)
 
 			for _, input := range tx.TxIn {
-				outpoint := input.PreviousOutPoint.String()
+				select {
+				case <-signal.InterruptChannel:
+					return nil
+				default:
+					outpoint := input.PreviousOutPoint.String()
 
-				var satRangesExist bool
-				var satRanges []*tables.OutpointSatRange
-				if idx.indexSpentSats {
-					satRanges, satRangesExist = idx.rangeCache[outpoint]
-				} else {
-					satRanges, satRangesExist = idx.rangeCache[outpoint]
-					delete(idx.rangeCache, outpoint)
-				}
-				if satRangesExist {
-					idx.outputsCached++
-				} else {
+					var satRangesExist bool
+					var satRanges []*tables.OutpointSatRange
 					if idx.indexSpentSats {
-						satRanges, err = wtx.OutpointToSatRanges(outpoint)
-						if err != nil {
-							return err
-						}
+						satRanges, satRangesExist = idx.rangeCache[outpoint]
 					} else {
-						satRanges, err = wtx.DelSatRangesByOutpoint(outpoint)
-						if err != nil {
-							return err
+						satRanges, satRangesExist = idx.rangeCache[outpoint]
+						delete(idx.rangeCache, outpoint)
+					}
+					if satRangesExist {
+						idx.outputsCached++
+					} else {
+						if idx.indexSpentSats {
+							satRanges, err = wtx.OutpointToSatRanges(outpoint)
+							if err != nil {
+								return err
+							}
+						} else {
+							satRanges, err = wtx.DelSatRangesByOutpoint(outpoint)
+							if err != nil {
+								return err
+							}
+						}
+						if len(satRanges) == 0 {
+							value, err := wtx.GetValueByOutpoint(outpoint)
+							if err != nil && !errors.Is(err, gorm.ErrRecordNotFound) {
+								return err
+							}
+							if errors.Is(err, gorm.ErrRecordNotFound) || value > 0 {
+								return fmt.Errorf("could not find outpoint %s in index", outpoint)
+							}
 						}
 					}
-					if len(satRanges) == 0 {
-						value, err := wtx.GetValueByOutpoint(outpoint)
-						if err != nil && !errors.Is(err, gorm.ErrRecordNotFound) {
-							return err
-						}
-						if errors.Is(err, gorm.ErrRecordNotFound) || value > 0 {
-							return fmt.Errorf("could not find outpoint %s in index", outpoint)
-						}
-					}
+					inputSatRanges = append(inputSatRanges, satRanges...)
 				}
-				inputSatRanges = append(inputSatRanges, satRanges...)
 			}
 
 			if err := idx.indexTransactionSats(
@@ -413,11 +439,18 @@ func (idx *Indexer) indexBlock(
 				return err
 			}
 			coinbaseInputs = append(coinbaseInputs, inputSatRanges...)
+			timeNow := time.Now()
+			if timeNow.Sub(latestSatsIdxStart).Seconds() > 3 ||
+				(timeNow.Sub(txSatsIdxStart).Seconds() > 3 && i+1 == len(commonTx)) {
+				log.Srv.Infof("Block %d indexTransactionSats %d/%d in %s", idx.height, i+1, len(commonTx), time.Since(txSatsIdxStart)/1e6*1e6)
+				latestSatsIdxStart = time.Now()
+			}
 		}
 
+		coinBaseTx := block.Transactions[0]
 		if err := idx.indexTransactionSats(
 			wtx,
-			block.Transactions[0],
+			coinBaseTx,
 			&coinbaseInputs,
 			&satRangesWritten,
 			&outputsInBlock,
@@ -499,7 +532,7 @@ func (idx *Indexer) indexBlock(
 	// Increment the height of the indexer and the number of outputs traversed.
 	atomic.AddUint32(&idx.height, 1)
 	atomic.AddUint64(&idx.outputsTraversed, outputsInBlock)
-	log.Srv.Infof("Block %d Wrote %d sat ranges from %d outputs in %d ms", idx.height-1, satRangesWritten, outputsInBlock, time.Since(startTime).Milliseconds())
+	log.Srv.Infof("Block %d Wrote %d sat ranges from %d outputs in %s", idx.height-1, satRangesWritten, outputsInBlock, time.Since(startTime)/1e6*1e6)
 	return nil
 }
 
@@ -535,62 +568,66 @@ func (idx *Indexer) indexTransactionSats(
 	}
 
 	for i, txOut := range tx.TxOut {
-		outpoint := wire.OutPoint{
-			Hash:  tx.TxHash(),
-			Index: uint32(i),
-		}.String()
+		select {
+		case <-signal.InterruptChannel:
+		default:
+			outpoint := wire.OutPoint{
+				Hash:  tx.TxHash(),
+				Index: uint32(i),
+			}.String()
 
-		sats := make([]*tables.OutpointSatRange, 0)
-		remaining := txOut.Value
+			sats := make([]*tables.OutpointSatRange, 0)
+			remaining := txOut.Value
 
-		for remaining > 0 {
-			if len(*inputSatRanges) == 0 {
-				return errors.New("no sat ranges")
-			}
-			firstRange := (*inputSatRanges)[0]
-			*inputSatRanges = (*inputSatRanges)[1:]
-			startSat := Sat(firstRange.Start)
-
-			if !startSat.Common() {
-				offset := txOut.Value - remaining
-				if offset < 0 {
-					return errors.New("negative offset")
+			for remaining > 0 {
+				if len(*inputSatRanges) == 0 {
+					return errors.New("no sat ranges")
 				}
-				if err := wtx.SatToSatPoint(&tables.SatSatPoint{
-					Sat:      firstRange.Start,
-					Outpoint: outpoint,
-					Offset:   uint64(offset),
-				}); err != nil {
-					return err
-				}
-			}
+				firstRange := (*inputSatRanges)[0]
+				*inputSatRanges = (*inputSatRanges)[1:]
+				startSat := Sat(firstRange.Start)
 
-			count := int64(firstRange.End) - int64(firstRange.Start)
-			assigned := firstRange
-
-			if count > remaining {
-				idx.satRangesSinceFlush++
-				middle := firstRange.Start + uint64(remaining)
-				*inputSatRanges = append([]*tables.OutpointSatRange{
-					{
+				if !startSat.Common() {
+					offset := txOut.Value - remaining
+					if offset < 0 {
+						return errors.New("negative offset")
+					}
+					if err := wtx.SatToSatPoint(&tables.SatSatPoint{
+						Sat:      firstRange.Start,
 						Outpoint: outpoint,
-						Start:    middle,
-						End:      firstRange.End,
-					},
-				}, *inputSatRanges...)
-				assigned.Start = firstRange.Start
-				assigned.End = middle
+						Offset:   uint64(offset),
+					}); err != nil {
+						return err
+					}
+				}
+
+				count := int64(firstRange.End) - int64(firstRange.Start)
+				assigned := firstRange
+
+				if count > remaining {
+					idx.satRangesSinceFlush++
+					middle := firstRange.Start + uint64(remaining)
+					*inputSatRanges = append([]*tables.OutpointSatRange{
+						{
+							Outpoint: outpoint,
+							Start:    middle,
+							End:      firstRange.End,
+						},
+					}, *inputSatRanges...)
+					assigned.Start = firstRange.Start
+					assigned.End = middle
+				}
+
+				sats = append(sats, assigned)
+				remaining -= int64(assigned.End) - int64(assigned.Start)
+				*satRangesWritten++
 			}
 
-			sats = append(sats, assigned)
-			remaining -= int64(assigned.End) - int64(assigned.Start)
-			*satRangesWritten++
+			*outputsTraversed++
+
+			idx.rangeCache[outpoint] = sats
+			idx.outputsInsertedSinceFlush++
 		}
-
-		*outputsTraversed++
-
-		idx.rangeCache[outpoint] = sats
-		idx.outputsInsertedSinceFlush++
 	}
 	return nil
 }
