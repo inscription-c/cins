@@ -10,5 +10,5 @@ func (d *DB) SatToSatPoint(satSatPoint *tables.SatSatPoint) error {
 	return d.Clauses(clause.OnConflict{
 		Columns:   []clause.Column{{Name: "sat"}},
 		DoUpdates: clause.AssignmentColumns([]string{"outpoint", "offset"}),
-	}).Create(satSatPoint).Error
+	}).Create(&satSatPoint).Error
 }

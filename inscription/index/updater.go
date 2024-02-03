@@ -2,6 +2,7 @@ package index
 
 import (
 	"errors"
+	"github.com/btcsuite/btcd/blockchain"
 	"github.com/btcsuite/btcd/rpcclient"
 	"github.com/btcsuite/btcd/wire"
 	"github.com/gogf/gf/v2/util/gconv"
@@ -196,7 +197,7 @@ type locationsInscription struct {
 // indexEnvelopers indexes the envelopers of a transaction.
 func (u *InscriptionUpdater) indexEnvelopers(
 	tx *wire.MsgTx,
-	inputSatRange []*tables.OutpointSatRange) error {
+	inputSatRange tables.SatRanges) error {
 
 	idCounter := uint32(0)
 
@@ -226,7 +227,7 @@ func (u *InscriptionUpdater) indexEnvelopers(
 
 		// Check if the input is a coinbase transaction.
 		// If it is, add the subsidy for the current block height to the total input value and skip to the next iteration.
-		if util.IsEmptyHash(txIn.PreviousOutPoint.Hash) {
+		if util.IsNullOutpoint(txIn.PreviousOutPoint) {
 			totalInputValue += int64(NewHeight(u.idx.height).Subsidy())
 			continue
 		}
@@ -413,7 +414,7 @@ func (u *InscriptionUpdater) indexEnvelopers(
 	// Check if the transaction is a coinbase transaction.
 	// A coinbase transaction is a unique type of bitcoin transaction that can only be created by a miner.
 	// This is done by checking if the hash of the previous outpoint of the first input in the transaction is empty.
-	isCoinBase := util.IsEmptyHash(tx.TxIn[0].PreviousOutPoint.Hash)
+	isCoinBase := blockchain.IsCoinBaseTx(tx)
 
 	// If the transaction is a coinbase transaction, append all the floating inscriptions from the updater to the current floating inscriptions.
 	// Floating inscriptions are inscriptions that are not yet bound to a specific location in the blockchain.
@@ -543,7 +544,7 @@ func (u *InscriptionUpdater) indexEnvelopers(
 
 // updateInscriptionLocation updates the location of an inscription.
 func (u *InscriptionUpdater) updateInscriptionLocation(
-	inputSatRanges []*tables.OutpointSatRange,
+	inputSatRanges tables.SatRanges,
 	flotsam *Flotsam,
 	newSatPoint *tables.SatPointToSequenceNum,
 ) error {
@@ -635,7 +636,7 @@ func (u *InscriptionUpdater) updateInscriptionLocation(
 		if err != nil {
 			return err
 		}
-		if util.IsEmptyHash(outpoint.Hash) {
+		if util.IsNullOutpoint(*outpoint) {
 			CharmLost.Set(&charms)
 		}
 
@@ -706,7 +707,7 @@ func (u *InscriptionUpdater) updateInscriptionLocation(
 
 // calculateSat calculates the Sat of an inscription.
 func (u *InscriptionUpdater) calculateSat(
-	inputSatRanges []*tables.OutpointSatRange,
+	inputSatRanges tables.SatRanges,
 	inputOffset uint64,
 ) *Sat {
 	// Initialize an offset counter starting from 0.
@@ -768,7 +769,7 @@ func (u *InscriptionUpdater) fetchOutputValues(tx *wire.MsgTx, maxCurrentNum int
 			txIn := tx.TxIn[inputIndex]
 
 			// If the input is a coinbase, skip it.
-			if util.IsEmptyHash(txIn.PreviousOutPoint.Hash) {
+			if util.IsNullOutpoint(txIn.PreviousOutPoint) {
 				continue
 			}
 
@@ -812,7 +813,7 @@ func (u *InscriptionUpdater) fetchOutputValues(tx *wire.MsgTx, maxCurrentNum int
 				txIn := tx.TxIn[inputIndex]
 
 				// If the input is a coinbase, skip it.
-				if util.IsEmptyHash(txIn.PreviousOutPoint.Hash) {
+				if util.IsNullOutpoint(txIn.PreviousOutPoint) {
 					continue
 				}
 

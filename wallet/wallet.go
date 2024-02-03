@@ -17,6 +17,7 @@ import (
 	"github.com/inscription-c/insc/internal/util"
 	"github.com/inscription-c/insc/wallet/log"
 	"github.com/spf13/cobra"
+	"go.etcd.io/etcd/pkg/v3/debugutil"
 	"net"
 	"net/http"
 	_ "net/http/pprof"
@@ -45,6 +46,8 @@ type walletOptions struct {
 	IndexSpendSats   string
 	IndexNoSyncBlock bool
 	MiningAddrs      []string
+	EnablePprof      bool
+	PprofPort        string
 }
 
 var Options = &walletOptions{}
@@ -72,6 +75,8 @@ func init() {
 	Cmd.Flags().StringVarP(&Options.IndexSpendSats, "index_spend_sats", "", "", "Keep sat index entries of spent outputs, true/false")
 	Cmd.Flags().BoolVarP(&Options.IndexNoSyncBlock, "index_no_sync_block", "", false, "index no sync block")
 	Cmd.Flags().StringSliceVarP(&Options.MiningAddrs, "mining_addrs", "", []string{}, "Add the specified payment address to the list of addresses to use for generated blocks")
+	Cmd.Flags().BoolVarP(&Options.EnablePprof, "enable_pprof", "", false, "enable pprof")
+	Cmd.Flags().StringVarP(&Options.PprofPort, "pprof_port", "", "18331", "pprof port")
 	if err := Cmd.MarkFlagRequired("user"); err != nil {
 		fmt.Println(err)
 		os.Exit(1)
@@ -155,6 +160,17 @@ func Main() error {
 	signal.AddInterruptHandler(func() {
 		indexer.Stop()
 	})
+
+	if Options.EnablePprof {
+		srvMux := http.NewServeMux()
+		for k, v := range debugutil.PProfHandlers() {
+			srvMux.Handle(k, v)
+		}
+		if err := http.ListenAndServe(fmt.Sprintf("localhost:%s", Options.PprofPort), srvMux); err != nil && !errors.Is(err, http.ErrServerClosed) {
+			log.Log.Error(err)
+			os.Exit(1)
+		}
+	}
 	return nil
 }
 

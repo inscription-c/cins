@@ -2,7 +2,6 @@ package dao
 
 import (
 	"github.com/inscription-c/insc/inscription/index/tables"
-	"gorm.io/gorm/clause"
 )
 
 // GetValueByOutpoint retrieves the value associated with a given outpoint.
@@ -23,8 +22,10 @@ func (d *DB) DeleteValueByOutpoint(outpoints ...string) (err error) {
 	if len(outpoints) == 0 {
 		return
 	}
-	// Delete the OutpointValue records for the given outpoints
-	err = d.DB.Where("outpoint in (?)", outpoints).Delete(&tables.OutpointValue{}).Error
+	err = d.Where("outpoint in (?)", outpoints).Delete(&tables.OutpointValue{}).Error
+	if err != nil {
+		return
+	}
 	return
 }
 
@@ -33,16 +34,11 @@ func (d *DB) DeleteValueByOutpoint(outpoints ...string) (err error) {
 // It returns any error encountered during the operation.
 func (d *DB) SetOutpointToValue(values map[string]int64) (err error) {
 	list := make([]*tables.OutpointValue, 0, len(values))
-
 	for outpoint, value := range values {
 		list = append(list, &tables.OutpointValue{
 			Outpoint: outpoint,
 			Value:    value,
 		})
 	}
-
-	return d.Clauses(clause.OnConflict{
-		Columns:   []clause.Column{{Name: "outpoint"}},
-		DoUpdates: clause.AssignmentColumns([]string{"value"}),
-	}).CreateInBatches(&list, 10_000).Error
+	return d.CreateInBatches(&list, 10_000).Error
 }

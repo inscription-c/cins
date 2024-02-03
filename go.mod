@@ -39,6 +39,7 @@ require (
 	github.com/tikv/client-go/v2 v2.0.8-0.20231227070846-61c486af13a5
 	github.com/tikv/pd/client v0.0.0-20240109100024-dd8df25316e9
 	github.com/ugorji/go/codec v1.2.12
+	go.etcd.io/etcd/pkg/v3 v3.5.10
 	go.uber.org/automaxprocs v1.5.3
 	go.uber.org/zap v1.26.0
 	golang.org/x/crypto v0.18.0

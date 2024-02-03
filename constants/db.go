@@ -10,6 +10,7 @@ const (
 	DefaultWithFlushNum         = 1_000
 	DefaultFlushCacheNum        = 50_000
 	DefaultFlushOutputTraversed = 50_000
+	DefaultFlushWrittenSats     = 50_000
 	DefaultDBListenPort         = "4000"
 	DefaultDbStatusListenPort   = "10080"
 	DefaultDBUser               = "root"
@@ -17,7 +18,7 @@ const (
 )
 
 const (
-	TidbSessionMemLimit = 3
+	TidbSessionMemLimit = 1
 )
 
 func DBDatDir(testnet bool) string {

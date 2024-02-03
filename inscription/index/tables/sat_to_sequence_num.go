@@ -12,11 +12,6 @@ type SatToSequenceNum struct {
 	UpdatedAt   time.Time `gorm:"column:updated_at;type:timestamp;default:CURRENT_TIMESTAMP;NOT NULL"`
 }
 
-type SatRange struct {
-	Start uint64
-	End   uint64
-}
-
 func (s *SatToSequenceNum) TableName() string {
 	return "sat_to_sequence_num"
 }
