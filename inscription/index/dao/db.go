@@ -31,7 +31,7 @@ type DBOptions struct {
 	user              string
 	password          string
 	dbName            string
-	noEmbedDB         bool
+	embedDB           bool
 	dataDir           string
 	serverPort        string
 	serverStatusPort  string
@@ -77,10 +77,10 @@ func WithAutoMigrateTables(tables ...interface{}) DBOption {
 	}
 }
 
-// WithNoEmbedDB returns a DBOption that sets whether to use an embedded database or not.
-func WithNoEmbedDB(noEmbed bool) DBOption {
+// WithEmbedDB returns a DBOption that sets whether to use an embedded database or not.
+func WithEmbedDB(embed bool) DBOption {
 	return func(options *DBOptions) {
-		options.noEmbedDB = noEmbed
+		options.embedDB = embed
 	}
 }
 
@@ -131,7 +131,7 @@ func NewDB(opts ...DBOption) (*DB, error) {
 	var err error
 	var db *gorm.DB
 
-	if !options.noEmbedDB {
+	if options.embedDB {
 		go TIDB(options)
 
 		timeout := time.After(time.Second * 30)
@@ -158,16 +158,11 @@ func NewDB(opts ...DBOption) (*DB, error) {
 			break
 		}
 
-		if err := db.Exec(fmt.Sprintf("CREATE DATABASE IF NOT EXISTS %s;", options.dbName)).Error; err != nil {
-			return nil, err
-		}
+		db.Exec(fmt.Sprintf("CREATE DATABASE IF NOT EXISTS %s;", options.dbName))
 		dsn = fmt.Sprintf(conn, options.user, options.password, options.addr, options.dbName)
 		db, err = gorm.Open(gormMysqlDriver.Open(dsn), &gorm.Config{Logger: gormLog})
 		if err != nil {
 			return nil, fmt.Errorf("gorm open :%v", err)
-		}
-		if err := db.AutoMigrate(options.autoMigrateTables...); err != nil {
-			return nil, err
 		}
 	} else {
 		dsn = fmt.Sprintf(conn, options.user, options.password, options.addr, options.dbName)
@@ -175,6 +170,9 @@ func NewDB(opts ...DBOption) (*DB, error) {
 		if err != nil {
 			return nil, fmt.Errorf("gorm open :%v", err)
 		}
+	}
+	if err := db.AutoMigrate(options.autoMigrateTables...); err != nil {
+		return nil, err
 	}
 
 	db = db.Debug()
@@ -192,7 +190,7 @@ func NewDB(opts ...DBOption) (*DB, error) {
 }
 
 func (d *DB) EmbedDB() bool {
-	return !d.opts.noEmbedDB
+	return d.opts.embedDB
 }
 
 // GormLogger is a struct that embeds btclog.Logger to provide additional logging functionality.

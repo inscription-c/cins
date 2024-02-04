@@ -6,7 +6,7 @@ import (
 )
 
 const (
-	DefaultDBName               = "insc"
+	DefaultDBName               = "cins"
 	DefaultWithFlushNum         = 1_000
 	DefaultFlushCacheNum        = 50_000
 	DefaultFlushOutputTraversed = 50_000

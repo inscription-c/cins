@@ -39,9 +39,13 @@ type walletOptions struct {
 	Username         string
 	Password         string
 	WalletPass       string
+	EmbedDB          bool
+	MysqlAddr        string
+	MysqlUser        string
+	MysqlPassword    string
+	MysqlDBName      string
 	Testnet          bool
 	RpcConnect       string
-	DbListenPort     string
 	IndexSats        string
 	IndexSpendSats   string
 	IndexNoSyncBlock bool
@@ -67,10 +71,14 @@ var Cmd = &cobra.Command{
 func init() {
 	Cmd.Flags().StringVarP(&Options.Username, "user", "u", "root", "btcd rpc server username")
 	Cmd.Flags().StringVarP(&Options.Password, "password", "P", "root", "btcd rpc server password")
+	Cmd.Flags().BoolVarP(&Options.EmbedDB, "embed_db", "", false, "use embed db")
 	Cmd.Flags().StringVarP(&Options.WalletPass, "wallet_pass", "", "root", "wallet password")
+	Cmd.Flags().StringVarP(&Options.MysqlAddr, "mysql_addr", "d", "127.0.0.1:3306", "inscription index mysql database addr")
+	Cmd.Flags().StringVarP(&Options.MysqlUser, "mysql_user", "", "root", "inscription index mysql database user")
+	Cmd.Flags().StringVarP(&Options.MysqlPassword, "mysql_pass", "", "root", "inscription index mysql database password")
+	Cmd.Flags().StringVarP(&Options.MysqlDBName, "dbname", "", constants.DefaultDBName, "inscription index mysql database name")
 	Cmd.Flags().BoolVarP(&Options.Testnet, "testnet", "t", false, "bitcoin testnet3")
 	Cmd.Flags().StringVarP(&Options.RpcConnect, "rpc_connect", "", "", "Hostname/IP and port of btcd RPC server to connect to (default localhost:8334, testnet: localhost:18334)")
-	Cmd.Flags().StringVarP(&Options.DbListenPort, "db_listen_port", "", constants.DefaultDBListenPort, "db listen port")
 	Cmd.Flags().StringVarP(&Options.IndexSats, "index_sats", "", "", "Track location of all satoshis, true/false")
 	Cmd.Flags().StringVarP(&Options.IndexSpendSats, "index_spend_sats", "", "", "Keep sat index entries of spent outputs, true/false")
 	Cmd.Flags().BoolVarP(&Options.IndexNoSyncBlock, "index_no_sync_block", "", false, "index no sync block")
@@ -117,10 +125,11 @@ func Main() error {
 	log2.InitLogRotator(logFile)
 
 	db, err := dao.NewDB(
-		dao.WithAddr(fmt.Sprintf("localhost:%s", Options.DbListenPort)),
-		dao.WithUser(constants.DefaultDBUser),
-		dao.WithPassword(constants.DefaultDBPass),
-		dao.WithDBName(constants.DefaultDBName),
+		dao.WithEmbedDB(Options.EmbedDB),
+		dao.WithAddr(Options.MysqlAddr),
+		dao.WithUser(Options.MysqlUser),
+		dao.WithPassword(Options.MysqlPassword),
+		dao.WithDBName(Options.MysqlDBName),
 		dao.WithDataDir(constants.DBDatDir(Options.Testnet)),
 		dao.WithServerPort(constants.DefaultDBListenPort),
 		dao.WithStatusPort(constants.DefaultDbStatusListenPort),

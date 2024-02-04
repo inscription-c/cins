@@ -36,6 +36,7 @@ var (
 	dbAddr               string
 	dbUser               string
 	dbPass               string
+	dbName               string
 	noBackup             bool
 )
 
@@ -57,9 +58,10 @@ func init() {
 	Cmd.Flags().StringVarP(&jsonMetadata, "json_metadata", "", "", "Include JSON in file at <METADATA> converted to CBOR as inscription metadata")
 	Cmd.Flags().BoolVarP(&dryRun, "dry_run", "", false, "Don't sign or broadcast transactions.")
 	Cmd.Flags().BoolVarP(&cbrc20, "c_brc_20", "", false, "is c-brc-20 protocol, add this flag will auto check protocol content effectiveness")
-	Cmd.Flags().StringVarP(&dbAddr, "db_addr", "", fmt.Sprintf("localhost:%s", constants.DefaultDBListenPort), "index server database address")
-	Cmd.Flags().StringVarP(&dbUser, "db_user", "", "root", "index server database user")
-	Cmd.Flags().StringVarP(&dbPass, "db_pass", "", "", "index server database password")
+	Cmd.Flags().StringVarP(&dbAddr, "mysql_addr", "", "127.0.0.1:3306", "index server database address")
+	Cmd.Flags().StringVarP(&dbUser, "mysql_user", "", "root", "index server database user")
+	Cmd.Flags().StringVarP(&dbPass, "mysql_pass", "", "root", "index server database password")
+	Cmd.Flags().StringVarP(&dbName, "dbname", "", constants.DefaultDBName, "inscription index mysql database name")
 	Cmd.Flags().BoolVarP(&noBackup, "no_backup", "", false, "Do not back up recovery key.")
 	if err := Cmd.MarkFlagRequired("filepath"); err != nil {
 		fmt.Println(err)
@@ -150,8 +152,7 @@ func inscribe() error {
 		dao.WithAddr(dbAddr),
 		dao.WithUser(dbUser),
 		dao.WithPassword(dbPass),
-		dao.WithDBName(constants.DefaultDBName),
-		dao.WithNoEmbedDB(true),
+		dao.WithDBName(dbName),
 	)
 	if err != nil {
 		return err

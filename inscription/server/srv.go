@@ -33,7 +33,7 @@ type SrvOptions struct {
 	rpcListen          string
 	testnet            bool
 	rpcConnect         string
-	noEmbedDB          bool
+	embedDB            bool
 	noApi              bool
 	dataDir            string
 	mysqlAddr          string
@@ -80,9 +80,9 @@ func WithRpcConnect(rpcConnect string) SrvOption {
 	}
 }
 
-func WithNoEmbedDB(noEmbedDB bool) SrvOption {
+func WithEmbedDB(embedDB bool) SrvOption {
 	return func(options *SrvOptions) {
-		options.noEmbedDB = noEmbedDB
+		options.embedDB = embedDB
 	}
 }
 
@@ -158,12 +158,12 @@ func init() {
 	Cmd.Flags().StringVarP(&srvOptions.rpcListen, "rpc_listen", "l", mainNetRPCListen, "rpc server listen address. Default `mainnet :8335, testnet :18335`")
 	Cmd.Flags().BoolVarP(&srvOptions.testnet, "testnet", "t", false, "bitcoin testnet3")
 	Cmd.Flags().StringVarP(&srvOptions.rpcConnect, "rpc_connect", "s", mainNetRPCConnect, "the URL of btcd RPC server to connect to (default localhost:8334, testnet: localhost:18334)")
-	Cmd.Flags().BoolVarP(&srvOptions.noEmbedDB, "no_embed_db", "", false, "don't embed db")
+	Cmd.Flags().BoolVarP(&srvOptions.embedDB, "embed_db", "", false, "use embed db")
 	Cmd.Flags().BoolVarP(&srvOptions.noApi, "no_api", "", false, "don't start api server")
 	Cmd.Flags().StringVarP(&srvOptions.dataDir, "data_dir", "", "", "embed database data dir")
-	Cmd.Flags().StringVarP(&srvOptions.mysqlAddr, "mysql_addr", "d", "127.0.0.1:4000", "inscription index mysql database addr")
+	Cmd.Flags().StringVarP(&srvOptions.mysqlAddr, "mysql_addr", "d", "127.0.0.1:3306", "inscription index mysql database addr")
 	Cmd.Flags().StringVarP(&srvOptions.mysqlUser, "mysql_user", "", "root", "inscription index mysql database user")
-	Cmd.Flags().StringVarP(&srvOptions.mysqlPassword, "mysql_pass", "", "", "inscription index mysql database password")
+	Cmd.Flags().StringVarP(&srvOptions.mysqlPassword, "mysql_pass", "", "root", "inscription index mysql database password")
 	Cmd.Flags().StringVarP(&srvOptions.mysqlDBName, "dbname", "", constants.DefaultDBName, "inscription index mysql database name")
 	Cmd.Flags().StringVarP(&srvOptions.dbListenPort, "db_listen", "", "4000", "inscription index database server listen port")
 	Cmd.Flags().StringVarP(&srvOptions.dbStatusListenPort, "db_status_listen", "", "10080", "inscription index database server status listen port")
@@ -208,7 +208,7 @@ func IndexSrv(opts ...SrvOption) error {
 		dao.WithPassword(srvOptions.mysqlPassword),
 		dao.WithDBName(srvOptions.mysqlDBName),
 		dao.WithDataDir(srvOptions.dataDir),
-		dao.WithNoEmbedDB(srvOptions.noEmbedDB),
+		dao.WithEmbedDB(srvOptions.embedDB),
 		dao.WithServerPort(srvOptions.dbListenPort),
 		dao.WithStatusPort(srvOptions.dbStatusListenPort),
 		dao.WithAutoMigrateTables(tables.Tables...),
