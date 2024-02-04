@@ -13,6 +13,7 @@ import (
 	"github.com/inscription-c/insc/inscription/log"
 	"github.com/inscription-c/insc/internal/signal"
 	"github.com/inscription-c/insc/internal/util"
+	"sync/atomic"
 	"time"
 )
 
@@ -98,8 +99,10 @@ func WithTidbSessionMemLimit(tidbSessionMemLimit int) func(*Options) {
 type Indexer struct {
 	// opts is a pointer to an Options struct which holds the configuration options for the Indexer.
 	opts *Options
+	// cache for outpoint value
+	valueCache *ValueCache
 	// rangeCache is a map that caches the range of satoshis for each transaction.
-	rangeCache map[string][]byte
+	rangeCache *RangeCaches
 	// height is an uint32 that represents the current height of the blockchain being indexed.
 	height uint32
 	// satRangesSinceFlush is an uint32 that represents the number of satoshi ranges since the last flush.
@@ -127,7 +130,8 @@ func NewIndexer(opts ...Option) *Indexer {
 	for _, v := range opts {
 		v(idx.opts)
 	}
-	idx.rangeCache = make(map[string][]byte)
+	idx.valueCache = NewValueCache()
+	idx.rangeCache = NewRangeCaches()
 	return idx
 }
 
@@ -256,31 +260,24 @@ func (idx *Indexer) UpdateIndex() error {
 
 	unCommit := 0
 	startTime := time.Now()
-	valueCache := NewValueCache()
 
 	for block := range blocksCh {
 		unCommit++
 
 		// Index the block.
-		if err = idx.indexBlock(wtx, block, valueCache); err != nil {
+		if err = idx.indexBlock(wtx, block); err != nil {
 			return err
 		}
 
-		if unCommit >= constants.DefaultWithFlushNum ||
-			valueCache.Len() >= constants.DefaultFlushCacheNum ||
-			idx.outputsTraversed >= constants.DefaultFlushOutputTraversed ||
-			time.Since(startTime) > time.Minute*30 {
-
+		if idx.needCommit(startTime, unCommit) {
 			unCommit = 0
 			startTime = time.Now()
 
-			if err = idx.commit(wtx, valueCache); err != nil {
+			if err = idx.commit(wtx); err != nil {
 				return err
 			}
 
 			wtx = idx.Begin()
-			valueCache = NewValueCache()
-
 			var height uint32
 			height, err = wtx.BlockCount()
 			if err != nil {
@@ -293,7 +290,7 @@ func (idx *Indexer) UpdateIndex() error {
 	}
 
 	if unCommit > 0 {
-		if err = idx.commit(wtx, valueCache); err != nil {
+		if err = idx.commit(wtx); err != nil {
 			return err
 		}
 	} else {
@@ -308,7 +305,6 @@ func (idx *Indexer) UpdateIndex() error {
 func (idx *Indexer) indexBlock(
 	wtx *dao.DB,
 	block *wire.MsgBlock,
-	valueCache *ValueCache,
 ) error {
 
 	// Detect if there is a reorganization in the blockchain.
@@ -348,7 +344,7 @@ func (idx *Indexer) indexBlock(
 	inscriptionUpdater := &InscriptionUpdater{
 		wtx:                     wtx,
 		idx:                     idx,
-		valueCache:              valueCache,
+		valueCache:              idx.valueCache,
 		reward:                  NewHeight(idx.height).Subsidy(),
 		lostSats:                &lostSats,
 		nextSequenceNumber:      &nextSequenceNumber,
@@ -390,14 +386,14 @@ func (idx *Indexer) indexBlock(
 				default:
 					outpoint := input.PreviousOutPoint.String()
 
-					var satRanges []byte
+					var ok bool
+					var satRanges *bytes.Buffer
 					if idx.indexSpentSats {
-						satRanges = idx.rangeCache[outpoint]
+						satRanges, ok = idx.rangeCache.Read(outpoint)
 					} else {
-						satRanges = idx.rangeCache[outpoint]
-						delete(idx.rangeCache, outpoint)
+						satRanges, ok = idx.rangeCache.Delete(outpoint)
 					}
-					if satRanges != nil {
+					if ok {
 						idx.outputsCached++
 					} else {
 						var outpointSatRange tables.OutpointSatRange
@@ -406,20 +402,20 @@ func (idx *Indexer) indexBlock(
 							if err != nil {
 								return err
 							}
-							satRanges = outpointSatRange.SatRange
+							satRanges = bytes.NewBuffer(outpointSatRange.SatRange)
 						} else {
 							outpointSatRange, err = wtx.DelSatRangesByOutpoint(outpoint)
 							if err != nil {
 								return err
 							}
-							satRanges = outpointSatRange.SatRange
+							satRanges = bytes.NewBuffer(outpointSatRange.SatRange)
 						}
 						if outpointSatRange.Id == 0 {
 							return fmt.Errorf("could not find outpoint %s in index", outpoint)
 						}
 					}
 
-					satRangesEntry, err := tables.NewSatRanges(satRanges)
+					satRangesEntry, err := tables.NewSatRanges(satRanges.Bytes())
 					if err != nil {
 						return err
 					}
@@ -535,8 +531,8 @@ func (idx *Indexer) indexBlock(
 		return err
 	}
 
-	idx.height++
-	idx.outputsTraversed += outputsInBlock
+	atomic.AddUint32(&idx.height, 1)
+	atomic.AddUint64(&idx.outputsTraversed, outputsInBlock)
 	log.Srv.Infof("Block %d Wrote %d sat ranges from %d outputs in %s", idx.height-1, satRangesWritten, outputsInBlock, time.Since(startTime)/1e6*1e6)
 	return nil
 }
@@ -581,7 +577,7 @@ func (idx *Indexer) indexTransactionSats(
 				Index: uint32(i),
 			}.String()
 
-			sats := make([]byte, 0)
+			sats := bytes.NewBufferString("")
 			remaining := txOut.Value
 
 			for remaining > 0 {
@@ -620,50 +616,68 @@ func (idx *Indexer) indexTransactionSats(
 					}, *inputSatRanges...)
 					assigned.End = middle
 				}
-				sats = append(sats, assigned.Store()...)
+				sats.Write(assigned.Store())
 				remaining -= int64(assigned.End) - int64(assigned.Start)
 				*satRangesWritten++
 			}
 
 			*outputsTraversed++
 
-			idx.rangeCache[outpoint] = sats
+			idx.rangeCache.Write(outpoint, sats.Bytes())
 			idx.outputsInsertedSinceFlush++
 		}
 	}
 	return nil
 }
 
+// needCommit is a method that checks if a commit is needed.
+func (idx *Indexer) needCommit(
+	startTime time.Time,
+	unCommit int,
+) bool {
+	return unCommit >= constants.DefaultWithFlushNum ||
+		idx.valueCache.Len() >= constants.DefaultFlushCacheNum ||
+		idx.outputsTraversed >= constants.DefaultFlushOutputTraversed ||
+		time.Since(startTime) > time.Minute*30
+	//if commit {
+	//	return true
+	//}
+	//return idx.valueCache.Size() >= constants.MaxInsertDataSize ||
+	//	idx.rangeCache.Size() >= constants.MaxInsertDataSize
+}
+
 // detectReorg is a method that detects if there is a reorganization in the blockchain.
-func (idx *Indexer) commit(wtx *dao.DB, valueCache *ValueCache) (err error) {
+func (idx *Indexer) commit(wtx *dao.DB) (err error) {
 	log.Srv.Infof(
 		"Committing at block %d, %d outputs traversed, %d in map, %d cached",
-		idx.height-1, idx.outputsTraversed, valueCache.Len(), idx.outputsCached,
+		idx.height-1, idx.outputsTraversed, idx.valueCache.Len(), idx.outputsCached,
 	)
 
 	// If the indexer is configured to index satoshis, flush the satoshi range cache to the database.
 	if idx.indexSats {
 		log.Srv.Infof(
-			"Flushing %d entries (%.1f%% resulting from %d insertions) from memory to database",
-			len(idx.rangeCache),
-			float64(len(idx.rangeCache))/float64(idx.outputsInsertedSinceFlush)*100,
+			"Flushing %d entries, total %d bytes (%.1f%% resulting from %d insertions) from memory to database",
+			idx.rangeCache.Len(),
+			idx.rangeCache.Size(),
+			float64(idx.rangeCache.Len())/float64(idx.outputsInsertedSinceFlush)*100,
 			idx.outputsInsertedSinceFlush,
 		)
 
-		for outpoint, ranges := range idx.rangeCache {
-			if err = wtx.SetOutpointToSatRange(&tables.OutpointSatRange{
-				Outpoint: outpoint,
-				SatRange: ranges,
-			}); err != nil {
-				return err
-			}
+		setRanges := make([]*tables.OutpointSatRange, 0, idx.rangeCache.Len())
+		idx.rangeCache.Range(func(k string, v *bytes.Buffer) {
+			setRanges = append(setRanges, &tables.OutpointSatRange{
+				Outpoint: k,
+				SatRange: v.Bytes(),
+			})
+		})
+		if err = wtx.SetOutpointToSatRange(setRanges...); err != nil {
+			return err
 		}
-		idx.outputsInsertedSinceFlush = 0
-		idx.rangeCache = make(map[string][]byte)
+		setRanges = nil
 	}
 
 	// Update the value cache.
-	if err = wtx.SetOutpointToValue(valueCache.Values()); err != nil {
+	if err = wtx.SetOutpointToValue(idx.valueCache.Values()); err != nil {
 		return err
 	}
 
@@ -681,6 +695,10 @@ func (idx *Indexer) commit(wtx *dao.DB, valueCache *ValueCache) (err error) {
 	}
 
 	wtx.Commit()
+
+	idx.outputsInsertedSinceFlush = 0
+	idx.valueCache = NewValueCache()
+	idx.rangeCache = NewRangeCaches()
 	return nil
 }
 

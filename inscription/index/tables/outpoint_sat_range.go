@@ -3,7 +3,7 @@ package tables
 import (
 	"encoding/binary"
 	"errors"
-	"github.com/inscription-c/insc/internal/math"
+	"github.com/inscription-c/insc/internal/math/uint128"
 	"time"
 )
 
@@ -64,7 +64,7 @@ func (s *SatRange) Store() []byte {
 	base := s.Start
 	delta := s.End - s.Start
 
-	n := math.From64(base).Or(math.From64(delta).Lsh(51))
+	n := uint128.From64(base).Or(uint128.From64(delta).Lsh(51))
 	bs := n.Big().Bytes()
 	l := len(bs)
 	resLen := 11

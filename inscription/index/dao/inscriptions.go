@@ -152,3 +152,82 @@ func (d *DB) FindInscriptionsInBlock(height uint32) (list []*model.OutPoint, err
 	}
 	return
 }
+
+func (d *DB) InscriptionsNum() (total int64, err error) {
+	err = d.Model(&tables.Inscriptions{}).Count(&total).Error
+	if errors.Is(err, gorm.ErrRecordNotFound) {
+		err = nil
+	}
+	return
+}
+
+func (d *DB) InscriptionsStoredData() (total uint64, err error) {
+	err = d.Model(&tables.Inscriptions{}).Select("sum(content_size)").Scan(&total).Error
+	if errors.Is(err, gorm.ErrRecordNotFound) {
+		err = nil
+	}
+	return
+}
+
+func (d *DB) InscriptionsTotalFees() (total uint64, err error) {
+	err = d.Model(&tables.Inscriptions{}).Select("sum(fee)").Scan(&total).Error
+	if errors.Is(err, gorm.ErrRecordNotFound) {
+		err = nil
+	}
+	return
+}
+
+func (d *DB) FirstInscriptionByOwner(owner string) (firts tables.Inscriptions, err error) {
+	err = d.Where("owner=?", owner).First(&firts).Error
+	if errors.Is(err, gorm.ErrRecordNotFound) {
+		err = nil
+	}
+	return
+}
+
+type FindProtocolsParams struct {
+	Page            int
+	Size            int
+	TxId            string
+	Offset          uint32
+	InscriptionNum  *int64
+	Owner           string
+	Order           string
+	Types           []string
+	InscriptionType string
+}
+
+func (d *DB) SearchInscriptions(params *FindProtocolsParams) (list []*tables.Inscriptions, total int64, err error) {
+	db := d.Select("inscriptions.*")
+	if params.InscriptionType != "" {
+		db = db.Joins("JOIN protocol ON inscriptions.sequence_num=protocol.sequence_num").
+			Where("protocol.ticker=?", params.InscriptionType)
+	}
+	if params.TxId != "" {
+		db = db.Where("inscriptions.tx_id=? and inscriptions.offset=?", params.TxId, params.Offset)
+	}
+	if params.InscriptionNum != nil {
+		db = db.Where("inscriptions.inscription_num=?", *params.InscriptionNum)
+	}
+	if params.Owner != "" {
+		db = db.Where("inscriptions.owner=?", params.Owner)
+	}
+	if len(params.Types) > 0 {
+		db = db.Where("inscriptions.media_type in (?)", params.Types)
+	}
+	switch params.Order {
+	case "newest":
+		db = db.Order("inscriptions.created_at desc")
+	case "oldest":
+		db = db.Order("inscriptions.created_at asc")
+	}
+
+	if err = db.Count(&total).Error; err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			err = nil
+		}
+		return
+	}
+	err = db.Offset((params.Page - 1) * params.Size).Limit(params.Size).Find(&list).Error
+	return
+}

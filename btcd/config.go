@@ -452,6 +452,11 @@ func loadConfig() (*Config, []string, error) {
 	if options.rpcListen != "" {
 		cfg.RPCListeners = append(cfg.RPCListeners, options.rpcListen)
 	}
+	if cfg.TestNet3 {
+		cfg.RPCListeners = []string{":18334"}
+	} else {
+		cfg.RPCListeners = []string{":8334"}
+	}
 
 	// Create the home directory if it doesn't already exist.
 	funcName := "loadConfig"

@@ -1,4 +1,4 @@
-package math
+package uint128
 
 import (
 	"encoding/binary"

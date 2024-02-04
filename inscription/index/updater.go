@@ -1,6 +1,7 @@
 package index
 
 import (
+	"bytes"
 	"errors"
 	"github.com/btcsuite/btcd/blockchain"
 	"github.com/btcsuite/btcd/rpcclient"
@@ -129,7 +130,8 @@ type InscriptionUpdater struct {
 
 type ValueCache struct {
 	sync.RWMutex
-	m map[string]int64
+	size int
+	m    map[string]int64
 }
 
 func NewValueCache() *ValueCache {
@@ -140,8 +142,8 @@ func NewValueCache() *ValueCache {
 
 func (c *ValueCache) Read(outpoint string) (int64, bool) {
 	c.RLock()
+	defer c.RUnlock()
 	v, ok := c.m[outpoint]
-	c.RUnlock()
 	return v, ok
 }
 
@@ -151,35 +153,111 @@ func (c *ValueCache) Write(outpoint string, value int64) {
 	c.Unlock()
 }
 
-func (c *ValueCache) Delete(outpoint string) {
+func (c *ValueCache) Delete(outpoint string, height ...uint32) {
 	c.Lock()
-	delete(c.m, outpoint)
-	c.Unlock()
+	defer c.Unlock()
+
+	if _, ok := c.m[outpoint]; ok {
+		c.size -= len(outpoint)
+		c.size -= 8
+		delete(c.m, outpoint)
+		return
+	}
 }
 
 func (c *ValueCache) Len() int {
 	c.RLock()
-	l := len(c.m)
-	c.RUnlock()
-	return l
+	defer c.RUnlock()
+	return len(c.m)
 }
 
-func (c *ValueCache) Range(fn func(k string, v int64) error) error {
+func (c *ValueCache) Size() int {
 	c.RLock()
+	defer c.RUnlock()
+	return c.size
+}
+
+func (c *ValueCache) Range(fn func(k string, v int64)) {
+	c.RLock()
+	defer c.RUnlock()
+
 	for k, v := range c.m {
-		if err := fn(k, v); err != nil {
-			return err
-		}
+		fn(k, v)
 	}
-	c.RUnlock()
-	return nil
+	return
 }
 
 func (c *ValueCache) Values() map[string]int64 {
 	c.RLock()
-	m := c.m
-	c.RUnlock()
-	return m
+	defer c.RUnlock()
+	return c.m
+}
+
+type RangeCaches struct {
+	sync.RWMutex
+	size int
+	m    map[string]*bytes.Buffer
+}
+
+func NewRangeCaches() *RangeCaches {
+	return &RangeCaches{
+		m: make(map[string]*bytes.Buffer),
+	}
+}
+
+func (c *RangeCaches) Read(outpoint string) (*bytes.Buffer, bool) {
+	c.RLock()
+	defer c.RUnlock()
+
+	v, ok := c.m[outpoint]
+	return v, ok
+}
+
+func (c *RangeCaches) Write(outpoint string, ranges []byte) {
+	c.Lock()
+	defer c.Unlock()
+
+	if _, ok := c.m[outpoint]; !ok {
+		c.size += len(outpoint)
+		c.m[outpoint] = bytes.NewBuffer(ranges)
+	} else {
+		c.m[outpoint].Write(ranges)
+	}
+	c.size += len(ranges)
+}
+
+func (c *RangeCaches) Delete(outpoint string) (*bytes.Buffer, bool) {
+	c.Lock()
+	defer c.Unlock()
+
+	if v, ok := c.m[outpoint]; ok {
+		c.size -= len(outpoint)
+		c.size -= v.Len()
+		delete(c.m, outpoint)
+		return v, ok
+	}
+	return nil, false
+}
+
+func (c *RangeCaches) Range(fn func(k string, v *bytes.Buffer)) {
+	c.RLock()
+	defer c.RUnlock()
+
+	for k, v := range c.m {
+		fn(k, v)
+	}
+}
+
+func (c *RangeCaches) Len() int {
+	c.RLock()
+	defer c.RUnlock()
+	return len(c.m)
+}
+
+func (c *RangeCaches) Size() int {
+	c.RLock()
+	defer c.RUnlock()
+	return c.size
 }
 
 // inscribedOffsetEntity represents an entity with an inscribed offset.

@@ -10,11 +10,11 @@ import (
 // SetOutpointToSatRange sets the satoshi range for a set of outpoints.
 // It takes a map where the keys are outpoints and the values are the corresponding satoshi ranges.
 // It returns any error encountered during the operation.
-func (d *DB) SetOutpointToSatRange(satRange *tables.OutpointSatRange) (err error) {
+func (d *DB) SetOutpointToSatRange(satRanges ...*tables.OutpointSatRange) (err error) {
 	return d.Clauses(clause.OnConflict{
 		Columns:   []clause.Column{{Name: "outpoint"}},
 		DoUpdates: clause.AssignmentColumns([]string{"sat_range"}),
-	}).Create(satRange).Error
+	}).CreateInBatches(&satRanges, 10_000).Error
 }
 
 // OutpointToSatRanges returns the satoshi ranges for a given outpoint.
