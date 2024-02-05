@@ -8,7 +8,7 @@ type Protocol struct {
 	Id            uint64 `gorm:"column:id;primary_key;AUTO_INCREMENT;NOT NULL"` // this is sequence_num
 	InscriptionId `gorm:"embedded"`
 	Index         uint32    `gorm:"column:index;type:int unsigned;default:0;NOT NULL"` // outpoint index of tx
-	SequenceNum   uint64    `gorm:"column:sequence_num;type:bigint unsigned;index:idx_sequence_num;default:0;NOT NULL"`
+	SequenceNum   int64     `gorm:"column:sequence_num;type:bigint;index:idx_sequence_num;default:0;NOT NULL"`
 	Protocol      string    `gorm:"column:protocol;type:varchar(255);index:idx_protocol;default:;NOT NULL"`
 	Ticker        string    `gorm:"column:ticker;type:varchar(255);index:idx_ticker;default:;NOT NULL"`
 	Operator      string    `gorm:"column:operator;type:varchar(255);index:idx_operator;default:;NOT NULL"`

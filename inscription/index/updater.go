@@ -116,7 +116,7 @@ type InscriptionUpdater struct {
 	timestamp int64
 
 	// nextSequenceNumber is a pointer to an uint64 that represents the next sequence number to be used for a transaction.
-	nextSequenceNumber *uint64
+	nextSequenceNumber *int64
 
 	// unboundInscriptions is a pointer to an uint32 that represents the total number of unbound inscriptions.
 	unboundInscriptions *uint64
@@ -629,7 +629,7 @@ func (u *InscriptionUpdater) updateInscriptionLocation(
 
 	// Initialize error, unbound flag, and sequence number.
 	var unbound bool
-	var sequenceNumber uint64
+	var sequenceNumber int64
 	inscriptionId := flotsam.InscriptionId
 
 	// If the origin of the flotsam is old, delete all by SatPoint and delete the inscription by ID.
@@ -664,7 +664,7 @@ func (u *InscriptionUpdater) updateInscriptionLocation(
 		}
 		// Increment the sequence number.
 		sequenceNumber = *u.nextSequenceNumber
-		if !atomic.CompareAndSwapUint64(u.nextSequenceNumber, sequenceNumber, sequenceNumber+1) {
+		if !atomic.CompareAndSwapInt64(u.nextSequenceNumber, sequenceNumber, sequenceNumber+1) {
 			return errors.New("nextSequenceNumber compare and swap failed")
 		}
 

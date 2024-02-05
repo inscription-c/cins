@@ -13,6 +13,10 @@ func (d *DB) SaveProtocol(protocol *tables.Protocol) error {
 	return d.DB.Save(protocol).Error
 }
 
+func (d *DB) DeleteMockProtocol() error {
+	return d.Where("sequence_num<0").Delete(&tables.Protocol{}).Error
+}
+
 // FindProtocol finds protocols based on the provided parameters.
 // It returns a list of matching protocols and any error encountered.
 func (d *DB) FindProtocol(protocol, ticker, operator string, tkid ...string) (list []*tables.Protocol, err error) {

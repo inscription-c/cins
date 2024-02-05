@@ -29,6 +29,19 @@ func (t ContentType) Bytes() []byte {
 	return []byte(t)
 }
 
+func (t ContentType) String() string {
+	return string(t)
+}
+
+func (t ContentType) MediaType() MediaType {
+	for _, media := range Medias {
+		if media.ContentType == t {
+			return media.MediaType
+		}
+	}
+	return MediaUnknown
+}
+
 const (
 	ContentTypeCbor             ContentType = "application/cbor"
 	ContentTypeJson             ContentType = "application/json"
@@ -68,15 +81,6 @@ const (
 	ContentTypeVideoWebm        ContentType = "video/webm"
 )
 
-func (t ContentType) MediaType() MediaType {
-	for _, media := range Medias {
-		if media.ContentType == t {
-			return media.MediaType
-		}
-	}
-	return MediaUnknown
-}
-
 type BrotliMode int
 
 const (
@@ -89,6 +93,10 @@ const (
 )
 
 type MediaType string
+
+func (m MediaType) String() string {
+	return string(m)
+}
 
 const (
 	MediaUnknown    MediaType = "unknown"

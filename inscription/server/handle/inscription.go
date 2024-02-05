@@ -17,22 +17,22 @@ import (
 
 // RespInscription is a struct that represents the response for an inscription request.
 type RespInscription struct {
-	InscriptionId   string                  `json:"inscription_id"`
-	Charms          []string                `json:"charms"`
-	InscriptionNum  int64                   `json:"inscription_number"`
-	Next            string                  `json:"next"`
-	Previous        string                  `json:"previous"`
-	Owner           string                  `json:"address"`
-	Sat             uint64                  `json:"sat"`
-	ContentLength   int                     `json:"content_length"`
-	ContentType     string                  `json:"content_type"`
-	GenesisFee      uint64                  `json:"genesis_fee"`
-	GenesisHeight   uint32                  `json:"genesis_height"`
-	OutputValue     int64                   `json:"output_value"`
-	SatPoint        string                  `json:"satpoint"`
-	Timestamp       int64                   `json:"timestamp"`
-	UnlockCondition *tables.UnlockCondition `json:"unlock_condition"`
-	ContentProtocol string                  `json:"content_protocol"`
+	InscriptionId   string                 `json:"inscription_id"`
+	Charms          []string               `json:"charms"`
+	InscriptionNum  int64                  `json:"inscription_number"`
+	Next            string                 `json:"next"`
+	Previous        string                 `json:"previous"`
+	Owner           string                 `json:"address"`
+	Sat             uint64                 `json:"sat"`
+	ContentLength   int                    `json:"content_length"`
+	ContentType     string                 `json:"content_type"`
+	GenesisFee      uint64                 `json:"genesis_fee"`
+	GenesisHeight   uint32                 `json:"genesis_height"`
+	OutputValue     int64                  `json:"output_value"`
+	SatPoint        string                 `json:"satpoint"`
+	Timestamp       int64                  `json:"timestamp"`
+	UnlockCondition tables.UnlockCondition `json:"unlock_condition"`
+	ContentProtocol string                 `json:"content_protocol"`
 }
 
 // Inscription is a handler function for handling inscription requests.

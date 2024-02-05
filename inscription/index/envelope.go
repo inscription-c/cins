@@ -184,10 +184,23 @@ func fromRawEnvelope(r *RawEnvelope) *Envelope {
 		}
 	}
 
+	inscription := &model.Inscription{
+		Body:                  body,
+		ContentEncoding:       contentEncoding,
+		ContentType:           constants.ContentType(contentType),
+		Metadata:              metadata,
+		Pointer:               pointer,
+		UnRecognizedEvenField: unrecognizedEvenField,
+		DuplicateField:        duplicateField,
+		IncompleteField:       incompleteField,
+	}
+
 	// Create an UnlockCondition from the unlock condition data
 	unlockCondition, err := tables.UnlockConditionFromBytes(unlockConditionData)
 	if err != nil {
 		unrecognizedEvenField = true
+	} else {
+		inscription.UnlockCondition = *unlockCondition
 	}
 
 	return &Envelope{
@@ -196,17 +209,7 @@ func fromRawEnvelope(r *RawEnvelope) *Envelope {
 		offset:  r.offset,
 		pushNum: r.pushNum,
 		stutter: r.stutter,
-		payload: &model.Inscription{
-			Body:                  body,
-			ContentEncoding:       contentEncoding,
-			ContentType:           constants.ContentType(contentType),
-			UnlockCondition:       unlockCondition,
-			Metadata:              metadata,
-			Pointer:               pointer,
-			UnRecognizedEvenField: unrecognizedEvenField,
-			DuplicateField:        duplicateField,
-			IncompleteField:       incompleteField,
-		},
+		payload: inscription,
 	}
 }
 

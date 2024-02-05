@@ -16,9 +16,9 @@ type Inscription struct {
 
 // NextSequenceNumber retrieves the next sequence number for inscriptions.
 // It returns the next sequence number as an uint64 and any error encountered.
-func (d *DB) NextSequenceNumber() (num uint64, err error) {
+func (d *DB) NextSequenceNumber() (num int64, err error) {
 	ins := &tables.Inscriptions{}
-	if err = d.Last(&ins).Error; err != nil {
+	if err = d.Where("sequence_num>0").Order("sequence_num desc").First(&ins).Error; err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			err = nil
 			return 1, nil
@@ -49,7 +49,7 @@ func (d *DB) GetInscriptionByOutpoint(outpoint *model.OutPoint) (list []*tables.
 
 // DeleteInscriptionById deletes an inscription by its outpoint.
 // It returns the sequence number of the deleted inscription and any error encountered.
-func (d *DB) DeleteInscriptionById(inscriptionId *tables.InscriptionId) (sequenceNum uint64, err error) {
+func (d *DB) DeleteInscriptionById(inscriptionId *tables.InscriptionId) (sequenceNum int64, err error) {
 	ins := &tables.Inscriptions{}
 	err = d.Clauses(clause.Returning{}).Where("tx_id=? and offset=?", inscriptionId.TxId, inscriptionId.Offset).Delete(ins).Error
 	if err != nil {
@@ -62,7 +62,11 @@ func (d *DB) DeleteInscriptionById(inscriptionId *tables.InscriptionId) (sequenc
 // CreateInscription creates a new inscription in the database.
 // It returns any error encountered.
 func (d *DB) CreateInscription(ins *tables.Inscriptions) error {
-	return d.DB.Create(ins).Error
+	return d.Create(ins).Error
+}
+
+func (d *DB) DeleteMockInscriptions() error {
+	return d.Where("sequence_num < 0").Delete(&tables.Inscriptions{}).Error
 }
 
 // GetInscriptionByInscriptionNum retrieves an inscription by its sequence number.
@@ -77,7 +81,7 @@ func (d *DB) GetInscriptionByInscriptionNum(inscriptionNum int64) (ins tables.In
 
 // GetInscriptionBySequenceNum retrieves an inscription by its sequence number.
 // It returns the inscription and any error encountered.
-func (d *DB) GetInscriptionBySequenceNum(sequenceNum uint64) (ins tables.Inscriptions, err error) {
+func (d *DB) GetInscriptionBySequenceNum(sequenceNum int64) (ins tables.Inscriptions, err error) {
 	err = d.Where("sequence_num = ?", sequenceNum).First(&ins).Error
 	if errors.Is(err, gorm.ErrRecordNotFound) {
 		err = nil
@@ -198,7 +202,7 @@ type FindProtocolsParams struct {
 }
 
 func (d *DB) SearchInscriptions(params *FindProtocolsParams) (list []*tables.Inscriptions, total int64, err error) {
-	db := d.Select("inscriptions.*")
+	db := d.Model(&tables.Inscriptions{})
 	if params.InscriptionType != "" {
 		db = db.Joins("JOIN protocol ON inscriptions.sequence_num=protocol.sequence_num").
 			Where("protocol.ticker=?", params.InscriptionType)
@@ -217,9 +221,9 @@ func (d *DB) SearchInscriptions(params *FindProtocolsParams) (list []*tables.Ins
 	}
 	switch params.Order {
 	case "newest":
-		db = db.Order("inscriptions.created_at desc")
+		db = db.Order("inscriptions.id desc")
 	case "oldest":
-		db = db.Order("inscriptions.created_at asc")
+		db = db.Order("inscriptions.id asc")
 	}
 
 	if err = db.Count(&total).Error; err != nil {

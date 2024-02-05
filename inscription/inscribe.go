@@ -34,9 +34,9 @@ var (
 	destination          string
 	unlockConditionFile  string
 	embedDB              bool
-	dbAddr               string
-	dbUser               string
-	dbPass               string
+	mysqlAddr            string
+	mysqlUser            string
+	mysqlPass            string
 	dbName               string
 	noBackup             bool
 )
@@ -60,9 +60,9 @@ func init() {
 	Cmd.Flags().BoolVarP(&dryRun, "dry_run", "", false, "Don't sign or broadcast transactions.")
 	Cmd.Flags().BoolVarP(&cbrc20, "c_brc_20", "", false, "is c-brc-20 protocol, add this flag will auto check protocol content effectiveness")
 	//Cmd.Flags().BoolVarP(&embedDB, "embed_db", "", false, "use embed the database in the index.")
-	Cmd.Flags().StringVarP(&dbAddr, "mysql_addr", "", "127.0.0.1:3306", "index server database address")
-	Cmd.Flags().StringVarP(&dbUser, "mysql_user", "", "root", "index server database user")
-	Cmd.Flags().StringVarP(&dbPass, "mysql_pass", "", "root", "index server database password")
+	Cmd.Flags().StringVarP(&mysqlAddr, "mysql_addr", "", "127.0.0.1:3306", "index server database address")
+	Cmd.Flags().StringVarP(&mysqlUser, "mysql_user", "", "root", "index server database user")
+	Cmd.Flags().StringVarP(&mysqlPass, "mysql_pass", "", "root", "index server database password")
 	Cmd.Flags().StringVarP(&dbName, "dbname", "", constants.DefaultDBName, "inscription index mysql database name")
 	Cmd.Flags().BoolVarP(&noBackup, "no_backup", "", false, "Do not back up recovery key.")
 	if err := Cmd.MarkFlagRequired("filepath"); err != nil {
@@ -150,16 +150,16 @@ func inscribe() error {
 	})
 
 	if embedDB {
-		dbAddr = fmt.Sprintf("localhost:%s", constants.DefaultDBListenPort)
-		dbUser = "root"
-		dbPass = ""
+		mysqlAddr = fmt.Sprintf("localhost:%s", constants.DefaultDBListenPort)
+		mysqlUser = "root"
+		mysqlPass = ""
 	}
 
 	// Get the database
 	db, err := dao.NewDB(
-		dao.WithAddr(dbAddr),
-		dao.WithUser(dbUser),
-		dao.WithPassword(dbPass),
+		dao.WithAddr(mysqlAddr),
+		dao.WithUser(mysqlUser),
+		dao.WithPassword(mysqlPass),
 		dao.WithDBName(dbName),
 	)
 	if err != nil {

@@ -9,7 +9,7 @@ import (
 // SaveSatToSequenceNumber saves a SAT (Satisfiability) to a sequence number in the database.
 // It takes a SAT and a sequence number as parameters, both of type uint64.
 // It returns any error encountered during the operation.
-func (d *DB) SaveSatToSequenceNumber(sat, sequenceNum uint64) error {
+func (d *DB) SaveSatToSequenceNumber(sat uint64, sequenceNum int64) error {
 	s := &tables.SatToSequenceNum{
 		Sat:         sat,
 		SequenceNum: sequenceNum,

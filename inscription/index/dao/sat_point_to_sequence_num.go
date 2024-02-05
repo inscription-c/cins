@@ -17,7 +17,7 @@ func (d *DB) DeleteAllBySatPoint(satpoint *tables.SatPointToSequenceNum) error {
 // SetSatPointToSequenceNum sets a SatPoint to a sequence number in the database.
 // It takes a SatPoint and a sequence number as parameters.
 // It returns any error encountered during the operation.
-func (d *DB) SetSatPointToSequenceNum(satPoint *tables.SatPointToSequenceNum, sequenceNum uint64) error {
+func (d *DB) SetSatPointToSequenceNum(satPoint *tables.SatPointToSequenceNum, sequenceNum int64) error {
 	return d.Clauses(clause.OnConflict{
 		Columns:   []clause.Column{{Name: "outpoint"}, {Name: "offset"}},
 		DoUpdates: clause.AssignmentColumns([]string{"sequence_num"}),
@@ -42,8 +42,8 @@ func (d *DB) InscriptionsByOutpoint(outpoint string) (res []*Inscription, err er
 		return
 	}
 
-	satpointMap := make(map[uint64]*tables.SatPointToSequenceNum)
-	sequenceNums := make([]uint64, 0, len(satpoints))
+	satpointMap := make(map[int64]*tables.SatPointToSequenceNum)
+	sequenceNums := make([]int64, 0, len(satpoints))
 	for _, satpoint := range satpoints {
 		sequenceNums = append(sequenceNums, satpoint.SequenceNum)
 		satpointMap[satpoint.SequenceNum] = satpoint
