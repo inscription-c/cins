@@ -13,6 +13,7 @@ import (
 	"github.com/inscription-c/insc/inscription/log"
 	"github.com/inscription-c/insc/internal/signal"
 	"github.com/inscription-c/insc/internal/util"
+	"io"
 	"sync/atomic"
 	"time"
 )
@@ -396,22 +397,28 @@ func (idx *Indexer) indexBlock(
 					if ok {
 						idx.outputsCached++
 					} else {
-						var outpointSatRange tables.OutpointSatRange
+						var outpointSatRanges []*tables.OutpointSatRange
 						if idx.indexSpentSats {
-							outpointSatRange, err = wtx.OutpointToSatRanges(outpoint)
+							outpointSatRanges, err = wtx.OutpointToSatRanges(outpoint)
 							if err != nil {
 								return err
 							}
-							satRanges = bytes.NewBuffer(outpointSatRange.SatRange)
 						} else {
-							outpointSatRange, err = wtx.DelSatRangesByOutpoint(outpoint)
+							outpointSatRanges, err = wtx.DelSatRangesByOutpoint(outpoint)
 							if err != nil {
 								return err
 							}
-							satRanges = bytes.NewBuffer(outpointSatRange.SatRange)
 						}
-						if outpointSatRange.Id == 0 {
+						if len(outpointSatRanges) == 0 {
 							return fmt.Errorf("could not find outpoint %s in index", outpoint)
+						}
+
+						for idx, v := range outpointSatRanges {
+							if idx == 0 {
+								satRanges = bytes.NewBuffer(v.SatRange)
+								continue
+							}
+							satRanges.Write(v.SatRange)
 						}
 					}
 
@@ -463,7 +470,14 @@ func (idx *Indexer) indexBlock(
 			if err != nil {
 				return err
 			}
-			for _, coinBase := range coinbaseInputs {
+			if len(lostSatRanges) == 0 {
+				lostSatRanges = []*tables.OutpointSatRange{{
+					Outpoint: nullOutpoint,
+					SatRange: make([]byte, 0),
+				}}
+			}
+			for i, coinBase := range coinbaseInputs {
+				latestIdx := len(lostSatRanges) - 1
 				start := Sat(coinBase.Start)
 				if !start.Common() {
 					if err := wtx.SatToSatPoint(&tables.SatSatPoint{
@@ -474,11 +488,21 @@ func (idx *Indexer) indexBlock(
 						return err
 					}
 				}
-				lostSatRanges.SatRange = append(lostSatRanges.SatRange, coinBase.Store()...)
+
+				lostSatRanges[latestIdx].SatRange = append(lostSatRanges[latestIdx].SatRange, coinBase.Store()...)
 				lostSats += coinBase.End - coinBase.Start
+
+				if i < len(coinbaseInputs)-1 &&
+					len(lostSatRanges[latestIdx].SatRange) >= constants.MaxSatRangesDataSize {
+					lostSatRanges = append(lostSatRanges,
+						&tables.OutpointSatRange{
+							Outpoint: nullOutpoint,
+							SatRange: make([]byte, 0),
+						},
+					)
+				}
 			}
-			lostSatRanges.Outpoint = nullOutpoint
-			if err := wtx.SetOutpointToSatRange(&lostSatRanges); err != nil {
+			if err := wtx.SetOutpointToSatRange(lostSatRanges...); err != nil {
 				return err
 			}
 		}
@@ -663,12 +687,29 @@ func (idx *Indexer) commit(wtx *dao.DB) (err error) {
 			idx.outputsInsertedSinceFlush,
 		)
 
-		setRanges := make([]*tables.OutpointSatRange, 0, idx.rangeCache.Len())
+		buf := make([]byte, constants.MaxSatRangesDataSize)
+		setRanges := make([]*tables.OutpointSatRange, 0)
 		idx.rangeCache.Range(func(k string, v *bytes.Buffer) {
-			setRanges = append(setRanges, &tables.OutpointSatRange{
-				Outpoint: k,
-				SatRange: v.Bytes(),
-			})
+			if v.Len() <= constants.MaxSatRangesDataSize {
+				setRanges = append(setRanges, &tables.OutpointSatRange{
+					Outpoint: k,
+					SatRange: v.Bytes(),
+				})
+				return
+			}
+
+			for {
+				n, err := v.Read(buf)
+				if err == io.EOF {
+					break
+				}
+				dest := make([]byte, n)
+				copy(dest, buf[:n])
+				setRanges = append(setRanges, &tables.OutpointSatRange{
+					Outpoint: k,
+					SatRange: dest,
+				})
+			}
 		})
 		if err = wtx.SetOutpointToSatRange(setRanges...); err != nil {
 			return err

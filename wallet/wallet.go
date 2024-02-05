@@ -124,6 +124,12 @@ func Main() error {
 	logFile := btcutil.AppDataDir(filepath.Join(constants.AppName, "inscription", "logs", "inscription.log"), false)
 	log2.InitLogRotator(logFile)
 
+	if Options.EmbedDB {
+		Options.MysqlAddr = fmt.Sprintf("127.0.0.1:%s", constants.DefaultDBListenPort)
+		Options.MysqlUser = "root"
+		Options.MysqlPassword = ""
+	}
+
 	db, err := dao.NewDB(
 		dao.WithEmbedDB(Options.EmbedDB),
 		dao.WithAddr(Options.MysqlAddr),
