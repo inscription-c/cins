@@ -57,6 +57,9 @@ func (h *Handler) doHomePageStatistics(apiResp *api.Resp) error {
 		resp.TotalFees = fmt.Sprintf("%s BTC", btc.String())
 		return nil
 	})
+	if err := errWg.Wait(); err != nil {
+		return err
+	}
 	apiResp.ApiRespOK(resp)
 	return nil
 }

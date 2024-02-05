@@ -71,7 +71,7 @@ var Cmd = &cobra.Command{
 func init() {
 	Cmd.Flags().StringVarP(&Options.Username, "user", "u", "root", "btcd rpc server username")
 	Cmd.Flags().StringVarP(&Options.Password, "password", "P", "root", "btcd rpc server password")
-	Cmd.Flags().BoolVarP(&Options.EmbedDB, "embed_db", "", false, "use embed db")
+	//Cmd.Flags().BoolVarP(&Options.EmbedDB, "embed_db", "", false, "use embed db")
 	Cmd.Flags().StringVarP(&Options.WalletPass, "wallet_pass", "", "root", "wallet password")
 	Cmd.Flags().StringVarP(&Options.MysqlAddr, "mysql_addr", "d", "127.0.0.1:3306", "inscription index mysql database addr")
 	Cmd.Flags().StringVarP(&Options.MysqlUser, "mysql_user", "", "root", "inscription index mysql database user")

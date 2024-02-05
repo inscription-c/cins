@@ -33,6 +33,7 @@ var (
 	cbrc20               bool
 	destination          string
 	unlockConditionFile  string
+	embedDB              bool
 	dbAddr               string
 	dbUser               string
 	dbPass               string
@@ -58,6 +59,7 @@ func init() {
 	Cmd.Flags().StringVarP(&jsonMetadata, "json_metadata", "", "", "Include JSON in file at <METADATA> converted to CBOR as inscription metadata")
 	Cmd.Flags().BoolVarP(&dryRun, "dry_run", "", false, "Don't sign or broadcast transactions.")
 	Cmd.Flags().BoolVarP(&cbrc20, "c_brc_20", "", false, "is c-brc-20 protocol, add this flag will auto check protocol content effectiveness")
+	//Cmd.Flags().BoolVarP(&embedDB, "embed_db", "", false, "use embed the database in the index.")
 	Cmd.Flags().StringVarP(&dbAddr, "mysql_addr", "", "127.0.0.1:3306", "index server database address")
 	Cmd.Flags().StringVarP(&dbUser, "mysql_user", "", "root", "index server database user")
 	Cmd.Flags().StringVarP(&dbPass, "mysql_pass", "", "root", "index server database password")
@@ -146,6 +148,12 @@ func inscribe() error {
 	signal.AddInterruptHandler(func() {
 		walletCli.Shutdown()
 	})
+
+	if embedDB {
+		dbAddr = fmt.Sprintf("localhost:%s", constants.DefaultDBListenPort)
+		dbUser = "root"
+		dbPass = ""
+	}
 
 	// Get the database
 	db, err := dao.NewDB(

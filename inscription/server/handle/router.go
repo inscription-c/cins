@@ -29,5 +29,5 @@ func (h *Handler) InitRouter() {
 	// scan
 	scan := h.Engine().Group("/scan")
 	scan.GET("/home/page/statistics", h.HomePageStatistics)
-	scan.GET("/inscriptions/list", h.ScanInscriptionList)
+	scan.POST("/inscriptions/list", h.ScanInscriptionList)
 }

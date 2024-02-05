@@ -28,11 +28,24 @@ const (
 
 type ScanInscriptionListReq struct {
 	Search          string   `json:"search"`
-	Page            int      `json:"page" binding:"min=1"`
-	Limit           int      `json:"limit" binding:"min=1,max=50"`
-	Order           string   `json:"order" binding:"oneof=newest oldest"`
+	Page            int      `json:"page" binding:"omitempty,min=1"`
+	Limit           int      `json:"limit" binding:"omitempty,min=1,max=50"`
+	Order           string   `json:"order" binding:"omitempty,oneof=newest oldest"`
 	Types           []string `json:"types" binding:"omitempty,dive,oneof=image text html"`
 	InscriptionType string   `json:"inscription_type" binding:"omitempty,oneof=c-brc-20"`
+}
+
+func (req *ScanInscriptionListReq) Check() error {
+	if req.Page == 0 {
+		req.Page = 1
+	}
+	if req.Limit == 0 {
+		req.Limit = 50
+	}
+	if req.Order == "" {
+		req.Order = "newest"
+	}
+	return nil
 }
 
 type ScanInscriptionListResp struct {
@@ -58,6 +71,11 @@ func (h *Handler) ScanInscriptionList(ctx *gin.Context) {
 	req := &ScanInscriptionListReq{}
 	apiResp := &api.Resp{}
 	if err := ctx.BindJSON(req); err != nil {
+		apiResp.ApiRespErr(api.CodeParamsInvalid, err.Error())
+		ctx.JSON(http.StatusOK, apiResp)
+		return
+	}
+	if err := req.Check(); err != nil {
 		apiResp.ApiRespErr(api.CodeParamsInvalid, err.Error())
 		ctx.JSON(http.StatusOK, apiResp)
 		return
