@@ -756,6 +756,12 @@ func (u *InscriptionUpdater) updateInscriptionLocation(
 			entry.Sat = uint64(*sat)
 			entry.Offset = uint32(flotsam.Offset)
 		}
+
+		protocol, err := util.NewProtocolFromBytes(inscription.payload.Body)
+		if err == nil {
+			entry.ContentProtocol = protocol.Name()
+		}
+
 		// Create the inscription in the database.
 		if err := u.wtx.CreateInscription(entry); err != nil {
 			return err

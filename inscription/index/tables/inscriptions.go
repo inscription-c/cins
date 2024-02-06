@@ -30,6 +30,7 @@ type Inscriptions struct {
 	ContentType     string          `gorm:"column:content_type;type:varchar(255);default:'';NOT NULL"`
 	MediaType       string          `gorm:"column:media_type;type:varchar(255);index:idx_media_type;default:'';NOT NULL"`
 	ContentSize     uint32          `gorm:"column:content_size;type:int unsigned;default:0;NOT NULL"`
+	ContentProtocol string          `gorm:"column:content_protocol;type:varchar(255);default:'';NOT NULL"`
 	CInsDescription CInsDescription `gorm:"embedded"`
 	Metadata        []byte          `gorm:"column:metadata;type:mediumblob"`
 	Pointer         int32           `gorm:"column:pointer;type:int;default:0;NOT NULL"`

@@ -205,13 +205,9 @@ type FindProtocolsParams struct {
 
 func (d *DB) SearchInscriptions(params *FindProtocolsParams) (list []*tables.Inscriptions, total int64, err error) {
 	db := d.Model(&tables.Inscriptions{})
-	if params.InscriptionType != "" || params.Ticker != "" {
-		db = db.Joins("JOIN protocol ON inscriptions.sequence_num=protocol.sequence_num")
-		if params.InscriptionType != "" {
-			db = db.Where("protocol.protocol=?", params.InscriptionType)
-		} else if params.Ticker != "" {
-			db = db.Where("protocol.protocol=? and protocol.ticker=?", constants.ProtocolCBRC20, params.Ticker)
-		}
+	if params.Ticker != "" {
+		db = db.Joins("JOIN protocol ON inscriptions.sequence_num=protocol.sequence_num").
+			Where("protocol.protocol=? and protocol.ticker=?", constants.ProtocolCBRC20, params.Ticker)
 	}
 	if params.TxId != "" {
 		db = db.Where("inscriptions.tx_id=? and inscriptions.offset=?", params.TxId, params.Offset)
@@ -221,6 +217,9 @@ func (d *DB) SearchInscriptions(params *FindProtocolsParams) (list []*tables.Ins
 	}
 	if params.Owner != "" {
 		db = db.Where("inscriptions.owner=?", params.Owner)
+	}
+	if params.InscriptionType != "" {
+		db = db.Where("inscriptions.content_protocol=?", params.InscriptionType)
 	}
 	if len(params.Types) > 0 {
 		db = db.Where("inscriptions.media_type in (?)", params.Types)

@@ -65,6 +65,7 @@ type ScanInscriptionEntry struct {
 	OwnerAddress      string `json:"owner_address"`
 	//Sat               string                 `json:"sat"`
 	CInsDescription tables.CInsDescription `json:"c_ins_description"`
+	ContentProtocol string                 `json:"content_protocol"`
 }
 
 func (h *Handler) ScanInscriptionList(ctx *gin.Context) {
@@ -155,6 +156,7 @@ func (h *Handler) doScanInscriptionList(req *ScanInscriptionListReq, apiResp *ap
 			OwnerAddress:      ins.Owner,
 			//Sat:               gconv.String(ins.Sat),
 			CInsDescription: ins.CInsDescription,
+			ContentProtocol: ins.ContentProtocol,
 		})
 	}
 	apiResp.ApiRespOK(resp)
