@@ -173,7 +173,7 @@ func fromRawEnvelope(r *RawEnvelope) *Envelope {
 	contentType := TagContentType.RemoveField(fields)
 	metadata := TagMetadata.RemoveField(fields)
 	pointer := TagPointer.RemoveField(fields)
-	unlockConditionData := TagUnlockCondition.RemoveField(fields)
+	cInsDescriptionData := TagCInsDescription.RemoveField(fields)
 
 	// Check for unrecognized even fields in the remaining map
 	unrecognizedEvenField := false
@@ -196,11 +196,11 @@ func fromRawEnvelope(r *RawEnvelope) *Envelope {
 	}
 
 	// Create an UnlockCondition from the unlock condition data
-	unlockCondition, err := tables.UnlockConditionFromBytes(unlockConditionData)
+	cInsDescription, err := tables.CInsDescriptionFromBytes(cInsDescriptionData)
 	if err != nil {
 		unrecognizedEvenField = true
 	} else {
-		inscription.UnlockCondition = *unlockCondition
+		inscription.CInsDescription = *cInsDescription
 	}
 
 	return &Envelope{

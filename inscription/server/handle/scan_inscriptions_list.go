@@ -3,7 +3,6 @@ package handle
 import (
 	"github.com/btcsuite/btcd/btcutil"
 	"github.com/gin-gonic/gin"
-	"github.com/gogf/gf/v2/util/gconv"
 	"github.com/inscription-c/insc/constants"
 	"github.com/inscription-c/insc/inscription/index/dao"
 	"github.com/inscription-c/insc/inscription/index/model"
@@ -56,15 +55,15 @@ type ScanInscriptionListResp struct {
 }
 
 type ScanInscriptionEntry struct {
-	InscriptionId     string                 `json:"inscription_id"`
-	InscriptionNumber int64                  `json:"inscription_number"`
-	ContentType       string                 `json:"content_type"`
-	ContentLength     uint32                 `json:"content_length"`
-	Timestamp         string                 `json:"timestamp"`
-	OwnerOutput       string                 `json:"owner_output"`
-	OwnerAddress      string                 `json:"owner_address"`
-	Sat               string                 `json:"sat"`
-	UnlockCondition   tables.UnlockCondition `json:"unlock_condition"`
+	InscriptionId     string `json:"inscription_id"`
+	InscriptionNumber int64  `json:"inscription_number"`
+	ContentType       string `json:"content_type"`
+	ContentLength     uint32 `json:"content_length"`
+	Timestamp         string `json:"timestamp"`
+	OwnerOutput       string `json:"owner_output"`
+	OwnerAddress      string `json:"owner_address"`
+	//Sat               string                 `json:"sat"`
+	CInsDescription tables.CInsDescription `json:"c_ins_description"`
 }
 
 func (h *Handler) ScanInscriptionList(ctx *gin.Context) {
@@ -147,8 +146,8 @@ func (h *Handler) doScanInscriptionList(req *ScanInscriptionListReq, apiResp *ap
 			Timestamp:         time.Unix(ins.Timestamp, 0).UTC().Format(time.RFC3339),
 			OwnerOutput:       model.NewOutPoint(ins.TxId, ins.Index).String(),
 			OwnerAddress:      ins.Owner,
-			Sat:               gconv.String(ins.Sat),
-			UnlockCondition:   ins.UnlockCondition,
+			//Sat:               gconv.String(ins.Sat),
+			CInsDescription: ins.CInsDescription,
 		})
 	}
 	apiResp.ApiRespOK(resp)

@@ -31,7 +31,7 @@ type RespInscription struct {
 	OutputValue     int64                  `json:"output_value"`
 	SatPoint        string                 `json:"satpoint"`
 	Timestamp       int64                  `json:"timestamp"`
-	UnlockCondition tables.UnlockCondition `json:"unlock_condition"`
+	CInsDescription tables.CInsDescription `json:"c_ins_description"`
 	ContentProtocol string                 `json:"content_protocol"`
 }
 
@@ -137,7 +137,7 @@ func (h *Handler) doInscription(ctx *gin.Context, query string) error {
 		ContentType:     inscription.ContentType,
 		ContentLength:   len(inscription.Body),
 		Timestamp:       inscription.Timestamp,
-		UnlockCondition: inscription.UnlockCondition,
+		CInsDescription: inscription.CInsDescription,
 		ContentProtocol: contentProtocol,
 		Previous:        preInscriptionId,
 		Next:            nextInscriptionId,

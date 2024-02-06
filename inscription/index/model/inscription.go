@@ -14,7 +14,7 @@ type Inscription struct {
 	Body            []byte
 	ContentEncoding []byte
 	ContentType     constants.ContentType
-	UnlockCondition tables.UnlockCondition
+	CInsDescription tables.CInsDescription
 	Metadata        []byte
 	Pointer         []byte
 

@@ -82,7 +82,7 @@ func (h *Handler) GetBRC20TokenInfo(token *tables.Protocol) (gin.H, error) {
 			return errors.New("inscription not found")
 		}
 		lock.Lock()
-		resp["unlock_condition"] = inscription.UnlockCondition
+		resp["c_ins_description"] = inscription.CInsDescription
 		//resp["metadata"] = hex.EncodeToString(inscription.Metadata)
 		lock.Unlock()
 		return nil

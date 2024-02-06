@@ -738,7 +738,7 @@ func (u *InscriptionUpdater) updateInscriptionLocation(
 			SequenceNum:     sequenceNumber,
 			InscriptionNum:  inscriptionNumber,
 			Owner:           inscription.owner,
-			UnlockCondition: inscription.payload.UnlockCondition,
+			CInsDescription: inscription.payload.CInsDescription,
 			Charms:          charms,
 			Fee:             uint64(flotsam.Origin.New.Fee),
 			Height:          u.idx.height,

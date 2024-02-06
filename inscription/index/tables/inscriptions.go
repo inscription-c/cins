@@ -30,33 +30,33 @@ type Inscriptions struct {
 	ContentType     string          `gorm:"column:content_type;type:varchar(255);default:'';NOT NULL"`
 	MediaType       string          `gorm:"column:media_type;type:varchar(255);index:idx_media_type;default:'';NOT NULL"`
 	ContentSize     uint32          `gorm:"column:content_size;type:int unsigned;default:0;NOT NULL"`
-	UnlockCondition UnlockCondition `gorm:"embedded"`
+	CInsDescription CInsDescription `gorm:"embedded"`
 	Metadata        []byte          `gorm:"column:metadata;type:mediumblob"`
 	Pointer         int32           `gorm:"column:pointer;type:int;default:0;NOT NULL"`
 	CreatedAt       time.Time       `gorm:"column:created_at;type:timestamp;default:CURRENT_TIMESTAMP;NOT NULL"`
 	UpdatedAt       time.Time       `gorm:"column:updated_at;type:timestamp;default:CURRENT_TIMESTAMP;NOT NULL"`
 }
 
-type UnlockCondition struct {
+type CInsDescription struct {
 	Type     string `gorm:"column:type;type:varchar(255);default:'';NOT NULL" json:"type"` // blockchain/ordinals
 	Chain    string `gorm:"column:chain;type:varchar(255);index:idx_chain;default:'';NOT NULL" json:"chain"`
 	Contract string `gorm:"column:contract;type:varchar(255);index:idx_contract;default:'';NOT NULL" json:"contract"`
 }
 
-func (u *UnlockCondition) Data() []byte {
+func (u *CInsDescription) Data() []byte {
 	data, _ := json.Marshal(u)
 	return data
 }
 
-func UnlockConditionFromFile(file string) (*UnlockCondition, error) {
+func CInsDescriptionFromFile(file string) (*CInsDescription, error) {
 	data, err := os.ReadFile(file)
 	if err != nil {
 		return nil, err
 	}
-	return UnlockConditionFromBytes(data)
+	return CInsDescriptionFromBytes(data)
 }
 
-func UnlockConditionFromBytes(data []byte) (*UnlockCondition, error) {
+func CInsDescriptionFromBytes(data []byte) (*CInsDescription, error) {
 	if len(data) == 0 {
 		return nil, ErrInvalidUnlockConditionData
 	}
@@ -64,7 +64,7 @@ func UnlockConditionFromBytes(data []byte) (*UnlockCondition, error) {
 	if err := json.Unmarshal(data, &m); err != nil {
 		return nil, err
 	}
-	unlockCondition := &UnlockCondition{}
+	unlockCondition := &CInsDescription{}
 	if err := gconv.Struct(m, unlockCondition); err != nil {
 		return nil, err
 	}

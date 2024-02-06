@@ -18,7 +18,7 @@ const (
 	TagMetaprotocol
 	TagContentEncoding
 	TagDelegate
-	TagUnlockCondition
+	TagCInsDescription
 
 	TagNop
 )
@@ -48,7 +48,7 @@ func TagFromBytes(bs []byte) TagType {
 		return TagNop
 	default:
 		if string(bs) == constants.UnlockCondition {
-			return TagUnlockCondition
+			return TagCInsDescription
 		}
 		return TagNop
 	}
@@ -77,7 +77,7 @@ func (t TagType) Bytes() []byte {
 		return []byte{11}
 	case TagNop:
 		return []byte{255}
-	case TagUnlockCondition:
+	case TagCInsDescription:
 		return []byte(constants.UnlockCondition)
 	default:
 		return []byte{}

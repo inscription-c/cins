@@ -98,9 +98,8 @@ type Inscription struct {
 // It contains the destination chain, the content type, the content encoding,
 // the pointer, and the metadata.
 type Header struct {
-	// UnlockCondition is the destination chain for the inscription.
-	// It follows the coin_type from https://github.com/satoshilabs/slips/blob/master/slip-0044.md
-	UnlockCondition *tables.UnlockCondition `json:"unlock_condition"`
+	// CInsDescription is the destination chain for the inscription.
+	CInsDescription *tables.CInsDescription `json:"c_ins_description"`
 
 	// ContentType is the content type of the inscription.
 	ContentType constants.ContentType `json:"content_type"`
@@ -130,8 +129,8 @@ type options struct {
 	// walletPass is the password for the wallet.
 	walletPass string `validate:"required"`
 
-	// unlockCondition is the destination chain for the inscription.
-	unlockCondition *tables.UnlockCondition
+	// cInsDescription is the destination chain for the inscription.
+	cInsDescription *tables.CInsDescription
 
 	// cborMetadata is the CBOR metadata for the inscription.
 	cborMetadata string
@@ -180,12 +179,12 @@ func WithJsonMetadata(jsonMetadata string) func(*options) {
 	}
 }
 
-// WithUnlockCondition is a function that sets the destination chain option for an Inscription.
+// WithCInsDescription is a function that sets the destination chain option for an Inscription.
 // It takes a string representing the destination chain and returns a function that sets
 // the destination chain in the options of an Inscription.
-func WithUnlockCondition(unlockCondition *tables.UnlockCondition) func(*options) {
+func WithCInsDescription(cInsDescription *tables.CInsDescription) func(*options) {
 	return func(options *options) {
-		options.unlockCondition = unlockCondition
+		options.cInsDescription = cInsDescription
 	}
 }
 
@@ -252,7 +251,7 @@ func NewFromPath(path string, inputOpts ...Option) (*Inscription, error) {
 	// Create a new Inscription with the provided options
 	inscription := &Inscription{
 		Header: Header{
-			UnlockCondition: opts.unlockCondition,
+			CInsDescription: opts.cInsDescription,
 			Metadata:        &util.Reader{},
 		},
 		options: opts,
@@ -721,7 +720,7 @@ func (i *Inscription) AppendInscriptionContentToBuilder() error {
 		AddOp(txscript.OP_IF).
 		AddData([]byte(constants.ProtocolId)).
 		AddData([]byte(constants.UnlockCondition)).
-		AddData(i.Header.UnlockCondition.Data()).
+		AddData(i.Header.CInsDescription.Data()).
 		AddOp(txscript.OP_1).
 		AddData(i.Header.ContentType.Bytes())
 

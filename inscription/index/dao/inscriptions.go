@@ -205,7 +205,7 @@ func (d *DB) SearchInscriptions(params *FindProtocolsParams) (list []*tables.Ins
 	db := d.Model(&tables.Inscriptions{})
 	if params.InscriptionType != "" {
 		db = db.Joins("JOIN protocol ON inscriptions.sequence_num=protocol.sequence_num").
-			Where("protocol.ticker=?", params.InscriptionType)
+			Where("protocol.protocol=?", params.InscriptionType)
 	}
 	if params.TxId != "" {
 		db = db.Where("inscriptions.tx_id=? and inscriptions.offset=?", params.TxId, params.Offset)

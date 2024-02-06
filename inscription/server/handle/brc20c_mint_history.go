@@ -68,11 +68,11 @@ func (h *Handler) doBRC20CMintHistory(ctx *gin.Context, tkidOrAddr string, page 
 	}
 
 	ctx.JSON(http.StatusOK, gin.H{
-		"unlock_condition": deploy.UnlockCondition,
-		"ticker_id":        deploy.InscriptionId,
-		"page_index":       page,
-		"more":             more,
-		"mint_history":     list,
+		"c_ins_description": deploy.CInsDescription,
+		"ticker_id":         deploy.InscriptionId,
+		"page_index":        page,
+		"more":              more,
+		"mint_history":      list,
 	})
 	return nil
 }

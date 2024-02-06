@@ -32,7 +32,7 @@ var (
 	dryRun               bool
 	cbrc20               bool
 	destination          string
-	unlockConditionFile  string
+	cInsDescriptionFile  string
 	embedDB              bool
 	mysqlAddr            string
 	mysqlUser            string
@@ -50,7 +50,7 @@ func init() {
 	Cmd.Flags().StringVarP(&walletPass, "wallet_pass", "", "root", "wallet password for master private key")
 	Cmd.Flags().BoolVarP(&testnet, "testnet", "t", false, "bitcoin testnet3")
 	Cmd.Flags().StringVarP(&inscriptionsFilePath, "filepath", "f", "", "inscription file path")
-	Cmd.Flags().StringVarP(&unlockConditionFile, "unlock_condition", "d", "", "unlock condition file path.")
+	Cmd.Flags().StringVarP(&cInsDescriptionFile, "c_ins_description", "", "", "cins protocol description.")
 	Cmd.Flags().StringVarP(&destination, "dest", "", "", "Send inscription to <DESTINATION> address.")
 	Cmd.Flags().StringVarP(&rpcConnect, "rpc_connect", "s", "localhost:8332", "the URL of wallet RPC server to connect to (default localhost:8332, testnet: localhost:18332)")
 	Cmd.Flags().Uint64VarP(&postage, "postage", "p", constants.DefaultPostage, "Amount of postage to include in the inscription. Default `10000sat`.")
@@ -73,7 +73,7 @@ func init() {
 		fmt.Println(err)
 		os.Exit(1)
 	}
-	if err := Cmd.MarkFlagRequired("unlock_condition"); err != nil {
+	if err := Cmd.MarkFlagRequired("c_ins_description"); err != nil {
 		fmt.Println(err)
 		os.Exit(1)
 	}
@@ -98,7 +98,7 @@ func configCheck() error {
 	log.InitLogRotator(logFile)
 
 	// unlock condition check
-	if _, err := tables.UnlockConditionFromFile(unlockConditionFile); err != nil {
+	if _, err := tables.CInsDescriptionFromFile(cInsDescriptionFile); err != nil {
 		return err
 	}
 	return nil
@@ -167,7 +167,7 @@ func inscribe() error {
 	}
 
 	// Get the unlock condition from the file path
-	unlockCondition, err := tables.UnlockConditionFromFile(unlockConditionFile)
+	cInsDescription, err := tables.CInsDescriptionFromFile(cInsDescriptionFile)
 	if err != nil {
 		return err
 	}
@@ -177,7 +177,7 @@ func inscribe() error {
 		WithDB(db),
 		WithWalletClient(walletCli),
 		WithPostage(postage),
-		WithUnlockCondition(unlockCondition),
+		WithCInsDescription(cInsDescription),
 		WithWalletPass(walletPass),
 		WithCborMetadata(cborMetadata),
 		WithJsonMetadata(jsonMetadata),
