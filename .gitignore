@@ -16,6 +16,6 @@ vendor/
 .idea
 
 # temp file
-config/config.yaml
+inscription/config/config.yaml
 .DS_Store
 logs

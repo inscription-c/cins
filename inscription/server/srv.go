@@ -158,7 +158,7 @@ func init() {
 	Cmd.Flags().StringVarP(&srvOptions.rpcListen, "rpc_listen", "l", mainNetRPCListen, "rpc server listen address. Default `mainnet :8335, testnet :18335`")
 	Cmd.Flags().BoolVarP(&srvOptions.testnet, "testnet", "t", false, "bitcoin testnet3")
 	Cmd.Flags().StringVarP(&srvOptions.rpcConnect, "rpc_connect", "s", mainNetRPCConnect, "the URL of btcd RPC server to connect to (default localhost:8334, testnet: localhost:18334)")
-	Cmd.Flags().BoolVarP(&srvOptions.embedDB, "embed_db", "", false, "use embed db")
+	//Cmd.Flags().BoolVarP(&srvOptions.embedDB, "embed_db", "", false, "use embed db")
 	Cmd.Flags().BoolVarP(&srvOptions.noApi, "no_api", "", false, "don't start api server")
 	Cmd.Flags().StringVarP(&srvOptions.dataDir, "data_dir", "", "", "embed database data dir")
 	Cmd.Flags().StringVarP(&srvOptions.mysqlAddr, "mysql_addr", "d", "127.0.0.1:3306", "inscription index mysql database addr")
