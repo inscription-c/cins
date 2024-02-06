@@ -24,7 +24,7 @@ func TestInscribe(t *testing.T) {
 	testnet = true
 	postage = 1
 	inscriptionsFilePath = "./test/cbrc20.json"
-	unlockConditionFile = "./test/unlock_condition.json"
+	cInsDescriptionFile = "./test/c_ins_description.json"
 	destination = "tb1qq2lsrdnylv0qu7eezsruhv29jxrujm3fpzfpkf"
 	if err := inscribe(); err != nil {
 		t.Fatal(err)
@@ -98,7 +98,7 @@ func TestMockInscriptions(t *testing.T) {
 				ContentType:     constants.ContentTypeJson.String(),
 				MediaType:       constants.ContentTypeJson.MediaType().String(),
 				ContentSize:     uint32(len(bodyBs)),
-				UnlockCondition: tables.UnlockCondition{
+				CInsDescription: tables.CInsDescription{
 					Type:     constants.UnlockConditionTypeBlockchain,
 					Chain:    "309",
 					Contract: "ckt1qqexmutxu0c2jq9q4msy8cc6fh4q7q02xvr7dc347zw3ks3qka0m6qggqupnqt6y5nu39j0704jvw770esjfdzulzsyqwqes9az2f7gje8l86ex8008ucfyk3w03gk2pfrr",

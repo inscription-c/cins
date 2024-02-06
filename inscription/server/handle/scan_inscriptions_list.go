@@ -23,6 +23,7 @@ const (
 	SearchTypeInscriptionId     SearchType = "inscription_id"
 	SearchTypeInscriptionNumber SearchType = "inscription_number"
 	SearchTypeAddress           SearchType = "address"
+	SearchTypeProtocol          SearchType = "protocol"
 )
 
 type ScanInscriptionListReq struct {
@@ -110,6 +111,15 @@ func (h *Handler) doScanInscriptionList(req *ScanInscriptionListReq, apiResp *ap
 			insId := tables.StringToInscriptionId(req.Search)
 			searParams.TxId, searParams.Offset = insId.TxId, insId.Offset
 		} else {
+			addressAndProtocol := func() {
+				if _, err := btcutil.DecodeAddress(req.Search, util.ActiveNet.Params); err != nil {
+					resp.SearchType = SearchTypeProtocol
+					searParams.Ticker = req.Search
+				} else {
+					resp.SearchType = SearchTypeAddress
+					searParams.Owner = req.Search
+				}
+			}
 			inscriptionNumber, err := strconv.ParseInt(req.Search, 10, 64)
 			if err == nil {
 				inscription, err := h.DB().GetInscriptionByInscriptionNum(inscriptionNumber)
@@ -119,15 +129,11 @@ func (h *Handler) doScanInscriptionList(req *ScanInscriptionListReq, apiResp *ap
 				if inscription.Id > 0 {
 					resp.SearchType = SearchTypeInscriptionNumber
 					searParams.InscriptionNum = &inscriptionNumber
-					return nil
+				} else {
+					addressAndProtocol()
 				}
-			}
-
-			if _, err := btcutil.DecodeAddress(req.Search, util.ActiveNet.Params); err != nil {
-				return nil
 			} else {
-				resp.SearchType = SearchTypeAddress
-				searParams.Owner = req.Search
+				addressAndProtocol()
 			}
 		}
 	}
@@ -137,6 +143,7 @@ func (h *Handler) doScanInscriptionList(req *ScanInscriptionListReq, apiResp *ap
 		return err
 	}
 	resp.Total = int(total)
+
 	for _, ins := range list {
 		resp.List = append(resp.List, &ScanInscriptionEntry{
 			InscriptionId:     ins.InscriptionId.String(),

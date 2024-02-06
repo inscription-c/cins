@@ -2,6 +2,7 @@ package dao
 
 import (
 	"errors"
+	"github.com/inscription-c/insc/constants"
 	"github.com/inscription-c/insc/inscription/index/model"
 	"github.com/inscription-c/insc/inscription/index/tables"
 	"gorm.io/gorm"
@@ -196,6 +197,7 @@ type FindProtocolsParams struct {
 	Offset          uint32
 	InscriptionNum  *int64
 	Owner           string
+	Ticker          string
 	Order           string
 	Types           []string
 	InscriptionType string
@@ -203,9 +205,13 @@ type FindProtocolsParams struct {
 
 func (d *DB) SearchInscriptions(params *FindProtocolsParams) (list []*tables.Inscriptions, total int64, err error) {
 	db := d.Model(&tables.Inscriptions{})
-	if params.InscriptionType != "" {
-		db = db.Joins("JOIN protocol ON inscriptions.sequence_num=protocol.sequence_num").
-			Where("protocol.protocol=?", params.InscriptionType)
+	if params.InscriptionType != "" || params.Ticker != "" {
+		db = db.Joins("JOIN protocol ON inscriptions.sequence_num=protocol.sequence_num")
+		if params.InscriptionType != "" {
+			db = db.Where("protocol.protocol=?", params.InscriptionType)
+		} else if params.Ticker != "" {
+			db = db.Where("protocol.protocol=? and protocol.ticker=?", constants.ProtocolCBRC20, params.Ticker)
+		}
 	}
 	if params.TxId != "" {
 		db = db.Where("inscriptions.tx_id=? and inscriptions.offset=?", params.TxId, params.Offset)
