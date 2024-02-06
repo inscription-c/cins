@@ -9,7 +9,10 @@ import (
 )
 
 func (h *Handler) InscriptionsInBlock(ctx *gin.Context) {
-	height := ctx.DefaultQuery("height", "0")
+	height := ctx.Param("height")
+	if height == "" {
+		height = "0"
+	}
 	if err := h.doInscriptionsInBlock(ctx, gconv.Uint32(height)); err != nil {
 		ctx.Status(http.StatusInternalServerError)
 		return

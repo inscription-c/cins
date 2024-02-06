@@ -7,17 +7,12 @@ import (
 	"github.com/btcsuite/btcwallet/chain"
 	"github.com/btcsuite/btcwallet/rpc/legacyrpc"
 	"github.com/btcsuite/btcwallet/wallet"
-	"github.com/inscription-c/insc/btcd"
 	"github.com/inscription-c/insc/constants"
-	"github.com/inscription-c/insc/inscription/index"
-	"github.com/inscription-c/insc/inscription/index/dao"
-	"github.com/inscription-c/insc/inscription/index/tables"
 	log2 "github.com/inscription-c/insc/inscription/log"
 	"github.com/inscription-c/insc/internal/signal"
 	"github.com/inscription-c/insc/internal/util"
 	"github.com/inscription-c/insc/wallet/log"
 	"github.com/spf13/cobra"
-	"go.etcd.io/etcd/pkg/v3/debugutil"
 	"net"
 	"net/http"
 	_ "net/http/pprof"
@@ -36,22 +31,11 @@ var (
 )
 
 type walletOptions struct {
-	Username         string
-	Password         string
-	WalletPass       string
-	EmbedDB          bool
-	MysqlAddr        string
-	MysqlUser        string
-	MysqlPassword    string
-	MysqlDBName      string
-	Testnet          bool
-	RpcConnect       string
-	IndexSats        string
-	IndexSpendSats   string
-	IndexNoSyncBlock bool
-	MiningAddrs      []string
-	EnablePprof      bool
-	PprofPort        string
+	Username   string
+	Password   string
+	BtcdUrl    string
+	WalletPass string
+	Testnet    bool
 }
 
 var Options = &walletOptions{}
@@ -71,28 +55,9 @@ var Cmd = &cobra.Command{
 func init() {
 	Cmd.Flags().StringVarP(&Options.Username, "user", "u", "root", "btcd rpc server username")
 	Cmd.Flags().StringVarP(&Options.Password, "password", "P", "root", "btcd rpc server password")
-	//Cmd.Flags().BoolVarP(&Options.EmbedDB, "embed_db", "", false, "use embed db")
+	Cmd.Flags().StringVarP(&Options.BtcdUrl, "btcd_url", "", "localhost:8334", "Hostname/IP and port of btcd RPC server to connect to (default localhost:8334, testnet: localhost:18334)")
 	Cmd.Flags().StringVarP(&Options.WalletPass, "wallet_pass", "", "root", "wallet password")
-	Cmd.Flags().StringVarP(&Options.MysqlAddr, "mysql_addr", "d", "127.0.0.1:3306", "inscription index mysql database addr")
-	Cmd.Flags().StringVarP(&Options.MysqlUser, "mysql_user", "", "root", "inscription index mysql database user")
-	Cmd.Flags().StringVarP(&Options.MysqlPassword, "mysql_pass", "", "root", "inscription index mysql database password")
-	Cmd.Flags().StringVarP(&Options.MysqlDBName, "dbname", "", constants.DefaultDBName, "inscription index mysql database name")
 	Cmd.Flags().BoolVarP(&Options.Testnet, "testnet", "t", false, "bitcoin testnet3")
-	Cmd.Flags().StringVarP(&Options.RpcConnect, "rpc_connect", "", "", "Hostname/IP and port of btcd RPC server to connect to (default localhost:8334, testnet: localhost:18334)")
-	Cmd.Flags().StringVarP(&Options.IndexSats, "index_sats", "", "", "Track location of all satoshis, true/false")
-	Cmd.Flags().StringVarP(&Options.IndexSpendSats, "index_spend_sats", "", "", "Keep sat index entries of spent outputs, true/false")
-	Cmd.Flags().BoolVarP(&Options.IndexNoSyncBlock, "index_no_sync_block", "", false, "index no sync block")
-	Cmd.Flags().StringSliceVarP(&Options.MiningAddrs, "mining_addrs", "", []string{}, "Add the specified payment address to the list of addresses to use for generated blocks")
-	Cmd.Flags().BoolVarP(&Options.EnablePprof, "enable_pprof", "", false, "enable pprof")
-	Cmd.Flags().StringVarP(&Options.PprofPort, "pprof_port", "", "18331", "pprof port")
-	if err := Cmd.MarkFlagRequired("user"); err != nil {
-		fmt.Println(err)
-		os.Exit(1)
-	}
-	if err := Cmd.MarkFlagRequired("password"); err != nil {
-		fmt.Println(err)
-		os.Exit(1)
-	}
 	if err := Cmd.MarkFlagRequired("wallet_pass"); err != nil {
 		fmt.Println(err)
 		os.Exit(1)
@@ -100,91 +65,10 @@ func init() {
 }
 
 func Main() error {
-	if Options.RpcConnect == "" {
-		btcdRpcListen := btcdRpcListenMainNet
-		if Options.Testnet {
-			btcdRpcListen = btcdRpcListenTestNet
-		}
-		Options.RpcConnect = btcdRpcListen
-		if err := btcd.Btcd(nil,
-			btcd.WithUser(Options.Username),
-			btcd.WithPassword(Options.Password),
-			btcd.WithTestnet(Options.Testnet),
-			btcd.WithRpcListen(btcdRpcListen),
-			btcd.WithMiningAddr(Options.MiningAddrs...),
-		); err != nil {
-			return err
-		}
-	}
-
-	if err := Wallet(nil); err != nil {
-		return err
-	}
-
 	logFile := btcutil.AppDataDir(filepath.Join(constants.AppName, "inscription", "logs", "inscription.log"), false)
 	log2.InitLogRotator(logFile)
-
-	if Options.EmbedDB {
-		Options.MysqlAddr = fmt.Sprintf("127.0.0.1:%s", constants.DefaultDBListenPort)
-		Options.MysqlUser = "root"
-		Options.MysqlPassword = ""
-	}
-
-	db, err := dao.NewDB(
-		dao.WithEmbedDB(Options.EmbedDB),
-		dao.WithAddr(Options.MysqlAddr),
-		dao.WithUser(Options.MysqlUser),
-		dao.WithPassword(Options.MysqlPassword),
-		dao.WithDBName(Options.MysqlDBName),
-		dao.WithDataDir(constants.DBDatDir(Options.Testnet)),
-		dao.WithServerPort(constants.DefaultDBListenPort),
-		dao.WithStatusPort(constants.DefaultDbStatusListenPort),
-		dao.WithAutoMigrateTables(tables.Tables...),
-	)
-	if err != nil {
+	if err := Wallet(nil); err != nil {
 		return err
-	}
-
-	disableTls, err := util.DisableTls(Options.RpcConnect, util.ActiveNet.RPCClientPort)
-	if err != nil {
-		return err
-	}
-	cli, err := btcd.NewClient(Options.RpcConnect, Options.Username, Options.Password, disableTls)
-	if err != nil {
-		return err
-	}
-	batchCli, err := btcd.NewBatchClient(Options.RpcConnect, Options.Username, Options.Password, disableTls)
-	if err != nil {
-		return err
-	}
-	signal.AddInterruptHandler(func() {
-		cli.Shutdown()
-		batchCli.Shutdown()
-	})
-
-	indexer := index.NewIndexer(
-		index.WithDB(db),
-		index.WithClient(cli),
-		index.WithIndexSats(Options.IndexSats),
-		index.WithBatchClient(batchCli),
-		index.WithIndexSpendSats(Options.IndexSpendSats),
-		index.WithNoSyncBLockInfo(Options.IndexNoSyncBlock),
-		index.WithTidbSessionMemLimit(constants.TidbSessionMemLimit),
-	)
-	indexer.Start()
-	signal.AddInterruptHandler(func() {
-		indexer.Stop()
-	})
-
-	if Options.EnablePprof {
-		srvMux := http.NewServeMux()
-		for k, v := range debugutil.PProfHandlers() {
-			srvMux.Handle(k, v)
-		}
-		if err := http.ListenAndServe(fmt.Sprintf("localhost:%s", Options.PprofPort), srvMux); err != nil && !errors.Is(err, http.ErrServerClosed) {
-			log.Log.Error(err)
-			os.Exit(1)
-		}
 	}
 	return nil
 }

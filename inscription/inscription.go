@@ -20,14 +20,13 @@ import (
 	"github.com/go-playground/validator/v10"
 	"github.com/inscription-c/insc/constants"
 	"github.com/inscription-c/insc/inscription/index"
-	"github.com/inscription-c/insc/inscription/index/dao"
 	"github.com/inscription-c/insc/inscription/index/model"
 	"github.com/inscription-c/insc/inscription/index/tables"
 	"github.com/inscription-c/insc/inscription/log"
+	"github.com/inscription-c/insc/internal/indexer"
 	"github.com/inscription-c/insc/internal/util"
 	"github.com/shopspring/decimal"
 	"github.com/ugorji/go/codec"
-	"gorm.io/gorm"
 	"io"
 	"os"
 	"reflect"
@@ -118,8 +117,6 @@ type Header struct {
 // It contains the wallet client, the postage, the wallet password, the destination chain,
 // the CBOR metadata, and the JSON metadata.
 type options struct {
-	db *dao.DB
-
 	// walletClient is the client for the wallet.
 	walletClient *rpcclient.Client `validate:"required"`
 
@@ -137,6 +134,8 @@ type options struct {
 
 	// jsonMetadata is the JSON metadata for the inscription.
 	jsonMetadata string
+
+	indexer *indexer.Indexer
 }
 
 // Option is a function type that takes a pointer to an options' struct.
@@ -197,12 +196,9 @@ func WithWalletClient(cli *rpcclient.Client) func(*options) {
 	}
 }
 
-// WithDB is a function that sets the database option for an Inscription.
-// It takes a pointer to a dao.DB representing the database and returns a function that sets
-// the database in the options of an Inscription.
-func WithDB(db *dao.DB) Option {
-	return func(o *options) {
-		o.db = db
+func WithIndexer(indexer *indexer.Indexer) func(*options) {
+	return func(options *options) {
+		options.indexer = indexer
 	}
 }
 
@@ -834,19 +830,15 @@ func (i *Inscription) getUtxo() error {
 	}
 
 	// Get wallet inscriptions UTXOs
-	walletInscriptionsOutpoints := make(map[string]struct{})
+	walletInscriptionsOutpoints := make(map[string][]string)
 	for _, outpoint := range utoxTotal {
-		inscriptions, err := i.options.db.GetInscriptionByOutpoint(outpoint)
-		if err != nil && !errors.Is(err, gorm.ErrRecordNotFound) {
+		resp, err := i.options.indexer.Outpoint(outpoint.String())
+		if err != nil {
 			return err
 		}
-		if errors.Is(err, gorm.ErrRecordNotFound) {
-			continue
+		if len(resp.Inscriptions) > 0 {
+			walletInscriptionsOutpoints[outpoint.String()] = resp.Inscriptions
 		}
-		if len(inscriptions) == 0 {
-			continue
-		}
-		walletInscriptionsOutpoints[outpoint.String()] = struct{}{}
 	}
 
 	// Filter out UTXOs that are already used in inscriptions

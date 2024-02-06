@@ -15,6 +15,8 @@ func (h *Handler) InitRouter() {
 	h.Engine().GET("/content/:inscriptionId", h.Content)
 	h.Engine().GET("/inscriptions/:pages", h.Inscriptions)
 	h.Engine().GET("/inscriptions/block/:height/:page", h.InscriptionsInBlockPage)
+	// output
+	//h.Engine().GET("/output/:output", h.Outpoint)
 
 	// cbrc20
 	//h.Engine().GET("/cbrc20/token/:tkid", h.BRC20CToken)

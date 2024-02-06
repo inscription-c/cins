@@ -9,7 +9,10 @@ import (
 // Inscriptions is a handler function for handling inscriptions requests.
 // It validates the request parameters and calls the doInscriptions function.
 func (h *Handler) Inscriptions(ctx *gin.Context) {
-	page := ctx.DefaultQuery("page", "1")
+	page := ctx.Param("page")
+	if page == "" {
+		page = "1"
+	}
 	if err := h.doInscriptions(ctx, page); err != nil {
 		ctx.Status(http.StatusInternalServerError)
 		return

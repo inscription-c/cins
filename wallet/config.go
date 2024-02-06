@@ -288,10 +288,10 @@ func loadConfig() (*Config, []string, error) {
 	cfg.Password = Options.Password
 	cfg.WalletPass = strings.TrimSpace(Options.WalletPass)
 	cfg.TestNet3 = Options.Testnet
-	cfg.RPCConnect = Options.RpcConnect
+	cfg.RPCConnect = Options.BtcdUrl
 
 	if cfg.RPCConnect != "" {
-		rpcConnect, err := cfgutil.NormalizeAddress(Options.RpcConnect, util.ActiveNet.RPCClientPort)
+		rpcConnect, err := cfgutil.NormalizeAddress(Options.BtcdUrl, util.ActiveNet.RPCClientPort)
 		if err != nil {
 			return nil, nil, err
 		}

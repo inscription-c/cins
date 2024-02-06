@@ -9,7 +9,7 @@ import (
 )
 
 func (h *Handler) InscriptionsInOutput(ctx *gin.Context) {
-	output := ctx.Query("output")
+	output := ctx.Param("output")
 	if output == "" {
 		ctx.Status(http.StatusBadRequest)
 		return
@@ -31,13 +31,26 @@ func (h *Handler) doInscriptionsInOutput(ctx *gin.Context, outputStr string) err
 		return err
 	}
 	txOut := tx.MsgTx().TxOut[output.Index]
-	_, address, _, err := txscript.ExtractPkScriptAddrs(txOut.PkScript, util.ActiveNet.Params)
+	_, addresses, num, err := txscript.ExtractPkScriptAddrs(txOut.PkScript, util.ActiveNet.Params)
+	if err != nil {
+		return err
+	}
+	address := ""
+	if num > 0 {
+		address = addresses[0].String()
+	}
+
+	scriptPk, err := txscript.DisasmString(txOut.PkScript)
+	if err != nil {
+		return err
+	}
+
 	ctx.JSON(http.StatusOK, gin.H{
-		"value":        txOut.Value,
-		"script":       string(txOut.PkScript),
-		"addresses":    address[0],
-		"transaction":  output.Hash.String(),
-		"inscriptions": inscriptions,
+		"value":         txOut.Value,
+		"script_pubkey": scriptPk,
+		"address":       address,
+		"transaction":   output.Hash.String(),
+		"inscriptions":  inscriptions,
 	})
 	return nil
 }

@@ -37,8 +37,6 @@ type Options struct {
 	noIndexInscriptions bool
 	// startHeight is an uint32 that represents the starting height of the blockchain to index from.
 	firstInscriptionHeight uint32
-	// no sync block info
-	noSyncBlock bool
 	// limit the tidb tx session memory, default 3GB
 	tidbSessionMemLimit int
 }
@@ -81,12 +79,6 @@ func WithIndexSats(indexSats string) func(*Options) {
 func WithIndexSpendSats(indexSpendSats string) func(*Options) {
 	return func(options *Options) {
 		options.indexSpentSats = indexSpendSats
-	}
-}
-
-func WithNoSyncBLockInfo(noSyncBlock bool) func(*Options) {
-	return func(options *Options) {
-		options.noSyncBlock = noSyncBlock
 	}
 }
 
@@ -138,9 +130,6 @@ func NewIndexer(opts ...Option) *Indexer {
 
 // Start is a method that starts the Indexer.
 func (idx *Indexer) Start() {
-	if idx.opts.noSyncBlock {
-		return
-	}
 	go func() {
 		for {
 			select {

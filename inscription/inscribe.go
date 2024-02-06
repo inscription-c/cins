@@ -7,10 +7,10 @@ import (
 	"github.com/btcsuite/btcwallet/netparams"
 	"github.com/inscription-c/insc/btcd"
 	"github.com/inscription-c/insc/constants"
-	"github.com/inscription-c/insc/inscription/index/dao"
 	"github.com/inscription-c/insc/inscription/index/tables"
 	"github.com/inscription-c/insc/inscription/log"
 	"github.com/inscription-c/insc/inscription/server"
+	"github.com/inscription-c/insc/internal/indexer"
 	"github.com/inscription-c/insc/internal/signal"
 	"github.com/inscription-c/insc/internal/util"
 	"github.com/spf13/cobra"
@@ -19,12 +19,13 @@ import (
 )
 
 var (
-	username             string
-	password             string
+	indexerUrl           string
+	walletUrl            string
+	walletRpcUser        string
+	walletRpcPass        string
 	walletPass           string
 	testnet              bool
 	inscriptionsFilePath string
-	rpcConnect           string
 	postage              = uint64(constants.DefaultPostage)
 	compress             bool
 	cborMetadata         string
@@ -33,11 +34,6 @@ var (
 	cbrc20               bool
 	destination          string
 	cInsDescriptionFile  string
-	embedDB              bool
-	mysqlAddr            string
-	mysqlUser            string
-	mysqlPass            string
-	dbName               string
 	noBackup             bool
 )
 
@@ -45,25 +41,21 @@ var (
 var InsufficientBalanceError = errors.New("InsufficientBalanceError")
 
 func init() {
-	Cmd.Flags().StringVarP(&username, "user", "u", "root", "wallet rpc server username")
-	Cmd.Flags().StringVarP(&password, "password", "P", "root", "wallet rpc server password")
+	Cmd.Flags().StringVarP(&indexerUrl, "indexer_url", "", "http://localhost:8335", "the URL of indexer server (default http://localhost:8335, testnet: http://localhost:18335)")
+	Cmd.Flags().StringVarP(&walletUrl, "wallet_url", "", "localhost:8332", "the URL of wallet RPC server to connect to (default localhost:8332, testnet: localhost:18332)")
+	Cmd.Flags().StringVarP(&walletRpcUser, "wallet_rpc_user", "", "root", "wallet rpc server user")
+	Cmd.Flags().StringVarP(&walletRpcPass, "wallet_rpc_pass", "", "root", "wallet rpc server password")
 	Cmd.Flags().StringVarP(&walletPass, "wallet_pass", "", "root", "wallet password for master private key")
 	Cmd.Flags().BoolVarP(&testnet, "testnet", "t", false, "bitcoin testnet3")
 	Cmd.Flags().StringVarP(&inscriptionsFilePath, "filepath", "f", "", "inscription file path")
 	Cmd.Flags().StringVarP(&cInsDescriptionFile, "c_ins_description", "", "", "cins protocol description.")
 	Cmd.Flags().StringVarP(&destination, "dest", "", "", "Send inscription to <DESTINATION> address.")
-	Cmd.Flags().StringVarP(&rpcConnect, "rpc_connect", "s", "localhost:8332", "the URL of wallet RPC server to connect to (default localhost:8332, testnet: localhost:18332)")
 	Cmd.Flags().Uint64VarP(&postage, "postage", "p", constants.DefaultPostage, "Amount of postage to include in the inscription. Default `10000sat`.")
 	Cmd.Flags().BoolVarP(&compress, "compress", "", false, "Compress inscription content with brotli.")
 	Cmd.Flags().StringVarP(&cborMetadata, "cbor_metadata", "", "", "Include CBOR in file at <METADATA> as inscription metadata")
 	Cmd.Flags().StringVarP(&jsonMetadata, "json_metadata", "", "", "Include JSON in file at <METADATA> converted to CBOR as inscription metadata")
 	Cmd.Flags().BoolVarP(&dryRun, "dry_run", "", false, "Don't sign or broadcast transactions.")
 	Cmd.Flags().BoolVarP(&cbrc20, "c_brc_20", "", false, "is c-brc-20 protocol, add this flag will auto check protocol content effectiveness")
-	//Cmd.Flags().BoolVarP(&embedDB, "embed_db", "", false, "use embed the database in the index.")
-	Cmd.Flags().StringVarP(&mysqlAddr, "mysql_addr", "", "127.0.0.1:3306", "index server database address")
-	Cmd.Flags().StringVarP(&mysqlUser, "mysql_user", "", "root", "index server database user")
-	Cmd.Flags().StringVarP(&mysqlPass, "mysql_pass", "", "root", "index server database password")
-	Cmd.Flags().StringVarP(&dbName, "dbname", "", constants.DefaultDBName, "inscription index mysql database name")
 	Cmd.Flags().BoolVarP(&noBackup, "no_backup", "", false, "Do not back up recovery key.")
 	if err := Cmd.MarkFlagRequired("filepath"); err != nil {
 		fmt.Println(err)
@@ -81,7 +73,8 @@ func init() {
 
 func configCheck() error {
 	if testnet {
-		rpcConnect = "localhost:18332"
+		walletUrl = "localhost:18332"
+		indexerUrl = "http://localhost:18335"
 		util.ActiveNet = &netparams.TestNet3Params
 	}
 
@@ -134,9 +127,9 @@ func inscribe() error {
 
 	// Create a new wallet client
 	walletCli, err := btcd.NewClient(
-		rpcConnect,
-		username,
-		password,
+		walletUrl,
+		walletRpcUser,
+		walletPass,
 		true,
 	)
 	if err != nil {
@@ -149,32 +142,17 @@ func inscribe() error {
 		walletCli.Shutdown()
 	})
 
-	if embedDB {
-		mysqlAddr = fmt.Sprintf("localhost:%s", constants.DefaultDBListenPort)
-		mysqlUser = "root"
-		mysqlPass = ""
-	}
-
-	// Get the database
-	db, err := dao.NewDB(
-		dao.WithAddr(mysqlAddr),
-		dao.WithUser(mysqlUser),
-		dao.WithPassword(mysqlPass),
-		dao.WithDBName(dbName),
-	)
-	if err != nil {
-		return err
-	}
-
 	// Get the unlock condition from the file path
 	cInsDescription, err := tables.CInsDescriptionFromFile(cInsDescriptionFile)
 	if err != nil {
 		return err
 	}
 
+	index := indexer.NewIndexer(indexerUrl)
+
 	// Create a new inscription from the file path
 	inscription, err := NewFromPath(inscriptionsFilePath,
-		WithDB(db),
+		WithIndexer(index),
 		WithWalletClient(walletCli),
 		WithPostage(postage),
 		WithCInsDescription(cInsDescription),
