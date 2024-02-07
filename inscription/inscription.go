@@ -64,6 +64,8 @@ type Inscription struct {
 	// revealFee is the fee for the reveal transaction.
 	revealFee int64
 
+	totalFee int64
+
 	// utxo is the unspent transaction outputs for the wallet.
 	utxo []btcjson.ListUnspentResult
 
@@ -369,13 +371,13 @@ func (i *Inscription) parseJsonMetadata(jsonMetadata string) error {
 // CommitTxId is a method of the Inscription struct. It returns the transaction
 // ID of the commit transaction of the Inscription.
 func (i *Inscription) CommitTxId() string {
-	return i.rawTx(i.commitTx)
+	return i.commitTx.TxHash().String()
 }
 
 // RevealTxId is a method of the Inscription struct. It returns the transaction
 // ID of the reveal transaction of the Inscription.
 func (i *Inscription) RevealTxId() string {
-	return i.rawTx(i.commitTx)
+	return i.revealTx.TxHash().String()
 }
 
 // rawTx is a method of the Inscription struct. It is responsible for serializing
@@ -483,7 +485,9 @@ func (i *Inscription) BuildCommitTx() error {
 		return err
 	}
 	commitTx.AddTxOut(wire.NewTxOut(change, changeScript))
-	change = inTotal - outTotal - calculateTxFee(commitTx, i.feeRate)
+	fee := calculateTxFee(commitTx, i.feeRate)
+	i.totalFee += fee
+	change = inTotal - outTotal - fee
 	commitTx.TxOut[len(commitTx.TxOut)-1].Value = change
 	if change < constants.DustLimit {
 		commitTx.TxOut = commitTx.TxOut[:len(commitTx.TxOut)-1]
@@ -561,6 +565,7 @@ func (i *Inscription) BuildRevealTx() error {
 	revealTx.AddTxIn(revealTxIn)
 	revealTx.AddTxOut(revealTxOutput)
 	i.revealFee = calculateTxFee(revealTx, i.feeRate)
+	i.totalFee += i.revealFee
 
 	// Clear the input scripts for the transaction
 	revealTxIn.SignatureScript = nil
@@ -715,7 +720,7 @@ func (i *Inscription) AppendInscriptionContentToBuilder() error {
 		AddOp(txscript.OP_FALSE).
 		AddOp(txscript.OP_IF).
 		AddData([]byte(constants.ProtocolId)).
-		AddData([]byte(constants.UnlockCondition)).
+		AddData([]byte(constants.CInsDescription)).
 		AddData(i.Header.CInsDescription.Data()).
 		AddOp(txscript.OP_1).
 		AddData(i.Header.ContentType.Bytes())
@@ -874,4 +879,11 @@ func calculateTxFee(tx *wire.MsgTx, feeRate int64) int64 {
 		fee = constants.DustLimit
 	}
 	return fee
+}
+
+type Output struct {
+	Commit    string `json:"commit"`
+	Reveal    string `json:"reveal"`
+	TotalFees int64  `json:"total_fees"`
+	//Inscriptions []tables.InscriptionId `json:"inscriptions"`
 }

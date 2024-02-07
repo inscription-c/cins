@@ -47,7 +47,7 @@ func TagFromBytes(bs []byte) TagType {
 	case 255:
 		return TagNop
 	default:
-		if string(bs) == constants.UnlockCondition {
+		if string(bs) == constants.CInsDescription {
 			return TagCInsDescription
 		}
 		return TagNop
@@ -78,7 +78,7 @@ func (t TagType) Bytes() []byte {
 	case TagNop:
 		return []byte{255}
 	case TagCInsDescription:
-		return []byte(constants.UnlockCondition)
+		return []byte(constants.CInsDescription)
 	default:
 		return []byte{}
 	}

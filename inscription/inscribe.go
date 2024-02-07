@@ -1,6 +1,7 @@
 package inscription
 
 import (
+	"encoding/json"
 	"errors"
 	"fmt"
 	"github.com/btcsuite/btcd/btcutil"
@@ -16,6 +17,11 @@ import (
 	"github.com/spf13/cobra"
 	"os"
 	"path/filepath"
+)
+
+const (
+	DefaultTestNet3IndexerUrl = "http://localhost:18335"
+	DefaultMainNetIndexerUrl  = "http://localhost:8335"
 )
 
 var (
@@ -41,7 +47,7 @@ var (
 var InsufficientBalanceError = errors.New("InsufficientBalanceError")
 
 func init() {
-	Cmd.Flags().StringVarP(&indexerUrl, "indexer_url", "", "http://localhost:8335", "the URL of indexer server (default http://localhost:8335, testnet: http://localhost:18335)")
+	Cmd.Flags().StringVarP(&indexerUrl, "indexer_url", "", DefaultMainNetIndexerUrl, "the URL of indexer server (default http://localhost:8335, testnet: http://localhost:18335)")
 	Cmd.Flags().StringVarP(&walletUrl, "wallet_url", "", "localhost:8332", "the URL of wallet RPC server to connect to (default localhost:8332, testnet: localhost:18332)")
 	Cmd.Flags().StringVarP(&walletRpcUser, "wallet_rpc_user", "", "root", "wallet rpc server user")
 	Cmd.Flags().StringVarP(&walletRpcPass, "wallet_rpc_pass", "", "root", "wallet rpc server password")
@@ -74,7 +80,9 @@ func init() {
 func configCheck() error {
 	if testnet {
 		walletUrl = "localhost:18332"
-		indexerUrl = "http://localhost:18335"
+		if indexerUrl == DefaultMainNetIndexerUrl {
+			indexerUrl = DefaultTestNet3IndexerUrl
+		}
 		util.ActiveNet = &netparams.TestNet3Params
 	}
 
@@ -177,8 +185,19 @@ func inscribe() error {
 	// If it's a dry run, log the success and the transaction IDs and return
 	if dryRun {
 		log.Log.Info("dry run success")
-		log.Log.Info("commitTx: ", inscription.CommitTxId())
-		log.Log.Info("revealTx: ", inscription.RevealTxId())
+		out := Output{
+			Commit:    inscription.CommitTxId(),
+			Reveal:    inscription.RevealTxId(),
+			TotalFees: inscription.totalFee,
+			//Inscriptions: []tables.InscriptionId{
+			//	{
+			//		TxId:   inscription.RevealTxId(),
+			//		Offset: 0,
+			//	},
+			//},
+		}
+		outData, _ := json.MarshalIndent(out, "", "\t")
+		fmt.Println(string(outData))
 		return nil
 	}
 
