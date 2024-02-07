@@ -11,8 +11,11 @@ import (
 // BRC20CHolders is a handler function for handling BRC20C holders requests.
 // It validates the request parameters and calls the doBRC20CHolders function.
 func (h *Handler) BRC20CHolders(ctx *gin.Context) {
-	tkid := ctx.Query("tkid")
-	page := ctx.DefaultQuery("page", "1")
+	tkid := ctx.Param("tkid")
+	page := ctx.Param("page")
+	if page == "" {
+		page = "1"
+	}
 	if tkid == "" {
 		ctx.Status(http.StatusBadRequest)
 		return

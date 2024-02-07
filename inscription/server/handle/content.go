@@ -63,8 +63,8 @@ func (h *Handler) doContent(ctx *gin.Context, inscriptionId string) error {
 			ctx.Data(http.StatusOK, string(contentType), decompressed)
 		} else {
 			ctx.Status(http.StatusNotAcceptable)
-			return nil
 		}
+		return nil
 	}
 
 	// If there is nobody, return an OK status

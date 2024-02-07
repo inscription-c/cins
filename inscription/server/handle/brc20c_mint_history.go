@@ -11,8 +11,11 @@ import (
 // BRC20CMintHistory is a handler function for handling BRC20C mint history requests.
 // It validates the request parameters and calls the doBRC20CMintHistory function.
 func (h *Handler) BRC20CMintHistory(ctx *gin.Context) {
-	tkidOrAddr := ctx.Query("tkidOrAddr")
-	page := ctx.DefaultQuery("page", "1")
+	tkidOrAddr := ctx.Param("tkidOrAddr")
+	page := ctx.Param("page")
+	if page == "" {
+		page = "1"
+	}
 	if tkidOrAddr == "" {
 		ctx.Status(http.StatusBadRequest)
 		return
@@ -72,7 +75,7 @@ func (h *Handler) doBRC20CMintHistory(ctx *gin.Context, tkidOrAddr string, page 
 		"ticker_id":         deploy.InscriptionId,
 		"page_index":        page,
 		"more":              more,
-		"mint_history":      list,
+		//"mint_history":      list,
 	})
 	return nil
 }

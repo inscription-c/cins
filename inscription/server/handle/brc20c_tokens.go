@@ -11,8 +11,11 @@ import (
 // BRC20CTokens is a handler function for handling BRC20C tokens requests.
 // It validates the request parameters and calls the doBRC20CTokens function.
 func (h *Handler) BRC20CTokens(ctx *gin.Context) {
-	tk := ctx.Query("tk")
-	page := ctx.DefaultQuery("page", "1")
+	tk := ctx.Param("tk")
+	page := ctx.Param("page")
+	if page == "" {
+		page = "1"
+	}
 	if tk == "" {
 		ctx.Status(http.StatusBadRequest)
 		return

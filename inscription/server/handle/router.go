@@ -19,8 +19,8 @@ func (h *Handler) InitRouter() {
 	//h.Engine().GET("/output/:output", h.Outpoint)
 
 	// cbrc20
-	//h.Engine().GET("/cbrc20/token/:tkid", h.BRC20CToken)
-	//h.Engine().GET("/cbrc20/tokens/:tk/:page", h.BRC20CTokens)
+	h.Engine().GET("/cbrc20/token/:tkid", h.BRC20CToken)
+	h.Engine().GET("/cbrc20/tokens/:tk/:page", h.BRC20CTokens)
 	//h.Engine().GET("/cbrc20/mint-history/:tkidOrAddr/:page", h.BRC20CMintHistory)
 	//h.Engine().GET("/cbrc20/holders/:tkid/:page", h.BRC20CHolders)
 
