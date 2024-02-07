@@ -23,7 +23,7 @@ const (
 	SearchTypeInscriptionId     SearchType = "inscription_id"
 	SearchTypeInscriptionNumber SearchType = "inscription_number"
 	SearchTypeAddress           SearchType = "address"
-	SearchTypeProtocol          SearchType = "protocol"
+	//SearchTypeProtocol          SearchType = "protocol"
 )
 
 type ScanInscriptionListReq struct {
@@ -113,10 +113,7 @@ func (h *Handler) doScanInscriptionList(req *ScanInscriptionListReq, apiResp *ap
 			searParams.TxId, searParams.Offset = insId.TxId, insId.Offset
 		} else {
 			addressAndProtocol := func() {
-				if _, err := btcutil.DecodeAddress(req.Search, util.ActiveNet.Params); err != nil {
-					resp.SearchType = SearchTypeProtocol
-					searParams.Ticker = req.Search
-				} else {
+				if _, err := btcutil.DecodeAddress(req.Search, util.ActiveNet.Params); err == nil {
 					resp.SearchType = SearchTypeAddress
 					searParams.Owner = req.Search
 				}

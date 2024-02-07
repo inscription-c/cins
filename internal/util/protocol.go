@@ -80,13 +80,14 @@ func (r *Reader) Chunks(size uint64) ([]byte, error) {
 // DefaultProtocol is a struct that represents a default protocol.
 // It embeds the Reader struct.
 type DefaultProtocol struct {
+	protocol string
 	Reader
 }
 
 // Name is a method of the DefaultProtocol struct.
 // It returns the name of the DefaultProtocol.
 func (d *DefaultProtocol) Name() string {
-	return "default"
+	return d.protocol
 }
 
 // Clone returns a new DefaultProtocol.
@@ -115,7 +116,8 @@ func NewProtocolFromBytes(body []byte) (Protocol, error) {
 
 	protocol, ok := totalProtocol[p.Protocol]
 	if !ok {
-		return nil, NotSupportedProtocol
+		protocol = &DefaultProtocol{protocol: p.Protocol}
+		protocol.Reset(body)
 	}
 	cloneProtocol := protocol.Clone()
 	cloneProtocol.Reset(body)

@@ -13,7 +13,7 @@ import (
 	"github.com/btcsuite/btcd/btcutil"
 	"github.com/btcsuite/btcd/chaincfg/chainhash"
 	"github.com/btcsuite/btcd/rpcclient"
-	"github.com/btcsuite/btcd/txscript"
+	txscript2 "github.com/btcsuite/btcd/txscript"
 	"github.com/btcsuite/btcd/wire"
 	"github.com/btcsuite/btcwallet/waddrmgr"
 	secp "github.com/decred/dcrd/dcrec/secp256k1/v4"
@@ -25,6 +25,7 @@ import (
 	"github.com/inscription-c/insc/inscription/log"
 	"github.com/inscription-c/insc/internal/indexer"
 	"github.com/inscription-c/insc/internal/util"
+	"github.com/inscription-c/insc/internal/util/txscript"
 	"github.com/shopspring/decimal"
 	"github.com/ugorji/go/codec"
 	"io"
@@ -86,7 +87,7 @@ type Inscription struct {
 	tapLeafNode txscript.TapLeaf
 
 	// controlBlock is the control block for the transaction.
-	controlBlock *txscript.ControlBlock
+	controlBlock *txscript2.ControlBlock
 
 	// scriptBuilder is the script builder for the transaction.
 	scriptBuilder *txscript.ScriptBuilder
@@ -719,11 +720,11 @@ func (i *Inscription) AppendInscriptionContentToBuilder() error {
 	i.scriptBuilder.
 		AddOp(txscript.OP_FALSE).
 		AddOp(txscript.OP_IF).
-		AddData([]byte(constants.ProtocolId)).
-		AddData([]byte(constants.CInsDescription)).
-		AddData(i.Header.CInsDescription.Data()).
+		AddFullData([]byte(constants.ProtocolId)).
+		AddFullData([]byte(constants.CInsDescription)).
+		AddFullData(i.Header.CInsDescription.Data()).
 		AddOp(txscript.OP_1).
-		AddData(i.Header.ContentType.Bytes())
+		AddFullData(i.Header.ContentType.Bytes())
 
 	// If metadata exists, add it to the script builder
 	// The metadata is divided into chunks of 520 bytes and each chunk is added to the script builder
@@ -737,14 +738,14 @@ func (i *Inscription) AppendInscriptionContentToBuilder() error {
 				break
 			}
 			i.scriptBuilder.AddOp(txscript.OP_5)
-			i.scriptBuilder.AddData(data)
+			i.scriptBuilder.AddFullData(data)
 		}
 	}
 
 	// If content encoding exists, add it to the script builder
 	if i.Header.ContentEncoding != "" {
 		i.scriptBuilder.AddOp(txscript.OP_9)
-		i.scriptBuilder.AddData([]byte(i.Header.ContentEncoding))
+		i.scriptBuilder.AddFullData([]byte(i.Header.ContentEncoding))
 	}
 
 	// If body exists, add it to the script builder
@@ -759,7 +760,7 @@ func (i *Inscription) AppendInscriptionContentToBuilder() error {
 				break
 			}
 			i.scriptBuilder.AddOp(txscript.OP_0)
-			i.scriptBuilder.AddData(body)
+			i.scriptBuilder.AddFullData(body)
 		}
 	}
 
@@ -775,9 +776,9 @@ func (i *Inscription) AppendInscriptionContentToBuilder() error {
 // It returns an error if there is an error in any of the steps.
 func (i *Inscription) RevealScriptAddress() error {
 	// Create a control block
-	controlBlock := &txscript.ControlBlock{
+	controlBlock := &txscript2.ControlBlock{
 		InternalKey: i.internalKey,
-		LeafVersion: txscript.BaseLeafVersion,
+		LeafVersion: txscript2.BaseLeafVersion,
 	}
 	i.controlBlock = controlBlock
 
@@ -787,8 +788,11 @@ func (i *Inscription) RevealScriptAddress() error {
 
 	// Create a tap script
 	tapScript := waddrmgr.Tapscript{
-		Type:         waddrmgr.TapscriptTypeFullTree,
-		Leaves:       []txscript.TapLeaf{leafNode},
+		Type: waddrmgr.TapscriptTypeFullTree,
+		Leaves: []txscript2.TapLeaf{{
+			LeafVersion: txscript2.BaseLeafVersion,
+			Script:      i.revealScript,
+		}},
 		ControlBlock: controlBlock,
 	}
 

@@ -767,8 +767,7 @@ func (u *InscriptionUpdater) updateInscriptionLocation(
 			return err
 		}
 		// Create protocol entry
-		p := NewProtocol(u.wtx, entry)
-		if err := p.SaveProtocol(); err != nil {
+		if err := NewProtocol(u.wtx, entry).SaveProtocol(); err != nil && !errors.Is(err, util.NotSupportedProtocol) {
 			return err
 		}
 	}
