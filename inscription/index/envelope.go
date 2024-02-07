@@ -126,7 +126,7 @@ func fromRawEnvelope(r *RawEnvelope) *Envelope {
 	// Create the body by appending all payloads after the body index
 	body := make([]byte, 0)
 	if bodyIdx != -1 {
-		for i := bodyIdx + 1; i < len(r.payload); i++ {
+		for i := bodyIdx + 1; i < len(r.payload); i += 2 {
 			body = append(body, r.payload[i]...)
 		}
 	}
