@@ -31,7 +31,7 @@ type ScanInscriptionListReq struct {
 	Page            int      `json:"page" binding:"omitempty,min=1"`
 	Limit           int      `json:"limit" binding:"omitempty,min=1,max=50"`
 	Order           string   `json:"order" binding:"omitempty,oneof=newest oldest"`
-	Types           []string `json:"types" binding:"omitempty,dive,oneof=image text html"`
+	Types           []string `json:"types" binding:"omitempty,dive,oneof=image text json html"`
 	InscriptionType string   `json:"inscription_type" binding:"omitempty,oneof=c-brc-20"`
 }
 
