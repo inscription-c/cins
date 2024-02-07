@@ -6,6 +6,6 @@ const (
 	OperationMint   = "mint"
 	DecimalsDefault = "18"
 
-	UnlockConditionTypeBlockchain = "blockchain"
-	UnlockConditionTypeOrdinals   = "ordinals"
+	CInsDescriptionTypeBlockchain = "blockchain"
+	CInsDescriptionTypeOrdinals   = "ordinals"
 )

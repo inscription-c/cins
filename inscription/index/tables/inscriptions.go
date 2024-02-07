@@ -11,7 +11,7 @@ import (
 	"time"
 )
 
-var ErrInvalidUnlockConditionData = errors.New("invalid unlock condition data")
+var ErrInvalidCInsDesc = errors.New("invalid CIns description data")
 
 type Inscriptions struct {
 	Id              uint64 `gorm:"column:id;primary_key;AUTO_INCREMENT;NOT NULL"` // this is sequence_num
@@ -58,22 +58,22 @@ func CInsDescriptionFromFile(file string) (*CInsDescription, error) {
 }
 
 func CInsDescriptionFromBytes(data []byte) (*CInsDescription, error) {
+	cInsDesc := &CInsDescription{}
 	if len(data) == 0 {
-		return nil, ErrInvalidUnlockConditionData
+		return cInsDesc, nil
 	}
 	m := make(map[string]string)
 	if err := json.Unmarshal(data, &m); err != nil {
 		return nil, err
 	}
-	unlockCondition := &CInsDescription{}
-	if err := gconv.Struct(m, unlockCondition); err != nil {
+	if err := gconv.Struct(m, cInsDesc); err != nil {
 		return nil, err
 	}
-	if unlockCondition.Type == constants.UnlockConditionTypeBlockchain &&
-		unlockCondition.Chain == "" || unlockCondition.Contract == "" {
-		return nil, ErrInvalidUnlockConditionData
+	if cInsDesc.Type == constants.CInsDescriptionTypeBlockchain &&
+		cInsDesc.Chain == "" || cInsDesc.Contract == "" {
+		return nil, ErrInvalidCInsDesc
 	}
-	return unlockCondition, nil
+	return cInsDesc, nil
 }
 
 func (i *Inscriptions) TableName() string {
