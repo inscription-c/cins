@@ -1,8 +1,8 @@
-# Contributing to INS-C
+# Contributing to C‐INS
 
 [[toc]]
 
-We always welcome and highly appreciate contributions to INS-C. To ensure efficient cooperation, we have some guidelines for you to follow.
+We always welcome and highly appreciate contributions to C-INS. To ensure efficient cooperation, we have some guidelines for you to follow.
 
 ## Reporting Issues
 
@@ -20,7 +20,7 @@ In the issue template of requesting a feature, you should describe the feature y
 
 ## Contributing Code
 
-If you are interested in contributing code, we would greatly appreciate it! We use the Go language to implement INS-C. First and foremost, you should be familiar with Go and can build the INS-C Node on your own. After that, you can review the issues and pick one to work on. Start small and start quickly - we will be happy to help you.
+If you are interested in contributing code, we would greatly appreciate it! We use the Go language to implement C-INS. First and foremost, you should be familiar with Go and can build the C-INS Node on your own. After that, you can review the issues and pick one to work on. Start small and start quickly - we will be happy to help you.
 
 When writing code, please follow the guidelines below:
 
