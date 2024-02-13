@@ -31,13 +31,11 @@ func (d *DB) BlockHeader() (height uint32, header *wire.BlockHeader, err error) 
 func (d *DB) BlockHash(height ...uint32) (blockHash string, err error) {
 	blockInfo := &tables.BlockInfo{}
 	if len(height) == 0 {
-		// Retrieve the last block if no height is provided
-		if err = d.DB.Last(blockInfo).Error; err != nil {
+		if err = d.Last(blockInfo).Error; err != nil {
 			return
 		}
 	} else {
-		// Retrieve the block with the provided height
-		if err = d.DB.Where("height = ?", height[0]).First(blockInfo).Error; err != nil {
+		if err = d.Where("height = ?", height[0]).First(blockInfo).Error; err != nil {
 			return
 		}
 	}
@@ -47,7 +45,6 @@ func (d *DB) BlockHash(height ...uint32) (blockHash string, err error) {
 	if err != nil {
 		return "", err
 	}
-	// Get the block hash from the header
 	blockHash = header.BlockHash().String()
 	return
 }
@@ -87,4 +84,8 @@ func (d *DB) SaveBlockInfo(block *tables.BlockInfo) error {
 		Columns:   []clause.Column{{Name: "height"}},
 		DoUpdates: clause.AssignmentColumns([]string{"sequence_num", "header", "timestamp"}),
 	}).Create(block).Error
+}
+
+func (d *DB) DeleteBlockInfoByHeight(height uint32) error {
+	return d.Where("height = ?", height).Delete(&tables.BlockInfo{}).Error
 }

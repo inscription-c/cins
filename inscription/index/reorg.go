@@ -5,7 +5,10 @@ import (
 	"errors"
 	"github.com/btcsuite/btcd/wire"
 	"github.com/inscription-c/insc/inscription/index/dao"
+	"strings"
 )
+
+var ErrDetectReorg = errors.New("unrecoverable reorg detected")
 
 // detectReorg is a function that detects a blockchain reorganization.
 // It takes a pointer to a DB, a pointer to a MsgBlock, and a uint32 as parameters.
@@ -17,7 +20,7 @@ import (
 // If they are equal, it returns nil because there is no reorganization.
 // If they are not equal, it returns an error because a reorganization is detected.
 func detectReorg(wtx *dao.DB, block *wire.MsgBlock, height uint32) error {
-	bitcoindPrevBlockHash := block.Header.PrevBlock.String() // Get the previous block hash from the block header
+	bitcoindPrevBlockHash := block.Header.PrevBlock.String()
 	if height == 0 {
 		return nil
 	}
@@ -25,8 +28,8 @@ func detectReorg(wtx *dao.DB, block *wire.MsgBlock, height uint32) error {
 	if err != nil {
 		return err
 	}
-	if indexPreBlockHash == bitcoindPrevBlockHash {
+	if strings.EqualFold(indexPreBlockHash, bitcoindPrevBlockHash) {
 		return nil
 	}
-	return errors.New("unrecoverable reorg detected")
+	return ErrDetectReorg
 }

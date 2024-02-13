@@ -2,6 +2,7 @@ package dao
 
 import (
 	"github.com/inscription-c/insc/inscription/index/tables"
+	"gorm.io/gorm/clause"
 )
 
 // GetValueByOutpoint retrieves the value associated with a given outpoint.
@@ -40,5 +41,8 @@ func (d *DB) SetOutpointToValue(values map[string]int64) (err error) {
 			Value:    value,
 		})
 	}
-	return d.CreateInBatches(&list, 10_000).Error
+	return d.Clauses(clause.OnConflict{
+		Columns:   []clause.Column{{Name: "outpoint"}},
+		DoUpdates: clause.AssignmentColumns([]string{"value"}),
+	}).CreateInBatches(&list, 10_000).Error
 }

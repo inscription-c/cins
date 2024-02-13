@@ -189,12 +189,6 @@ func inscribe() error {
 			Commit:    inscription.CommitTxId(),
 			Reveal:    inscription.RevealTxId(),
 			TotalFees: inscription.totalFee,
-			//Inscriptions: []tables.InscriptionId{
-			//	{
-			//		TxId:   inscription.RevealTxId(),
-			//		Offset: 0,
-			//	},
-			//},
 		}
 		outData, _ := json.MarshalIndent(out, "", "\t")
 		fmt.Println(string(outData))

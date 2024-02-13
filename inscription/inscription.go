@@ -720,11 +720,11 @@ func (i *Inscription) AppendInscriptionContentToBuilder() error {
 	i.scriptBuilder.
 		AddOp(txscript.OP_FALSE).
 		AddOp(txscript.OP_IF).
-		AddFullData([]byte(constants.ProtocolId)).
-		AddFullData([]byte(constants.CInsDescription)).
-		AddFullData(i.Header.CInsDescription.Data()).
+		AddData([]byte(constants.ProtocolId)).
+		AddData([]byte(constants.CInsDescription)).
+		AddData(i.Header.CInsDescription.Data()).
 		AddOp(txscript.OP_1).
-		AddFullData(i.Header.ContentType.Bytes())
+		AddData(i.Header.ContentType.Bytes())
 
 	// If metadata exists, add it to the script builder
 	// The metadata is divided into chunks of 520 bytes and each chunk is added to the script builder
@@ -738,14 +738,14 @@ func (i *Inscription) AppendInscriptionContentToBuilder() error {
 				break
 			}
 			i.scriptBuilder.AddOp(txscript.OP_5)
-			i.scriptBuilder.AddFullData(data)
+			i.scriptBuilder.AddData(data)
 		}
 	}
 
 	// If content encoding exists, add it to the script builder
 	if i.Header.ContentEncoding != "" {
 		i.scriptBuilder.AddOp(txscript.OP_9)
-		i.scriptBuilder.AddFullData([]byte(i.Header.ContentEncoding))
+		i.scriptBuilder.AddData([]byte(i.Header.ContentEncoding))
 	}
 
 	// If body exists, add it to the script builder
@@ -760,7 +760,7 @@ func (i *Inscription) AppendInscriptionContentToBuilder() error {
 				break
 			}
 			i.scriptBuilder.AddOp(txscript.OP_0)
-			i.scriptBuilder.AddFullData(body)
+			i.scriptBuilder.AddData(body)
 		}
 	}
 
@@ -823,41 +823,17 @@ func (i *Inscription) getUtxo() error {
 		return err
 	}
 
-	// List locked UTXOs
-	lockedUtxos, err := i.Wallet().ListLockUnspent()
-	if err != nil {
-		return err
-	}
-
-	// Combine unspent and locked UTXOs
-	utoxTotal := make([]*model.OutPoint, 0)
+	utxo := make([]btcjson.ListUnspentResult, 0)
 	for _, v := range unspentUtxo {
-		utoxTotal = append(utoxTotal, model.NewOutPoint(v.TxID, v.Vout))
-	}
-	for _, v := range lockedUtxos {
-		utoxTotal = append(utoxTotal, model.NewOutPoint(v.Hash.String(), v.Index))
-	}
-
-	// Get wallet inscriptions UTXOs
-	walletInscriptionsOutpoints := make(map[string][]string)
-	for _, outpoint := range utoxTotal {
+		hash, _ := chainhash.NewHashFromStr(v.TxID)
+		outpoint := wire.NewOutPoint(hash, v.Vout)
 		resp, err := i.options.indexer.Outpoint(outpoint.String())
 		if err != nil {
 			return err
 		}
-		if len(resp.Inscriptions) > 0 {
-			walletInscriptionsOutpoints[outpoint.String()] = resp.Inscriptions
+		if len(resp.Inscriptions) == 0 {
+			utxo = append(utxo, v)
 		}
-	}
-
-	// Filter out UTXOs that are already used in inscriptions
-	utxo := make([]btcjson.ListUnspentResult, 0)
-	for _, v := range unspentUtxo {
-		outpoint := model.NewOutPoint(v.TxID, v.Vout)
-		if _, ok := walletInscriptionsOutpoints[outpoint.String()]; ok {
-			continue
-		}
-		utxo = append(utxo, v)
 	}
 	i.utxo = utxo
 	return nil
@@ -879,6 +855,7 @@ func calculateTxFee(tx *wire.MsgTx, feeRate int64) int64 {
 		Div(decimal.NewFromInt(4)).
 		Div(decimal.NewFromInt(1000)). //Ceil().
 		Mul(decimal.NewFromInt(feeRate)).IntPart()
+
 	if fee < constants.DustLimit {
 		fee = constants.DustLimit
 	}
@@ -889,5 +866,4 @@ type Output struct {
 	Commit    string `json:"commit"`
 	Reveal    string `json:"reveal"`
 	TotalFees int64  `json:"total_fees"`
-	//Inscriptions []tables.InscriptionId `json:"inscriptions"`
 }

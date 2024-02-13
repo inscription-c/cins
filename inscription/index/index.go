@@ -140,7 +140,15 @@ func (idx *Indexer) Start() {
 					return
 				}
 				if err != nil {
+					//if errors.Is(err, ErrDetectReorg) {
+					//	idx.height--
+					//	if err := idx.DB().DeleteBlockInfoByHeight(idx.height); err != nil {
+					//		log.Srv.Error("DeleteBlockInfoByHeight", err)
+					//		continue
+					//	}
+					//} else {
 					log.Srv.Error("UpdateIndex", err)
+					//}
 				}
 				time.Sleep(time.Second * 5)
 			}
@@ -204,38 +212,30 @@ func (idx *Indexer) UpdateIndex() error {
 		}
 	}
 
-	wtx := idx.Begin()
-	var err error
-	defer func() {
-		if err != nil {
-			wtx.Rollback()
-		}
-	}()
-
-	indexSats, err := wtx.GetStatisticCountByName(tables.StatisticIndexSats)
+	indexSats, err := idx.DB().GetStatisticCountByName(tables.StatisticIndexSats)
 	if err != nil {
 		return err
 	}
 	idx.indexSats = indexSats > 0
 
-	indexSpentSats, err := wtx.GetStatisticCountByName(tables.StatisticIndexSpentSats)
+	indexSpentSats, err := idx.DB().GetStatisticCountByName(tables.StatisticIndexSpentSats)
 	if err != nil {
 		return err
 	}
 	idx.indexSpentSats = indexSpentSats > 0
 
 	// Get the current block count from the database.
-	idx.height, err = wtx.BlockCount()
+	idx.height, err = idx.DB().BlockCount()
 	if err != nil {
 		return err
 	}
 
-	// Get the latest block height from the Bitcoin node.
 	var endHeight int64
 	endHeight, err = idx.RpcClient().GetBlockCount()
 	if err != nil {
 		return err
 	}
+	endHeight--
 
 	// Fetch blocks from the blockchain, starting from the current height of the indexer.
 	var blocksCh chan *wire.MsgBlock
@@ -244,48 +244,63 @@ func (idx *Indexer) UpdateIndex() error {
 		return err
 	}
 	if blocksCh == nil {
-		wtx.Commit()
 		return nil
 	}
+
+	wtx := idx.Begin()
+	defer func() {
+		if err != nil {
+			wtx.Rollback()
+		}
+	}()
 
 	unCommit := 0
 	startTime := time.Now()
 
-	for block := range blocksCh {
-		unCommit++
-
-		// Index the block.
-		if err = idx.indexBlock(wtx, block); err != nil {
-			return err
-		}
-
-		if idx.needCommit(startTime, unCommit) {
-			unCommit = 0
-			startTime = time.Now()
-
-			if err = idx.commit(wtx); err != nil {
-				return err
+	for {
+		select {
+		case block, ok := <-blocksCh:
+			if !ok {
+				if unCommit > 0 {
+					if err = idx.commit(wtx); err != nil {
+						return err
+					}
+				}
+				goto END
 			}
 
-			wtx = idx.Begin()
-			var height uint32
-			height, err = wtx.BlockCount()
-			if err != nil {
+			// Index the block.
+			if err = idx.indexBlock(wtx, block); err != nil {
 				return err
 			}
-			if height != idx.height {
-				return errors.New("height mismatch")
+			unCommit++
+
+			needCommit := idx.needCommit(startTime, unCommit)
+			if needCommit {
+				unCommit = 0
+				startTime = time.Now()
+
+				if err = idx.commit(wtx); err != nil {
+					return err
+				}
+
+				var height uint32
+				height, err = idx.DB().BlockCount()
+				if err != nil {
+					return err
+				}
+				if height != idx.height {
+					return errors.New("height mismatch")
+				}
+
+				if int64(idx.height) <= endHeight {
+					wtx = idx.Begin()
+				}
 			}
 		}
 	}
 
-	if unCommit > 0 {
-		if err = idx.commit(wtx); err != nil {
-			return err
-		}
-	} else {
-		wtx.Commit()
-	}
+END:
 	return nil
 }
 
@@ -745,9 +760,7 @@ func (idx *Indexer) fetchBlockFrom(start, end, current uint32) (chan *wire.MsgBl
 	go func() {
 		defer close(blockCh)
 		for i := start; i <= end; i++ {
-			var err error
-			var block *wire.MsgBlock
-			block, err = idx.getBlockWithRetries(i)
+			block, err := idx.getBlockWithRetries(i)
 			if err != nil {
 				log.Srv.Warn("getBlockWithRetries", err)
 				return
