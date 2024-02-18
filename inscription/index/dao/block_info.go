@@ -86,6 +86,8 @@ func (d *DB) SaveBlockInfo(block *tables.BlockInfo) error {
 	}).Create(block).Error
 }
 
-func (d *DB) DeleteBlockInfoByHeight(height uint32) error {
-	return d.Where("height = ?", height).Delete(&tables.BlockInfo{}).Error
+// DeleteBlockInfoByHeight deletes a block info from the database by height.
+func (d *DB) DeleteBlockInfoByHeight(height uint32) (info tables.BlockInfo, err error) {
+	err = d.Clauses(clause.Returning{}).Where("height = ?", height).Delete(&info).Error
+	return
 }

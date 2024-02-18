@@ -16,6 +16,8 @@ const (
 	InscriptionIdDelimiter = "i"
 	OutpointDelimiter      = ":"
 	IdRegexpContent        = `^[a-z0-9]{64}%s\d+$`
+
+	TestnetFirstInscriptionHeight = 2576099
 )
 
 var (

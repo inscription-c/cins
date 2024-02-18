@@ -2,6 +2,7 @@ package index
 
 import (
 	"bytes"
+	"context"
 	"errors"
 	"fmt"
 	"github.com/btcsuite/btcd/rpcclient"
@@ -230,22 +231,25 @@ func (idx *Indexer) UpdateIndex() error {
 		return err
 	}
 
-	var endHeight int64
-	endHeight, err = idx.RpcClient().GetBlockCount()
+	endHeight, err := idx.RpcClient().GetBlockCount()
 	if err != nil {
 		return err
 	}
-	endHeight--
+	endHeight -= 6
 
-	// Fetch blocks from the blockchain, starting from the current height of the indexer.
-	var blocksCh chan *wire.MsgBlock
-	blocksCh, err = idx.fetchBlockFrom(idx.height, uint32(endHeight), 16)
-	if err != nil {
-		return err
-	}
-	if blocksCh == nil {
+	if int64(idx.height) > endHeight {
 		return nil
 	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	blockCh := make(chan *wire.MsgBlock, 16)
+	idx.fetchBlockFrom(ctx, blockCh, uint32(endHeight))
+	defer func() {
+		cancel()
+		for range blockCh {
+		}
+		blockCh = nil
+	}()
 
 	wtx := idx.Begin()
 	defer func() {
@@ -259,14 +263,14 @@ func (idx *Indexer) UpdateIndex() error {
 
 	for {
 		select {
-		case block, ok := <-blocksCh:
+		case block, ok := <-blockCh:
 			if !ok {
 				if unCommit > 0 {
 					if err = idx.commit(wtx); err != nil {
 						return err
 					}
 				}
-				goto END
+				return nil
 			}
 
 			// Index the block.
@@ -299,9 +303,6 @@ func (idx *Indexer) UpdateIndex() error {
 			}
 		}
 	}
-
-END:
-	return nil
 }
 
 // indexBlock is a method that indexes a block from the blockchain.
@@ -320,8 +321,6 @@ func (idx *Indexer) indexBlock(
 	startTime := time.Now()
 	satRangesWritten := uint64(0)
 	outputsInBlock := uint64(0)
-	indexInscriptions :=
-		/*idx.height >= index.first_inscription_height && */ !idx.opts.noIndexInscriptions
 
 	// Get various statistics related to the indexing process.
 	lostSats, err := wtx.GetStatisticCountByName(tables.StatisticLostSats)
@@ -359,6 +358,8 @@ func (idx *Indexer) indexBlock(
 		timestamp:               block.Header.Timestamp.Unix(),
 	}
 
+	indexInscriptions := idx.indexInscriptions()
+
 	// If the indexer is configured to index satoshis, index the satoshis in the block.
 	if idx.indexSats {
 		coinbaseInputs := make(tables.SatRanges, 0)
@@ -376,8 +377,8 @@ func (idx *Indexer) indexBlock(
 			idx.satRangesSinceFlush++
 		}
 
-		txSatsIdxStart := time.Now()
-		latestSatsIdxStart := time.Now()
+		txSatIdxStart := time.Now()
+		latestSatIdxStart := time.Now()
 		commonTx := block.Transactions[1:]
 		for i := range commonTx {
 			tx := commonTx[i]
@@ -448,10 +449,10 @@ func (idx *Indexer) indexBlock(
 			coinbaseInputs = append(coinbaseInputs, inputSatRanges...)
 
 			timeNow := time.Now()
-			if timeNow.Sub(latestSatsIdxStart).Seconds() > 3 ||
-				(timeNow.Sub(txSatsIdxStart).Seconds() > 3 && i+1 == len(commonTx)) {
-				log.Srv.Infof("Block %d indexTransactionSats %d/%d in %s", idx.height, i+1, len(commonTx), time.Since(txSatsIdxStart)/1e6*1e6)
-				latestSatsIdxStart = time.Now()
+			if timeNow.Sub(latestSatIdxStart).Seconds() > 3 ||
+				(timeNow.Sub(txSatIdxStart).Seconds() > 3 && i+1 == len(commonTx)) {
+				log.Srv.Infof("Block %d indexTransactionSats %d/%d in %s", idx.height, i+1, len(commonTx), time.Since(txSatIdxStart)/1e6*1e6)
+				latestSatIdxStart = time.Now()
 			}
 		}
 
@@ -658,6 +659,23 @@ func (idx *Indexer) indexTransactionSats(
 	return nil
 }
 
+//func (idx *Indexer) rollback(height uint32) error {
+//	return idx.DB().Transaction(func(tx *dao.DB) error {
+//		indexInscriptions := idx.indexInscriptions()
+//		if idx.indexSats {
+//			// TODO
+//		} else if indexInscriptions {
+//			blockInfo, err := idx.DB().DeleteBlockInfoByHeight(height)
+//			if err != nil {
+//				return err
+//			}
+//			header,err:=blockInfo.LoadHeader()
+//			if header.
+//		}
+//		return nil
+//	})
+//}
+
 // needCommit is a method that checks if a commit is needed.
 func (idx *Indexer) needCommit(
 	startTime time.Time,
@@ -750,25 +768,27 @@ func (idx *Indexer) commit(wtx *dao.DB) (err error) {
 // fetchBlockFrom is a method that fetches blocks from the blockchain, starting from a specified start height and ending at a specified end height.
 // It returns a channel that emits the fetched blocks.
 // The method returns an error if there is any issue during the fetching process.
-func (idx *Indexer) fetchBlockFrom(start, end, current uint32) (chan *wire.MsgBlock, error) {
-	if start > end {
-		return nil, nil
+func (idx *Indexer) fetchBlockFrom(ctx context.Context, blockCh chan *wire.MsgBlock, end uint32) {
+	if idx.height > end {
+		return
 	}
-	blockCh := make(chan *wire.MsgBlock, current)
 
-	// Start a goroutine to fetch the blocks and emit them to the channel.
 	go func() {
 		defer close(blockCh)
-		for i := start; i <= end; i++ {
-			block, err := idx.getBlockWithRetries(i)
-			if err != nil {
-				log.Srv.Warn("getBlockWithRetries", err)
+		for i := idx.height; i <= end; i++ {
+			select {
+			case <-ctx.Done():
 				return
+			default:
+				block, err := idx.getBlockWithRetries(i)
+				if err != nil {
+					log.Srv.Warn("getBlockWithRetries", err)
+					return
+				}
+				blockCh <- block
 			}
-			blockCh <- block
 		}
 	}()
-	return blockCh, nil
 }
 
 // getBlockWithRetries is a method that fetches a block from the blockchain at a specified height.
@@ -812,4 +832,16 @@ func (idx *Indexer) getBlockWithRetries(height uint32) (*wire.MsgBlock, error) {
 			return block, nil
 		}
 	}
+}
+
+// indexInscriptions
+func (idx *Indexer) indexInscriptions() bool {
+	indexInscriptions := !idx.opts.noIndexInscriptions
+	switch util.ActiveNet.Net {
+	case wire.TestNet:
+		indexInscriptions = indexInscriptions && idx.height >= constants.TestnetFirstInscriptionHeight
+	case wire.MainNet:
+		// TODO
+	}
+	return indexInscriptions
 }
