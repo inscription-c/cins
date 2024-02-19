@@ -160,17 +160,17 @@ func init() {
 	Cmd.Flags().StringVarP(&srvOptions.rpcConnect, "rpc_connect", "s", mainNetRPCConnect, "the URL of btcd RPC server to connect to (default localhost:8334, testnet: localhost:18334)")
 	//Cmd.Flags().BoolVarP(&srvOptions.embedDB, "embed_db", "", false, "use embed db")
 	Cmd.Flags().BoolVarP(&srvOptions.noApi, "no_api", "", false, "don't start api server")
-	Cmd.Flags().StringVarP(&srvOptions.dataDir, "data_dir", "", "", "embed database data dir")
+	//Cmd.Flags().StringVarP(&srvOptions.dataDir, "data_dir", "", "", "embed database data dir")
 	Cmd.Flags().StringVarP(&srvOptions.mysqlAddr, "mysql_addr", "d", "127.0.0.1:3306", "inscription index mysql database addr")
 	Cmd.Flags().StringVarP(&srvOptions.mysqlUser, "mysql_user", "", "root", "inscription index mysql database user")
 	Cmd.Flags().StringVarP(&srvOptions.mysqlPassword, "mysql_pass", "", "root", "inscription index mysql database password")
 	Cmd.Flags().StringVarP(&srvOptions.mysqlDBName, "dbname", "", constants.DefaultDBName, "inscription index mysql database name")
-	Cmd.Flags().StringVarP(&srvOptions.dbListenPort, "db_listen", "", "4000", "inscription index database server listen port")
-	Cmd.Flags().StringVarP(&srvOptions.dbStatusListenPort, "db_status_listen", "", "10080", "inscription index database server status listen port")
-	Cmd.Flags().BoolVarP(&srvOptions.enablePProf, "enable_pprof", "", false, "enable pprof")
+	//Cmd.Flags().StringVarP(&srvOptions.dbListenPort, "db_listen", "", "4000", "inscription index database server listen port")
+	//Cmd.Flags().StringVarP(&srvOptions.dbStatusListenPort, "db_status_listen", "", "10080", "inscription index database server status listen port")
+	Cmd.Flags().BoolVarP(&srvOptions.enablePProf, "pprof", "", false, "enable pprof")
 	Cmd.Flags().StringVarP(&srvOptions.indexSats, "index_sats", "", "", "Track location of all satoshis, true/false")
 	Cmd.Flags().StringVarP(&srvOptions.indexSpendSats, "index_spend_sats", "", "", "Keep sat index entries of spent outputs, true/false")
-	Cmd.Flags().BoolVarP(&srvOptions.indexNoSyncBlock, "no_sync_block", "", false, "no sync block")
+	//Cmd.Flags().BoolVarP(&srvOptions.indexNoSyncBlock, "no_sync_block", "", false, "no sync block")
 }
 
 func IndexSrv(opts ...SrvOption) error {

@@ -9,8 +9,8 @@ import (
 )
 
 var rootCmd = &cobra.Command{
-	Use:   "insc",
-	Short: "insc inscription protocol, include wallet, embed btcd and inscribe tools.",
+	Use:   "cins",
+	Short: "cins inscription protocol, include wallet, embed btcd and inscribe tools.",
 }
 
 func init() {

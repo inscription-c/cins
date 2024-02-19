@@ -14,6 +14,7 @@ import (
 	"github.com/inscription-c/insc/inscription/log"
 	"github.com/inscription-c/insc/internal/signal"
 	"github.com/inscription-c/insc/internal/util"
+	"golang.org/x/sync/errgroup"
 	"io"
 	"sync/atomic"
 	"time"
@@ -237,18 +238,16 @@ func (idx *Indexer) UpdateIndex() error {
 	}
 	endHeight -= 6
 
-	if int64(idx.height) > endHeight {
+	ctx, cancel := context.WithCancel(context.Background())
+	blockCh, errCh := idx.fetchBlockFrom(ctx, uint32(endHeight))
+	if blockCh == nil {
+		cancel()
 		return nil
 	}
-
-	ctx, cancel := context.WithCancel(context.Background())
-	blockCh := make(chan *wire.MsgBlock, 16)
-	idx.fetchBlockFrom(ctx, blockCh, uint32(endHeight))
 	defer func() {
 		cancel()
 		for range blockCh {
 		}
-		blockCh = nil
 	}()
 
 	wtx := idx.Begin()
@@ -263,6 +262,8 @@ func (idx *Indexer) UpdateIndex() error {
 
 	for {
 		select {
+		case err = <-errCh:
+			return err
 		case block, ok := <-blockCh:
 			if !ok {
 				if unCommit > 0 {
@@ -523,22 +524,20 @@ func (idx *Indexer) indexBlock(
 		}
 	}
 
-	if indexInscriptions {
-		buf := bytes.NewBufferString("")
-		if err := block.Header.Serialize(buf); err != nil {
-			return err
-		}
-		blockInfo := &tables.BlockInfo{
-			Height:    idx.height,
-			Header:    buf.Bytes(),
-			Timestamp: block.Header.Timestamp.Unix(),
-		}
-		if *inscriptionUpdater.nextSequenceNumber > sequenceNumber {
-			blockInfo.SequenceNum = *inscriptionUpdater.nextSequenceNumber
-		}
-		if err := wtx.SaveBlockInfo(blockInfo); err != nil {
-			return err
-		}
+	buf := bytes.NewBufferString("")
+	if err := block.Header.Serialize(buf); err != nil {
+		return err
+	}
+	blockInfo := &tables.BlockInfo{
+		Height:    idx.height,
+		Header:    buf.Bytes(),
+		Timestamp: block.Header.Timestamp.Unix(),
+	}
+	if *inscriptionUpdater.nextSequenceNumber > sequenceNumber {
+		blockInfo.SequenceNum = *inscriptionUpdater.nextSequenceNumber
+	}
+	if err := wtx.SaveBlockInfo(blockInfo); err != nil {
+		return err
 	}
 
 	if idx.indexSats {
@@ -768,27 +767,87 @@ func (idx *Indexer) commit(wtx *dao.DB) (err error) {
 // fetchBlockFrom is a method that fetches blocks from the blockchain, starting from a specified start height and ending at a specified end height.
 // It returns a channel that emits the fetched blocks.
 // The method returns an error if there is any issue during the fetching process.
-func (idx *Indexer) fetchBlockFrom(ctx context.Context, blockCh chan *wire.MsgBlock, end uint32) {
-	if idx.height > end {
-		return
+func (idx *Indexer) fetchBlockFrom(ctx context.Context, endHeight uint32) (chan *wire.MsgBlock, chan error) {
+	if idx.height > endHeight {
+		return nil, nil
 	}
 
+	current := uint32(16)
+	currentHeightsNum := uint32(2)
+	lastHeightStart := idx.height
+
+	errCh := make(chan error, 1)
+	blockCh := make(chan *wire.MsgBlock, current)
+	currentHeightCh := make(chan []uint32, currentHeightsNum)
+
 	go func() {
-		defer close(blockCh)
-		for i := idx.height; i <= end; i++ {
+		next := idx.height
+		defer close(currentHeightCh)
+		for height := idx.height; height <= endHeight; height++ {
 			select {
 			case <-ctx.Done():
 				return
 			default:
-				block, err := idx.getBlockWithRetries(i)
-				if err != nil {
-					log.Srv.Warn("getBlockWithRetries", err)
-					return
+				if height-next == current-1 || height == endHeight {
+					currentHeightCh <- []uint32{next, height}
+					next = height + 1
 				}
-				blockCh <- block
 			}
 		}
 	}()
+
+	go func() {
+		defer close(blockCh)
+		errWg := &errgroup.Group{}
+
+		for i := uint32(0); i < currentHeightsNum; i++ {
+			errWg.Go(func() error {
+				for heights := range currentHeightCh {
+					start := heights[0]
+					end := heights[1]
+					errWg := &errgroup.Group{}
+					blocks := make([]*wire.MsgBlock, current)
+					for i := start; i <= end; i++ {
+						height := i
+						errWg.Go(func() error {
+							block, err := idx.getBlockWithRetries(height)
+							if err != nil {
+								return err
+							}
+							blocks[(height-start)%uint32(len(blocks))] = block
+							return nil
+						})
+					}
+					if err := errWg.Wait(); err != nil {
+						return err
+					}
+
+					for {
+						if atomic.LoadUint32(&lastHeightStart) != start {
+							time.Sleep(time.Millisecond * 10)
+							continue
+						}
+						break
+					}
+
+					for i := 0; i < len(blocks); i++ {
+						if blocks[i] == nil {
+							break
+						}
+						blockCh <- blocks[i]
+					}
+					atomic.StoreUint32(&lastHeightStart, end+1)
+				}
+				return nil
+			})
+		}
+
+		if err := errWg.Wait(); err != nil {
+			errCh <- err
+		}
+	}()
+
+	return blockCh, errCh
 }
 
 // getBlockWithRetries is a method that fetches a block from the blockchain at a specified height.
@@ -838,10 +897,10 @@ func (idx *Indexer) getBlockWithRetries(height uint32) (*wire.MsgBlock, error) {
 func (idx *Indexer) indexInscriptions() bool {
 	indexInscriptions := !idx.opts.noIndexInscriptions
 	switch util.ActiveNet.Net {
-	case wire.TestNet:
-		indexInscriptions = indexInscriptions && idx.height >= constants.TestnetFirstInscriptionHeight
+	case wire.TestNet3:
+		indexInscriptions = indexInscriptions && constants.TestnetFirstInscriptionHeight > 0 && idx.height >= constants.TestnetFirstInscriptionHeight
 	case wire.MainNet:
-		// TODO
+		indexInscriptions = indexInscriptions && constants.MainNetFirstInscriptionHeight > 0 && idx.height >= constants.MainNetFirstInscriptionHeight
 	}
 	return indexInscriptions
 }
