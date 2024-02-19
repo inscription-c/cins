@@ -138,11 +138,7 @@ func inscribe() error {
 		walletUrl,
 		walletRpcUser,
 		walletPass,
-		true,
 	)
-	if err != nil {
-		return err
-	}
 	if err != nil {
 		return err
 	}

@@ -4,13 +4,14 @@ import (
 	"errors"
 	"fmt"
 	"github.com/btcsuite/btcd/btcutil"
-	"github.com/btcsuite/btcwallet/chain"
+	chain2 "github.com/btcsuite/btcwallet/chain"
 	"github.com/btcsuite/btcwallet/rpc/legacyrpc"
 	"github.com/btcsuite/btcwallet/wallet"
 	"github.com/inscription-c/insc/constants"
 	log2 "github.com/inscription-c/insc/inscription/log"
 	"github.com/inscription-c/insc/internal/signal"
 	"github.com/inscription-c/insc/internal/util"
+	"github.com/inscription-c/insc/internal/wallet/chain"
 	"github.com/inscription-c/insc/wallet/log"
 	"github.com/spf13/cobra"
 	"net"
@@ -19,11 +20,7 @@ import (
 	"os"
 	"path/filepath"
 	"sync"
-)
-
-const (
-	btcdRpcListenMainNet = "127.0.0.1:8334"
-	btcdRpcListenTestNet = "127.0.0.1:18334"
+	"time"
 )
 
 var (
@@ -42,7 +39,7 @@ var Options = &walletOptions{}
 
 var Cmd = &cobra.Command{
 	Use:   "wallet",
-	Short: "wallet embed btcd endpoint",
+	Short: "wallet with btc",
 	Run: func(cmd *cobra.Command, args []string) {
 		if err := Main(); err != nil {
 			fmt.Println(err)
@@ -53,9 +50,9 @@ var Cmd = &cobra.Command{
 }
 
 func init() {
-	Cmd.Flags().StringVarP(&Options.Username, "user", "u", "root", "btcd rpc server username")
-	Cmd.Flags().StringVarP(&Options.Password, "password", "P", "root", "btcd rpc server password")
-	Cmd.Flags().StringVarP(&Options.BtcdUrl, "btcd_url", "", "localhost:8334", "Hostname/IP and port of btcd RPC server to connect to (default localhost:8334, testnet: localhost:18334)")
+	Cmd.Flags().StringVarP(&Options.BtcdUrl, "rpc_connect", "s", "localhost:8334", "Hostname/IP and port of RPC server to connect to (default localhost:8334, testnet: localhost:18334)")
+	Cmd.Flags().StringVarP(&Options.Username, "user", "u", "root", "rpc server username")
+	Cmd.Flags().StringVarP(&Options.Password, "password", "P", "root", "rpc server password")
 	Cmd.Flags().StringVarP(&Options.WalletPass, "wallet_pass", "", "root", "wallet password")
 	Cmd.Flags().BoolVarP(&Options.Testnet, "testnet", "t", false, "bitcoin testnet3")
 	if err := Cmd.MarkFlagRequired("wallet_pass"); err != nil {
@@ -179,11 +176,11 @@ func Wallet(walletCh chan<- *wallet.Wallet) error {
 func rpcClientConnectLoop(legacyRPCServer *legacyrpc.Server, loader *wallet.Loader) {
 	for {
 		var (
-			chainClient chain.Interface
+			chainClient chain2.Interface
 			err         error
 		)
 
-		chainClient, err = startChainRPC(nil)
+		chainClient, err = startChainRPC()
 		if err != nil {
 			log.Log.Errorf("Unable to open connection to consensus RPC server: %v", err)
 			continue
@@ -234,16 +231,38 @@ func rpcClientConnectLoop(legacyRPCServer *legacyrpc.Server, loader *wallet.Load
 	}
 }
 
-// startChainRPC opens an RPC client connection to a btcd server for blockchain
-// services.  This function uses the RPC options from the global config and
-// there is no recovery in case the server is not available or if there is an
-// authentication error.  Instead, all requests to the client will simply error.
-func startChainRPC(certs []byte) (*chain.RPCClient, error) {
+func startChainRPC() (chain2.Interface, error) {
 	log.Log.Infof("Attempting RPC client connection to %v", cfg.RPCConnect)
-	rpcc, err := chain.NewRPCClient(util.ActiveNet.Params, cfg.RPCConnect, cfg.BtcdUsername, cfg.BtcdPassword, certs, cfg.DisableClientTLS, 0)
+	bitcoindCfg := &chain.BitcoindConfig{
+		ChainParams:        util.ActiveNet.Params,
+		Host:               cfg.RPCConnect,
+		User:               cfg.BtcdUsername,
+		Pass:               cfg.BtcdPassword,
+		Dialer:             nil,
+		PrunedModeMaxPeers: 0,
+		PollingConfig: &chain.PollingConfig{
+			BlockPollingInterval: time.Millisecond * 100,
+			TxPollingInterval:    time.Millisecond * 100,
+		},
+	}
+
+	chainConn, err := chain.NewBitcoindConn(bitcoindCfg)
 	if err != nil {
 		return nil, err
 	}
-	err = rpcc.Start()
-	return rpcc, err
+	if err := chainConn.Start(); err != nil {
+		return nil, err
+	}
+	signal.AddInterruptHandler(func() {
+		chainConn.Stop()
+	})
+
+	btcClient := chainConn.NewBitcoindClient()
+	if err := btcClient.Start(); err != nil {
+		return nil, err
+	}
+	signal.AddInterruptHandler(func() {
+		btcClient.Stop()
+	})
+	return btcClient, err
 }

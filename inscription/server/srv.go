@@ -153,11 +153,11 @@ var Cmd = &cobra.Command{
 }
 
 func init() {
-	Cmd.Flags().StringVarP(&srvOptions.username, "user", "u", "", "btcd rpc server username")
-	Cmd.Flags().StringVarP(&srvOptions.password, "password", "P", "", "btcd rpc server password")
+	Cmd.Flags().StringVarP(&srvOptions.username, "user", "u", "root", "btcd rpc server username")
+	Cmd.Flags().StringVarP(&srvOptions.password, "password", "P", "root", "btcd rpc server password")
 	Cmd.Flags().StringVarP(&srvOptions.rpcListen, "rpc_listen", "l", mainNetRPCListen, "rpc server listen address. Default `mainnet :8335, testnet :18335`")
 	Cmd.Flags().BoolVarP(&srvOptions.testnet, "testnet", "t", false, "bitcoin testnet3")
-	Cmd.Flags().StringVarP(&srvOptions.rpcConnect, "rpc_connect", "s", mainNetRPCConnect, "the URL of btcd RPC server to connect to (default localhost:8334, testnet: localhost:18334)")
+	Cmd.Flags().StringVarP(&srvOptions.rpcConnect, "rpc_connect", "s", mainNetRPCConnect, "the URL of RPC server to connect to (default localhost:8334, testnet: localhost:18334)")
 	//Cmd.Flags().BoolVarP(&srvOptions.embedDB, "embed_db", "", false, "use embed db")
 	Cmd.Flags().BoolVarP(&srvOptions.noApi, "no_api", "", false, "don't start api server")
 	//Cmd.Flags().StringVarP(&srvOptions.dataDir, "data_dir", "", "", "embed database data dir")
@@ -193,15 +193,6 @@ func IndexSrv(opts ...SrvOption) error {
 	logFile := btcutil.AppDataDir(filepath.Join(constants.AppName, "inscription", "logs", "index.log"), false)
 	log.InitLogRotator(logFile)
 
-	var err error
-	disableTls := false
-	if srvOptions.rpcConnect != "" {
-		disableTls, err = util.DisableTls(srvOptions.rpcConnect, util.ActiveNet.RPCClientPort)
-		if err != nil {
-			return err
-		}
-	}
-
 	db, err := dao.NewDB(
 		dao.WithAddr(srvOptions.mysqlAddr),
 		dao.WithUser(srvOptions.mysqlUser),
@@ -217,18 +208,14 @@ func IndexSrv(opts ...SrvOption) error {
 		return err
 	}
 
-	cli, err := btcd.NewClient(srvOptions.rpcConnect, srvOptions.username, srvOptions.password, disableTls)
+	cli, err := btcd.NewClient(srvOptions.rpcConnect, srvOptions.username, srvOptions.password)
 	if err != nil {
 		return err
 	}
-	batchCli, err := btcd.NewBatchClient(srvOptions.rpcConnect, srvOptions.username, srvOptions.password, disableTls)
+	batchCli, err := btcd.NewBatchClient(srvOptions.rpcConnect, srvOptions.username, srvOptions.password)
 	if err != nil {
 		return err
 	}
-	signal.AddInterruptHandler(func() {
-		cli.Shutdown()
-		batchCli.Shutdown()
-	})
 
 	indexer := index.NewIndexer(
 		index.WithDB(db),

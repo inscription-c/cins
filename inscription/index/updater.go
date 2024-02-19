@@ -4,10 +4,10 @@ import (
 	"bytes"
 	"errors"
 	"github.com/btcsuite/btcd/blockchain"
-	"github.com/btcsuite/btcd/rpcclient"
 	"github.com/btcsuite/btcd/wire"
 	"github.com/gogf/gf/v2/util/gconv"
 	"github.com/gogf/gf/v2/util/gutil"
+	"github.com/inscription-c/insc/btcd/rpcclient"
 	"github.com/inscription-c/insc/inscription/index/dao"
 	"github.com/inscription-c/insc/inscription/index/model"
 	"github.com/inscription-c/insc/inscription/index/tables"
@@ -866,8 +866,7 @@ func (u *InscriptionUpdater) fetchOutputValues(tx *wire.MsgTx, maxCurrentNum int
 					return nil
 				}
 				// Try to get the value of the input from the database.
-				_, err := u.idx.DB().GetValueByOutpoint(txIn.PreviousOutPoint.String())
-				if err != nil && !errors.Is(err, gorm.ErrRecordNotFound) {
+				if _, err := u.idx.DB().GetValueByOutpoint(txIn.PreviousOutPoint.String()); err != nil && !errors.Is(err, gorm.ErrRecordNotFound) {
 					return err
 				}
 				if err == nil {

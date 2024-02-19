@@ -5,9 +5,9 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"github.com/btcsuite/btcd/rpcclient"
 	"github.com/btcsuite/btcd/wire"
 	"github.com/gogf/gf/v2/util/gconv"
+	"github.com/inscription-c/insc/btcd/rpcclient"
 	"github.com/inscription-c/insc/constants"
 	"github.com/inscription-c/insc/inscription/index/dao"
 	"github.com/inscription-c/insc/inscription/index/tables"
@@ -880,7 +880,7 @@ func (idx *Indexer) getBlockWithRetries(height uint32) (*wire.MsgBlock, error) {
 			}
 
 			// Get the block with the obtained hash.
-			block, err := idx.opts.cli.GetBlock(hash)
+			block, err := idx.RpcClient().GetBlock(hash)
 			if err != nil && !errors.Is(err, rpcclient.ErrClientShutdown) {
 				log.Srv.Warn("GetBlock", err)
 				continue
