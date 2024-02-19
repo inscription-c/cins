@@ -660,7 +660,6 @@ func (u *InscriptionUpdater) updateInscriptionLocation(
 				return errors.New("blessedInscriptionCount compare and swap failed")
 			}
 			inscriptionNumber = int64(number)
-
 		}
 		// Increment the sequence number.
 		sequenceNumber = *u.nextSequenceNumber
@@ -778,9 +777,7 @@ func (u *InscriptionUpdater) updateInscriptionLocation(
 		if !atomic.CompareAndSwapUint64(u.unboundInscriptions, unboundNum, unboundNum+1) {
 			return errors.New("unboundInscriptions compare and swap failed")
 		}
-		satPoint = &tables.SatPointToSequenceNum{
-			Offset: unboundNum,
-		}
+		satPoint.Offset = unboundNum
 	}
 	if err := u.wtx.SetSatPointToSequenceNum(satPoint, sequenceNumber); err != nil {
 		return err

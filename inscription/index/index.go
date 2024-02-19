@@ -773,12 +773,12 @@ func (idx *Indexer) fetchBlockFrom(ctx context.Context, endHeight uint32) (chan 
 	}
 
 	current := uint32(16)
-	currentHeightsNum := uint32(2)
+	currentGroupNum := uint32(4)
 	lastHeightStart := idx.height
 
 	errCh := make(chan error, 1)
 	blockCh := make(chan *wire.MsgBlock, current)
-	currentHeightCh := make(chan []uint32, currentHeightsNum)
+	currentHeightCh := make(chan []uint32, currentGroupNum)
 
 	go func() {
 		next := idx.height
@@ -800,7 +800,7 @@ func (idx *Indexer) fetchBlockFrom(ctx context.Context, endHeight uint32) (chan 
 		defer close(blockCh)
 		errWg := &errgroup.Group{}
 
-		for i := uint32(0); i < currentHeightsNum; i++ {
+		for i := uint32(0); i < currentGroupNum; i++ {
 			errWg.Go(func() error {
 				for heights := range currentHeightCh {
 					start := heights[0]
