@@ -17,15 +17,15 @@ func (h *Handler) BRC20CHolders(ctx *gin.Context) {
 		page = "1"
 	}
 	if tkid == "" {
-		ctx.Status(http.StatusBadRequest)
+		ctx.String(http.StatusBadRequest, "missing tkid")
 		return
 	}
 	if gconv.Int(page) < 1 {
-		ctx.Status(http.StatusBadRequest)
+		ctx.String(http.StatusBadRequest, "invalid page")
 		return
 	}
 	if err := h.doBRC20CHolders(ctx, tkid, gconv.Int(page)); err != nil {
-		ctx.Status(http.StatusInternalServerError)
+		ctx.String(http.StatusInternalServerError, err.Error())
 		return
 	}
 }

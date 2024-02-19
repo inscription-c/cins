@@ -16,11 +16,11 @@ import (
 func (h *Handler) Content(ctx *gin.Context) {
 	inscriptionId := ctx.Param("inscriptionId")
 	if inscriptionId == "" {
-		ctx.Status(http.StatusBadRequest)
+		ctx.String(http.StatusBadRequest, "missing inscriptionId")
 		return
 	}
 	if err := h.doContent(ctx, inscriptionId); err != nil {
-		ctx.Status(http.StatusInternalServerError)
+		ctx.String(http.StatusInternalServerError, err.Error())
 		return
 	}
 }

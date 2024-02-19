@@ -40,11 +40,11 @@ type RespInscription struct {
 func (h *Handler) Inscription(ctx *gin.Context) {
 	query := ctx.Param("query")
 	if query == "" {
-		ctx.Status(http.StatusBadRequest)
+		ctx.String(http.StatusBadRequest, "missing query")
 		return
 	}
 	if err := h.doInscription(ctx, query); err != nil {
-		ctx.Status(http.StatusInternalServerError)
+		ctx.String(http.StatusInternalServerError, err.Error())
 		return
 	}
 }
@@ -68,7 +68,7 @@ func (h *Handler) doInscription(ctx *gin.Context, query string) error {
 		var inscriptionNum int64
 		inscriptionNum, err = strconv.ParseInt(query, 10, 64)
 		if err != nil {
-			ctx.Status(http.StatusBadRequest)
+			ctx.String(http.StatusBadRequest, "invalid inscription number")
 			return nil
 		}
 		inscription, err = h.DB().GetInscriptionByInscriptionNum(inscriptionNum)

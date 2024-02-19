@@ -1,12 +1,9 @@
 package handle
 
 import (
-	"fmt"
-	"github.com/dustin/go-humanize"
 	"github.com/gin-gonic/gin"
 	"github.com/gogf/gf/v2/util/gconv"
 	"github.com/inscription-c/insc/constants"
-	"github.com/inscription-c/insc/inscription/server/handle/api"
 	"github.com/inscription-c/insc/internal/util"
 	"github.com/shopspring/decimal"
 	"golang.org/x/sync/errgroup"
@@ -20,14 +17,13 @@ type HomePageStatisticsResp struct {
 }
 
 func (h *Handler) HomePageStatistics(ctx *gin.Context) {
-	apiResp := &api.Resp{}
-	if err := h.doHomePageStatistics(apiResp); err != nil {
-		apiResp.ApiRespErr(api.CodeError500, err.Error())
+	if err := h.doHomePageStatistics(ctx); err != nil {
+		ctx.String(http.StatusInternalServerError, err.Error())
+		return
 	}
-	ctx.JSON(http.StatusOK, apiResp)
 }
 
-func (h *Handler) doHomePageStatistics(apiResp *api.Resp) error {
+func (h *Handler) doHomePageStatistics(ctx *gin.Context) error {
 	resp := &HomePageStatisticsResp{}
 
 	errWg := &errgroup.Group{}
@@ -44,7 +40,7 @@ func (h *Handler) doHomePageStatistics(apiResp *api.Resp) error {
 		if err != nil {
 			return err
 		}
-		resp.StoredData = humanize.Bytes(storedData)
+		resp.StoredData = gconv.String(storedData)
 		return nil
 	})
 	errWg.Go(func() error {
@@ -54,12 +50,13 @@ func (h *Handler) doHomePageStatistics(apiResp *api.Resp) error {
 		}
 		btc := decimal.NewFromInt(int64(totalFees)).
 			Div(decimal.NewFromInt(int64(constants.OneBtc)))
-		resp.TotalFees = fmt.Sprintf("%s BTC", btc.String())
+		resp.TotalFees = btc.String()
 		return nil
 	})
 	if err := errWg.Wait(); err != nil {
 		return err
 	}
-	apiResp.ApiRespOK(resp)
+
+	ctx.JSON(http.StatusOK, resp)
 	return nil
 }

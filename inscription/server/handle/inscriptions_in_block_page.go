@@ -18,7 +18,7 @@ func (h *Handler) InscriptionsInBlockPage(ctx *gin.Context) {
 		page = "1"
 	}
 	if err := h.doInscriptionsInBlockPage(ctx, gconv.Int(height), gconv.Int(page)); err != nil {
-		ctx.Status(http.StatusInternalServerError)
+		ctx.String(http.StatusInternalServerError, err.Error())
 		return
 	}
 }
@@ -27,7 +27,7 @@ func (h *Handler) InscriptionsInBlockPage(ctx *gin.Context) {
 // It retrieves the inscriptions in a specific block based on the provided height and page number and returns them in the response.
 func (h *Handler) doInscriptionsInBlockPage(ctx *gin.Context, height, page int) error {
 	if page <= 0 {
-		ctx.Status(http.StatusBadRequest)
+		ctx.String(http.StatusBadRequest, "invalid page")
 		return nil
 	}
 

@@ -12,11 +12,11 @@ import (
 func (h *Handler) BRC20CToken(ctx *gin.Context) {
 	tkid := ctx.Param("tkid")
 	if tkid == "" {
-		ctx.Status(http.StatusBadRequest)
+		ctx.String(http.StatusBadRequest, "invalid token id")
 		return
 	}
 	if err := h.doBRC20CToken(ctx, tkid); err != nil {
-		ctx.Status(http.StatusInternalServerError)
+		ctx.String(http.StatusInternalServerError, err.Error())
 		return
 	}
 }

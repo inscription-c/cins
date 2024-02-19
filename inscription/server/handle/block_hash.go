@@ -10,10 +10,9 @@ import (
 func (h *Handler) BlockHash(ctx *gin.Context) {
 	height := ctx.Param("height")
 	if err := h.doBlockHash(ctx, height); err != nil {
-		ctx.Status(http.StatusInternalServerError)
+		ctx.String(http.StatusInternalServerError, err.Error())
 		return
 	}
-	ctx.Status(http.StatusOK)
 }
 
 func (h *Handler) doBlockHash(ctx *gin.Context, height string) error {
@@ -30,8 +29,6 @@ func (h *Handler) doBlockHash(ctx *gin.Context, height string) error {
 			return err
 		}
 	}
-	if _, err := ctx.Writer.WriteString(blockHash); err != nil {
-		return err
-	}
+	ctx.String(http.StatusOK, blockHash)
 	return nil
 }

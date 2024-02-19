@@ -14,7 +14,7 @@ func (h *Handler) Inscriptions(ctx *gin.Context) {
 		page = "1"
 	}
 	if err := h.doInscriptions(ctx, page); err != nil {
-		ctx.Status(http.StatusInternalServerError)
+		ctx.String(http.StatusInternalServerError, err.Error())
 		return
 	}
 }
@@ -26,7 +26,7 @@ func (h *Handler) doInscriptions(ctx *gin.Context, pageStr string) error {
 	page := gconv.Int(pageStr)
 	// If the page number is less than or equal to 0, return a bad request status.
 	if page <= 0 {
-		ctx.Status(http.StatusBadRequest)
+		ctx.String(http.StatusBadRequest, "invalid page")
 		return nil
 	}
 	// Set the page size.

@@ -11,11 +11,11 @@ import (
 func (h *Handler) InscriptionsInOutput(ctx *gin.Context) {
 	output := ctx.Param("output")
 	if output == "" {
-		ctx.Status(http.StatusBadRequest)
+		ctx.String(http.StatusBadRequest, "invalid output")
 		return
 	}
 	if err := h.doInscriptionsInOutput(ctx, output); err != nil {
-		ctx.Status(http.StatusInternalServerError)
+		ctx.String(http.StatusInternalServerError, err.Error())
 		return
 	}
 }

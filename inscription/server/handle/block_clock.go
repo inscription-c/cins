@@ -8,7 +8,7 @@ import (
 // BlockClock return latest block clock
 func (h *Handler) BlockClock(ctx *gin.Context) {
 	if err := h.doBlockClock(ctx); err != nil {
-		ctx.Status(http.StatusInternalServerError)
+		ctx.String(http.StatusInternalServerError, err.Error())
 		return
 	}
 }

@@ -17,15 +17,15 @@ func (h *Handler) BRC20CTokens(ctx *gin.Context) {
 		page = "1"
 	}
 	if tk == "" {
-		ctx.Status(http.StatusBadRequest)
+		ctx.String(http.StatusBadRequest, "missing tk")
 		return
 	}
 	if gconv.Int(page) < 1 {
-		ctx.Status(http.StatusBadRequest)
+		ctx.String(http.StatusBadRequest, "invalid page")
 		return
 	}
 	if err := h.doBRC20CTokens(ctx, tk, gconv.Int(page)); err != nil {
-		ctx.Status(http.StatusInternalServerError)
+		ctx.String(http.StatusInternalServerError, err.Error())
 		return
 	}
 }

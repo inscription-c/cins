@@ -17,15 +17,15 @@ func (h *Handler) BRC20CMintHistory(ctx *gin.Context) {
 		page = "1"
 	}
 	if tkidOrAddr == "" {
-		ctx.Status(http.StatusBadRequest)
+		ctx.String(http.StatusBadRequest, "invalid token id or address")
 		return
 	}
 	if gconv.Int(page) < 1 {
-		ctx.Status(http.StatusBadRequest)
+		ctx.String(http.StatusBadRequest, "invalid page")
 		return
 	}
 	if err := h.doBRC20CMintHistory(ctx, tkidOrAddr, gconv.Int(page)); err != nil {
-		ctx.Status(http.StatusInternalServerError)
+		ctx.String(http.StatusInternalServerError, err.Error())
 		return
 	}
 }

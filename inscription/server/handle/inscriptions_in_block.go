@@ -14,7 +14,7 @@ func (h *Handler) InscriptionsInBlock(ctx *gin.Context) {
 		height = "0"
 	}
 	if err := h.doInscriptionsInBlock(ctx, gconv.Uint32(height)); err != nil {
-		ctx.Status(http.StatusInternalServerError)
+		ctx.String(http.StatusInternalServerError, err.Error())
 		return
 	}
 }

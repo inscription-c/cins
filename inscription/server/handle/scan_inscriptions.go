@@ -7,7 +7,6 @@ import (
 	"github.com/inscription-c/insc/inscription/index/dao"
 	"github.com/inscription-c/insc/inscription/index/model"
 	"github.com/inscription-c/insc/inscription/index/tables"
-	"github.com/inscription-c/insc/inscription/server/handle/api"
 	"github.com/inscription-c/insc/internal/util"
 	"net/http"
 	"strconv"
@@ -26,7 +25,7 @@ const (
 	//SearchTypeProtocol          SearchType = "protocol"
 )
 
-type ScanInscriptionListReq struct {
+type ScanInscriptionsReq struct {
 	Search          string   `json:"search"`
 	Page            int      `json:"page" binding:"omitempty,min=1"`
 	Limit           int      `json:"limit" binding:"omitempty,min=1,max=50"`
@@ -35,7 +34,7 @@ type ScanInscriptionListReq struct {
 	InscriptionType string   `json:"inscription_type" binding:"omitempty,oneof=c-brc-20"`
 }
 
-func (req *ScanInscriptionListReq) Check() error {
+func (req *ScanInscriptionsReq) Check() error {
 	if req.Page == 0 {
 		req.Page = 1
 	}
@@ -48,7 +47,7 @@ func (req *ScanInscriptionListReq) Check() error {
 	return nil
 }
 
-type ScanInscriptionListResp struct {
+type ScanInscriptionsResp struct {
 	SearchType SearchType              `json:"search_type"`
 	Page       int                     `json:"page"`
 	Total      int                     `json:"total"`
@@ -68,27 +67,24 @@ type ScanInscriptionEntry struct {
 	ContentProtocol string                 `json:"content_protocol"`
 }
 
-func (h *Handler) ScanInscriptionList(ctx *gin.Context) {
-	req := &ScanInscriptionListReq{}
-	apiResp := &api.Resp{}
+func (h *Handler) ScanInscriptions(ctx *gin.Context) {
+	req := &ScanInscriptionsReq{}
 	if err := ctx.BindJSON(req); err != nil {
-		apiResp.ApiRespErr(api.CodeParamsInvalid, err.Error())
-		ctx.JSON(http.StatusOK, apiResp)
+		ctx.String(http.StatusBadRequest, err.Error())
 		return
 	}
 	if err := req.Check(); err != nil {
-		apiResp.ApiRespErr(api.CodeParamsInvalid, err.Error())
-		ctx.JSON(http.StatusOK, apiResp)
+		ctx.String(http.StatusBadRequest, err.Error())
 		return
 	}
-	if err := h.doScanInscriptionList(req, apiResp); err != nil {
-		apiResp.ApiRespErr(api.CodeError500, err.Error())
+	if err := h.doScanInscriptions(ctx, req); err != nil {
+		ctx.String(http.StatusInternalServerError, err.Error())
+		return
 	}
-	ctx.JSON(http.StatusOK, apiResp)
 }
 
-func (h *Handler) doScanInscriptionList(req *ScanInscriptionListReq, apiResp *api.Resp) error {
-	resp := &ScanInscriptionListResp{
+func (h *Handler) doScanInscriptions(ctx *gin.Context, req *ScanInscriptionsReq) error {
+	resp := &ScanInscriptionsResp{
 		SearchType: SearchTypeUnknown,
 		Page:       req.Page,
 		List:       make([]*ScanInscriptionEntry, 0),
@@ -156,6 +152,7 @@ func (h *Handler) doScanInscriptionList(req *ScanInscriptionListReq, apiResp *ap
 			ContentProtocol: ins.ContentProtocol,
 		})
 	}
-	apiResp.ApiRespOK(resp)
+
+	ctx.JSON(http.StatusOK, resp)
 	return nil
 }
