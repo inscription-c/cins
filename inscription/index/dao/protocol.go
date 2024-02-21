@@ -10,7 +10,31 @@ import (
 // SaveProtocol saves a protocol to the database.
 // It returns any error encountered during the operation.
 func (d *DB) SaveProtocol(protocol *tables.Protocol) error {
-	return d.DB.Save(protocol).Error
+	old := &tables.Protocol{}
+	err := d.Where("tx_id = ? AND offset = ?", protocol.TxId, protocol.Offset).First(old).Error
+	if err != nil && !errors.Is(err, gorm.ErrRecordNotFound) {
+		return err
+	}
+	if old.Id > 0 {
+		protocol.Id = old.Id
+		protocol.CreatedAt = old.CreatedAt
+		if err := d.Save(protocol).Error; err != nil {
+			return err
+		}
+		return d.Create(&tables.UndoLog{
+			Sql: d.ToSQL(func(tx *gorm.DB) *gorm.DB {
+				return tx.Save(old)
+			}),
+		}).Error
+	}
+	if err := d.Create(protocol).Error; err != nil {
+		return err
+	}
+	return d.Create(&tables.UndoLog{
+		Sql: d.ToSQL(func(tx *gorm.DB) *gorm.DB {
+			return tx.Delete(protocol)
+		}),
+	}).Error
 }
 
 func (d *DB) DeleteMockProtocol() error {

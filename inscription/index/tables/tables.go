@@ -10,4 +10,6 @@ var Tables = []interface{}{
 	&SatPointToSequenceNum{},
 	&SatSatPoint{},
 	&Statistic{},
+	&SavePoint{},
+	&UndoLog{},
 }

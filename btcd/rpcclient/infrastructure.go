@@ -1657,22 +1657,11 @@ func (c *Client) BackendVersion() (BackendVersion, error) {
 	// bitcoind nodes as of v0.16.0, so we'll assume the client is connected
 	// to a btcd backend if it does exist.
 	info, err := c.GetInfo()
-
-	switch err := err.(type) {
-	// Parse the btcd version and cache it.
-	case nil:
+	if err == nil {
 		log.Debugf("Detected btcd version: %v", info.Version)
 		version := Btcd
 		c.backendVersion = &version
 		return *c.backendVersion, nil
-
-	// Inspect the RPC error to ensure the method was not found, otherwise
-	// we actually ran into an error.
-	case *btcjson.RPCError:
-		if err.Code != btcjson.ErrRPCMethodNotFound.Code {
-			return 0, fmt.Errorf("unable to detect btcd version: "+
-				"%v", err)
-		}
 	}
 
 	// Since the GetInfo method was not found, we assume the client is

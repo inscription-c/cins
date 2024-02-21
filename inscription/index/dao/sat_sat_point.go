@@ -1,14 +1,36 @@
 package dao
 
 import (
+	"errors"
 	"github.com/inscription-c/insc/inscription/index/tables"
-	"gorm.io/gorm/clause"
+	"gorm.io/gorm"
 )
 
 // SatToSatPoint saves a SAT (Satisfiability) to a sequence number in the database.
 func (d *DB) SatToSatPoint(satSatPoint *tables.SatSatPoint) error {
-	return d.Clauses(clause.OnConflict{
-		Columns:   []clause.Column{{Name: "sat"}},
-		DoUpdates: clause.AssignmentColumns([]string{"outpoint", "offset"}),
-	}).Create(&satSatPoint).Error
+	old := &tables.SatSatPoint{}
+	err := d.Where("sat=?", satSatPoint.Sat).First(old).Error
+	if err != nil && !errors.Is(err, gorm.ErrRecordNotFound) {
+		return err
+	}
+	if old.Id > 0 {
+		satSatPoint.Id = old.Id
+		satSatPoint.CreatedAt = old.CreatedAt
+		if err := d.Save(satSatPoint).Error; err != nil {
+			return err
+		}
+		return d.Create(&tables.UndoLog{
+			Sql: d.ToSQL(func(tx *gorm.DB) *gorm.DB {
+				return tx.Save(old)
+			}),
+		}).Error
+	}
+	if err := d.Create(satSatPoint).Error; err != nil {
+		return err
+	}
+	return d.Create(&tables.UndoLog{
+		Sql: d.ToSQL(func(tx *gorm.DB) *gorm.DB {
+			return tx.Delete(satSatPoint)
+		}),
+	}).Error
 }

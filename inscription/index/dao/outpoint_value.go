@@ -1,7 +1,9 @@
 package dao
 
 import (
+	"github.com/gogf/gf/v2/util/gutil"
 	"github.com/inscription-c/insc/inscription/index/tables"
+	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
 )
 
@@ -23,17 +25,28 @@ func (d *DB) DeleteValueByOutpoint(outpoints ...string) (err error) {
 	if len(outpoints) == 0 {
 		return
 	}
-	err = d.Where("outpoint in (?)", outpoints).Delete(&tables.OutpointValue{}).Error
+	list := make([]*tables.OutpointValue, 0, len(outpoints))
+	err = d.Clauses(clause.Returning{}).Where("outpoint in (?)", outpoints).Delete(&list).Error
 	if err != nil {
 		return
 	}
-	return
+	if len(list) == 0 {
+		return
+	}
+	return d.Create(&tables.UndoLog{
+		Sql: d.ToSQL(func(tx *gorm.DB) *gorm.DB {
+			return tx.CreateInBatches(list, 10_000)
+		}),
+	}).Error
 }
 
 // SetOutpointToValue sets the values for a set of outpoints.
 // It takes a map where the keys are outpoints and the values are the corresponding values.
 // It returns any error encountered during the operation.
 func (d *DB) SetOutpointToValue(values map[string]int64) (err error) {
+	if len(values) == 0 {
+		return
+	}
 	list := make([]*tables.OutpointValue, 0, len(values))
 	for outpoint, value := range values {
 		list = append(list, &tables.OutpointValue{
@@ -41,8 +54,12 @@ func (d *DB) SetOutpointToValue(values map[string]int64) (err error) {
 			Value:    value,
 		})
 	}
-	return d.Clauses(clause.OnConflict{
-		Columns:   []clause.Column{{Name: "outpoint"}},
-		DoUpdates: clause.AssignmentColumns([]string{"value"}),
-	}).CreateInBatches(&list, 10_000).Error
+	if err := d.CreateInBatches(&list, 10_000).Error; err != nil {
+		return err
+	}
+	return d.Create(&tables.UndoLog{
+		Sql: d.ToSQL(func(tx *gorm.DB) *gorm.DB {
+			return tx.Where("outpoint in (?)", gutil.Keys(values)).Delete(&tables.OutpointValue{})
+		}),
+	}).Error
 }

@@ -1,12 +1,8 @@
 package tables
 
 import (
-	"errors"
 	"fmt"
-	"github.com/btcsuite/btcd/chaincfg/chainhash"
 	"github.com/inscription-c/insc/constants"
-	"strconv"
-	"strings"
 	"time"
 )
 
@@ -33,27 +29,4 @@ func FormatOutpoint(txid string, index uint32) string {
 
 func FormatSatPoint(outpoint string, sat uint64) string {
 	return fmt.Sprintf("%s%s%d", outpoint, constants.OutpointDelimiter, sat)
-}
-
-func NewSatPointFromString(satpoint string) (*SatPointToSequenceNum, error) {
-	parts := strings.Split(satpoint, constants.OutpointDelimiter)
-	if len(parts) != 3 {
-		return nil, errors.New("satpoint should be of the form txid:index:offset")
-	}
-	hash, err := chainhash.NewHashFromStr(parts[0])
-	if err != nil {
-		return nil, err
-	}
-	outputIndex, err := strconv.ParseUint(parts[1], 10, 32)
-	if err != nil {
-		return nil, fmt.Errorf("invalid output index: %v", err)
-	}
-	offset, err := strconv.ParseUint(parts[2], 10, 64)
-	if err != nil {
-		return nil, fmt.Errorf("invalid satpoint offset: %v", err)
-	}
-	return &SatPointToSequenceNum{
-		Outpoint: fmt.Sprintf("%s%s%d", *hash, constants.OutpointDelimiter, outputIndex),
-		Offset:   offset,
-	}, nil
 }

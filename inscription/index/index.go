@@ -115,13 +115,12 @@ type Indexer struct {
 }
 
 // NewIndexer is a function that returns a pointer to a new Indexer instance.
-// It takes a variadic number of Option functions as arguments, which are used to set the configuration options for the Indexer.
+// It takes a variadic number of Option functions as arguments,
+// which are used to set the configuration options for the Indexer.
 func NewIndexer(opts ...Option) *Indexer {
-	// Create a new Indexer instance with default options.
 	idx := &Indexer{
 		opts: &Options{},
 	}
-	// Apply each Option function to the Indexer's options.
 	for _, v := range opts {
 		v(idx.opts)
 	}
@@ -141,16 +140,20 @@ func (idx *Indexer) Start() {
 				if errors.Is(err, signal.ErrInterrupted) {
 					return
 				}
-				if err != nil {
-					//if errors.Is(err, ErrDetectReorg) {
-					//	idx.height--
-					//	if err := idx.DB().DeleteBlockInfoByHeight(idx.height); err != nil {
-					//		log.Srv.Error("DeleteBlockInfoByHeight", err)
-					//		continue
-					//	}
-					//} else {
+				if errors.Is(err, ErrDetectReorg) {
 					log.Srv.Error("UpdateIndex", err)
-					//}
+					return
+				}
+				var recoverable *ErrRecoverable
+				if errors.As(err, &recoverable) {
+					if err := handleReorg(idx, recoverable.Height, recoverable.Depth); err != nil {
+						log.Srv.Error("handleReorg", err)
+						time.Sleep(time.Second * 5)
+					}
+					continue
+				}
+				if err != nil {
+					log.Srv.Error("UpdateIndex", err)
 				}
 				time.Sleep(time.Second * 5)
 			}
@@ -236,7 +239,6 @@ func (idx *Indexer) UpdateIndex() error {
 	if err != nil {
 		return err
 	}
-	endHeight -= 6
 
 	ctx, cancel := context.WithCancel(context.Background())
 	blockCh, errCh := idx.fetchBlockFrom(ctx, uint32(endHeight))
@@ -262,16 +264,11 @@ func (idx *Indexer) UpdateIndex() error {
 
 	for {
 		select {
-		case err = <-errCh:
-			return err
+		case <-signal.InterruptChannel:
+			goto END
 		case block, ok := <-blockCh:
 			if !ok {
-				if unCommit > 0 {
-					if err = idx.commit(wtx); err != nil {
-						return err
-					}
-				}
-				return nil
+				goto END
 			}
 
 			// Index the block.
@@ -302,8 +299,18 @@ func (idx *Indexer) UpdateIndex() error {
 					wtx = idx.Begin()
 				}
 			}
+		case err = <-errCh:
+			return err
 		}
 	}
+
+END:
+	if unCommit > 0 {
+		if err = idx.commit(wtx); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 // indexBlock is a method that indexes a block from the blockchain.
@@ -315,7 +322,7 @@ func (idx *Indexer) indexBlock(
 ) error {
 
 	// Detect if there is a reorganization in the blockchain.
-	if err := detectReorg(wtx, block, idx.height); err != nil {
+	if err := detectReorg(idx, wtx, block, idx.height); err != nil {
 		return err
 	}
 
@@ -403,7 +410,7 @@ func (idx *Indexer) indexBlock(
 					if ok {
 						idx.outputsCached++
 					} else {
-						var outpointSatRanges []*tables.OutpointSatRange
+						var outpointSatRanges tables.OutpointSatRange
 						if idx.indexSpentSats {
 							outpointSatRanges, err = wtx.OutpointToSatRanges(outpoint)
 							if err != nil {
@@ -415,17 +422,10 @@ func (idx *Indexer) indexBlock(
 								return err
 							}
 						}
-						if len(outpointSatRanges) == 0 {
+						if outpointSatRanges.Id == 0 {
 							return fmt.Errorf("could not find outpoint %s in index", outpoint)
 						}
-
-						for idx, v := range outpointSatRanges {
-							if idx == 0 {
-								satRanges = bytes.NewBuffer(v.SatRange)
-								continue
-							}
-							satRanges.Write(v.SatRange)
-						}
+						satRanges = bytes.NewBuffer(outpointSatRanges.SatRange)
 					}
 
 					satRangesEntry, err := tables.NewSatRanges(satRanges.Bytes())
@@ -476,14 +476,9 @@ func (idx *Indexer) indexBlock(
 			if err != nil {
 				return err
 			}
-			if len(lostSatRanges) == 0 {
-				lostSatRanges = []*tables.OutpointSatRange{{
-					Outpoint: nullOutpoint,
-					SatRange: make([]byte, 0),
-				}}
-			}
-			for i, coinBase := range coinbaseInputs {
-				latestIdx := len(lostSatRanges) - 1
+			lostSatRanges.Outpoint = nullOutpoint
+
+			for _, coinBase := range coinbaseInputs {
 				start := Sat(coinBase.Start)
 				if !start.Common() {
 					if err := wtx.SatToSatPoint(&tables.SatSatPoint{
@@ -494,21 +489,10 @@ func (idx *Indexer) indexBlock(
 						return err
 					}
 				}
-
-				lostSatRanges[latestIdx].SatRange = append(lostSatRanges[latestIdx].SatRange, coinBase.Store()...)
+				lostSatRanges.SatRange = append(lostSatRanges.SatRange, coinBase.Store()...)
 				lostSats += coinBase.End - coinBase.Start
-
-				if i < len(coinbaseInputs)-1 &&
-					len(lostSatRanges[latestIdx].SatRange) >= constants.MaxSatRangesDataSize {
-					lostSatRanges = append(lostSatRanges,
-						&tables.OutpointSatRange{
-							Outpoint: nullOutpoint,
-							SatRange: make([]byte, 0),
-						},
-					)
-				}
 			}
-			if err := wtx.SetOutpointToSatRange(lostSatRanges...); err != nil {
+			if err := wtx.SetOutpointToSatRange(&lostSatRanges); err != nil {
 				return err
 			}
 		}
@@ -698,7 +682,6 @@ func (idx *Indexer) commit(wtx *dao.DB) (err error) {
 		idx.height-1, idx.outputsTraversed, idx.valueCache.Len(), idx.outputsCached,
 	)
 
-	// If the indexer is configured to index satoshis, flush the satoshi range cache to the database.
 	if idx.indexSats {
 		log.Srv.Infof(
 			"Flushing %d entries, total %d bytes (%.1f%% resulting from %d insertions) from memory to database",
@@ -756,6 +739,9 @@ func (idx *Indexer) commit(wtx *dao.DB) (err error) {
 		return err
 	}
 
+	if err := updateSavePoints(idx, wtx, idx.height); err != nil {
+		return err
+	}
 	wtx.Commit()
 
 	idx.outputsInsertedSinceFlush = 0
@@ -777,8 +763,8 @@ func (idx *Indexer) fetchBlockFrom(ctx context.Context, endHeight uint32) (chan 
 	lastHeightStart := idx.height
 
 	errCh := make(chan error, 1)
-	blockCh := make(chan *wire.MsgBlock, current)
-	currentHeightCh := make(chan []uint32, currentGroupNum)
+	blockCh := make(chan *wire.MsgBlock, current*currentGroupNum)
+	currentHeightCh := make(chan []uint32, currentGroupNum*2)
 
 	go func() {
 		next := idx.height
@@ -805,6 +791,7 @@ func (idx *Indexer) fetchBlockFrom(ctx context.Context, endHeight uint32) (chan 
 				for heights := range currentHeightCh {
 					start := heights[0]
 					end := heights[1]
+
 					errWg := &errgroup.Group{}
 					blocks := make([]*wire.MsgBlock, current)
 					for i := start; i <= end; i++ {
@@ -824,7 +811,7 @@ func (idx *Indexer) fetchBlockFrom(ctx context.Context, endHeight uint32) (chan 
 
 					for {
 						if atomic.LoadUint32(&lastHeightStart) != start {
-							time.Sleep(time.Millisecond * 10)
+							time.Sleep(time.Millisecond)
 							continue
 						}
 						break

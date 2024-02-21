@@ -38,6 +38,24 @@ type Inscriptions struct {
 	UpdatedAt       time.Time       `gorm:"column:updated_at;type:timestamp;default:CURRENT_TIMESTAMP;NOT NULL"`
 }
 
+func (i *Inscriptions) TableName() string {
+	return "inscriptions"
+}
+
+type InscriptionId struct {
+	TxId   string `gorm:"column:tx_id;type:varchar(255);index:idx_tx_id;default:'';NOT NULL" json:"txid"` // tx id
+	Offset uint32 `gorm:"column:offset;type:int unsigned;default:0;NOT NULL" json:"offset"`               // inscription offset of tx
+}
+
+func (i *InscriptionId) MarshalJSON() ([]byte, error) {
+	inscriptionId := NewInscriptionId(i.TxId, i.Offset).String()
+	return []byte(fmt.Sprintf("\"%s\"", inscriptionId)), nil
+}
+
+func (i *InscriptionId) String() string {
+	return fmt.Sprintf("%s%s%d", i.TxId, constants.InscriptionIdDelimiter, i.Offset)
+}
+
 type CInsDescription struct {
 	Type     string `gorm:"column:type;type:varchar(255);default:'';NOT NULL" json:"type"` // blockchain/ordinals
 	Chain    string `gorm:"column:chain;type:varchar(255);index:idx_chain;default:'';NOT NULL" json:"chain"`
@@ -74,24 +92,6 @@ func CInsDescriptionFromBytes(data []byte) (*CInsDescription, error) {
 		return nil, ErrInvalidCInsDesc
 	}
 	return cInsDesc, nil
-}
-
-func (i *Inscriptions) TableName() string {
-	return "inscriptions"
-}
-
-type InscriptionId struct {
-	TxId   string `gorm:"column:tx_id;type:varchar(255);index:idx_tx_id;default:'';NOT NULL" json:"txid"` // tx id
-	Offset uint32 `gorm:"column:offset;type:int unsigned;default:0;NOT NULL" json:"offset"`               // inscription offset of tx
-}
-
-func (i *InscriptionId) MarshalJSON() ([]byte, error) {
-	inscriptionId := NewInscriptionId(i.TxId, i.Offset).String()
-	return []byte(fmt.Sprintf("\"%s\"", inscriptionId)), nil
-}
-
-func (i *InscriptionId) String() string {
-	return fmt.Sprintf("%s%s%d", i.TxId, constants.InscriptionIdDelimiter, i.Offset)
 }
 
 func NewInscriptionId(txid string, offset uint32) *InscriptionId {

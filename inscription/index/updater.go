@@ -634,7 +634,7 @@ func (u *InscriptionUpdater) updateInscriptionLocation(
 
 	// If the origin of the flotsam is old, delete all by SatPoint and delete the inscription by ID.
 	if flotsam.Origin.Old != nil {
-		if err := u.wtx.DeleteAllBySatPoint(&flotsam.Origin.Old.OldSatPoint); err != nil {
+		if err := u.wtx.DeleteBySatPoint(&flotsam.Origin.Old.OldSatPoint); err != nil {
 			return err
 		}
 		inscription, err := u.wtx.GetInscriptionById(inscriptionId)
@@ -779,7 +779,8 @@ func (u *InscriptionUpdater) updateInscriptionLocation(
 		}
 		satPoint.Offset = unboundNum
 	}
-	if err := u.wtx.SetSatPointToSequenceNum(satPoint, sequenceNumber); err != nil {
+	satPoint.SequenceNum = sequenceNumber
+	if err := u.wtx.SetSatPointToSequenceNum(satPoint); err != nil {
 		return err
 	}
 	return nil

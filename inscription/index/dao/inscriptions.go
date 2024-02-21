@@ -1,12 +1,14 @@
 package dao
 
 import (
+	"encoding/hex"
 	"errors"
 	"github.com/inscription-c/insc/constants"
 	"github.com/inscription-c/insc/inscription/index/model"
 	"github.com/inscription-c/insc/inscription/index/tables"
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
+	"strings"
 )
 
 // Inscription is a struct that embeds tables.Inscriptions and util.SatPoint.
@@ -57,13 +59,45 @@ func (d *DB) DeleteInscriptionById(inscriptionId *tables.InscriptionId) (sequenc
 		return
 	}
 	sequenceNum = ins.SequenceNum
+
+	if ins.Id > 0 {
+		sql := d.ToSQL(func(tx *gorm.DB) *gorm.DB {
+			return tx.Create(ins)
+		})
+		num := 0
+		for {
+			idx := strings.Index(sql, "<binary>")
+			if idx == -1 {
+				break
+			}
+			switch num {
+			case 0:
+				sql = sql[:idx] + "0x" + hex.EncodeToString(ins.Body) + sql[idx+8:]
+			case 1:
+				sql = sql[:idx] + "0x" + hex.EncodeToString(ins.Metadata) + sql[idx+8:]
+			default:
+				break
+			}
+			num++
+		}
+		err = d.Create(&tables.UndoLog{
+			Sql: sql,
+		}).Error
+	}
 	return
 }
 
 // CreateInscription creates a new inscription in the database.
 // It returns any error encountered.
 func (d *DB) CreateInscription(ins *tables.Inscriptions) error {
-	return d.Create(ins).Error
+	if err := d.Create(ins).Error; err != nil {
+		return err
+	}
+	return d.Create(&tables.UndoLog{
+		Sql: d.ToSQL(func(tx *gorm.DB) *gorm.DB {
+			return tx.Delete(ins)
+		}),
+	}).Error
 }
 
 func (d *DB) DeleteMockInscriptions() error {

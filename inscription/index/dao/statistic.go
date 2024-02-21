@@ -11,7 +11,7 @@ import (
 // It returns the count of the statistic and any error encountered.
 func (d *DB) GetStatisticCountByName(name tables.StatisticType) (count uint64, err error) {
 	statistic := &tables.Statistic{}
-	err = d.DB.Where("name = ?", name).First(statistic).Error
+	err = d.Where("name = ?", name).First(statistic).Error
 	if errors.Is(err, gorm.ErrRecordNotFound) {
 		err = nil
 		return
@@ -26,25 +26,65 @@ func (d *DB) GetStatisticCountByName(name tables.StatisticType) (count uint64, e
 // It returns any error encountered during the operation.
 func (d *DB) IncrementStatistic(name tables.StatisticType, count uint64) error {
 	statistic := &tables.Statistic{}
-	err := d.DB.Where("name = ?", name).First(statistic).Error
-	if errors.Is(err, gorm.ErrRecordNotFound) {
+	err := d.Where("name = ?", name).First(statistic).Error
+	if err != nil && !errors.Is(err, gorm.ErrRecordNotFound) {
+		return err
+	}
+	if statistic.Id == 0 {
 		statistic.Name = name
 		statistic.Count = count
-		return d.DB.Create(statistic).Error
+		if err := d.Create(statistic).Error; err != nil {
+			return err
+		}
+		return d.Create(&tables.UndoLog{
+			Sql: d.ToSQL(func(tx *gorm.DB) *gorm.DB {
+				return tx.Delete(statistic)
+			}),
+		}).Error
 	}
 	statistic.Count += count
-	return d.DB.Save(statistic).Error
+	if err := d.Save(statistic).Error; err != nil {
+		return err
+	}
+	return d.Create(&tables.UndoLog{
+		Sql: d.ToSQL(func(tx *gorm.DB) *gorm.DB {
+			statistic.Count -= count
+			return tx.Save(statistic)
+		}),
+	}).Error
 }
 
 // SetStatistic sets the count of a specific statistic to a given amount.
 func (d *DB) SetStatistic(name tables.StatisticType, count uint64) error {
 	statistic := &tables.Statistic{}
-	err := d.DB.Where("name = ?", name).First(statistic).Error
-	if errors.Is(err, gorm.ErrRecordNotFound) {
+	err := d.Where("name = ?", name).First(statistic).Error
+	if err != nil && !errors.Is(err, gorm.ErrRecordNotFound) {
+		return err
+	}
+	if statistic.Id == 0 {
 		statistic.Name = name
 		statistic.Count = count
-		return d.DB.Create(statistic).Error
+		if err := d.Create(statistic).Error; err != nil {
+			return err
+		}
+		return d.Create(&tables.UndoLog{
+			Sql: d.ToSQL(func(tx *gorm.DB) *gorm.DB {
+				return tx.Delete(statistic)
+			}),
+		}).Error
 	}
+	if statistic.Count == count {
+		return nil
+	}
+	oldCont := statistic.Count
 	statistic.Count = count
-	return d.DB.Save(statistic).Error
+	if err := d.Save(statistic).Error; err != nil {
+		return err
+	}
+	return d.Create(&tables.UndoLog{
+		Sql: d.ToSQL(func(tx *gorm.DB) *gorm.DB {
+			statistic.Count = oldCont
+			return tx.Save(statistic)
+		}),
+	}).Error
 }

@@ -1,11 +1,13 @@
 package dao
 
 import (
+	"encoding/hex"
 	"errors"
 	"github.com/btcsuite/btcd/wire"
 	"github.com/inscription-c/insc/inscription/index/tables"
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
+	"strings"
 )
 
 // BlockHeader retrieves the block header for a given block height.
@@ -80,14 +82,46 @@ func (d *DB) BlockCount() (count uint32, err error) {
 // If a block with the same height already exists, it updates the existing record.
 // It returns any error encountered.
 func (d *DB) SaveBlockInfo(block *tables.BlockInfo) error {
-	return d.Clauses(clause.OnConflict{
-		Columns:   []clause.Column{{Name: "height"}},
-		DoUpdates: clause.AssignmentColumns([]string{"sequence_num", "header", "timestamp"}),
-	}).Create(block).Error
+	old := &tables.BlockInfo{}
+	err := d.Where("height = ?", block.Height).First(old).Error
+	if err != nil && !errors.Is(err, gorm.ErrRecordNotFound) {
+		return err
+	}
+	if old.Id > 0 {
+		block.Id = old.Id
+		block.CreatedAt = old.CreatedAt
+		if err := d.Save(block).Error; err != nil {
+			return err
+		}
+		return d.Create(&tables.UndoLog{
+			Sql: d.ToSQL(func(tx *gorm.DB) *gorm.DB {
+				return tx.Save(old)
+			}),
+		}).Error
+	}
+	if err := d.Create(block).Error; err != nil {
+		return err
+	}
+	return d.Create(&tables.UndoLog{
+		Sql: d.ToSQL(func(tx *gorm.DB) *gorm.DB {
+			return tx.Delete(block)
+		}),
+	}).Error
 }
 
 // DeleteBlockInfoByHeight deletes a block info from the database by height.
 func (d *DB) DeleteBlockInfoByHeight(height uint32) (info tables.BlockInfo, err error) {
-	err = d.Clauses(clause.Returning{}).Where("height = ?", height).Delete(&info).Error
+	if err = d.Clauses(clause.Returning{}).Where("height = ?", height).Delete(&info).Error; err != nil {
+		return
+	}
+	if info.Id > 0 {
+		sql := d.ToSQL(func(tx *gorm.DB) *gorm.DB {
+			return tx.Create(&info)
+		})
+		sql = strings.ReplaceAll(sql, "<binary>", "0x"+hex.EncodeToString(info.Header))
+		err = d.Create(&tables.UndoLog{
+			Sql: sql,
+		}).Error
+	}
 	return
 }
