@@ -227,9 +227,6 @@ func (d *DB) FirstInscriptionByOwner(owner string) (firts tables.Inscriptions, e
 type FindProtocolsParams struct {
 	Page            int
 	Size            int
-	TxId            string
-	Offset          uint32
-	InscriptionNum  *int64
 	Owner           string
 	Ticker          string
 	Order           string
@@ -242,12 +239,6 @@ func (d *DB) SearchInscriptions(params *FindProtocolsParams) (list []*tables.Ins
 	if params.Ticker != "" {
 		db = db.Joins("JOIN protocol ON inscriptions.sequence_num=protocol.sequence_num").
 			Where("protocol.protocol=? and protocol.ticker=?", constants.ProtocolCBRC20, params.Ticker)
-	}
-	if params.TxId != "" {
-		db = db.Where("inscriptions.tx_id=? and inscriptions.offset=?", params.TxId, params.Offset)
-	}
-	if params.InscriptionNum != nil {
-		db = db.Where("inscriptions.inscription_num=?", *params.InscriptionNum)
 	}
 	if params.Owner != "" {
 		db = db.Where("inscriptions.owner=?", params.Owner)

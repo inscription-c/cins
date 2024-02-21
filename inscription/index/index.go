@@ -642,23 +642,6 @@ func (idx *Indexer) indexTransactionSats(
 	return nil
 }
 
-//func (idx *Indexer) rollback(height uint32) error {
-//	return idx.DB().Transaction(func(tx *dao.DB) error {
-//		indexInscriptions := idx.indexInscriptions()
-//		if idx.indexSats {
-//			// TODO
-//		} else if indexInscriptions {
-//			blockInfo, err := idx.DB().DeleteBlockInfoByHeight(height)
-//			if err != nil {
-//				return err
-//			}
-//			header,err:=blockInfo.LoadHeader()
-//			if header.
-//		}
-//		return nil
-//	})
-//}
-
 // needCommit is a method that checks if a commit is needed.
 func (idx *Indexer) needCommit(
 	startTime time.Time,
@@ -668,11 +651,6 @@ func (idx *Indexer) needCommit(
 		idx.valueCache.Len() >= constants.DefaultFlushCacheNum ||
 		idx.outputsTraversed >= constants.DefaultFlushOutputTraversed ||
 		time.Since(startTime) > time.Minute*30
-	//if commit {
-	//	return true
-	//}
-	//return idx.valueCache.Size() >= constants.MaxInsertDataSize ||
-	//	idx.rangeCache.Size() >= constants.MaxInsertDataSize
 }
 
 // detectReorg is a method that detects if there is a reorganization in the blockchain.

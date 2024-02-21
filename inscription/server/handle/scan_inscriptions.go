@@ -22,7 +22,7 @@ const (
 	SearchTypeInscriptionId     SearchType = "inscription_id"
 	SearchTypeInscriptionNumber SearchType = "inscription_number"
 	SearchTypeAddress           SearchType = "address"
-	//SearchTypeProtocol          SearchType = "protocol"
+	SearchTypeProtocol          SearchType = "protocol"
 )
 
 type ScanInscriptionsReq struct {
@@ -104,31 +104,45 @@ func (h *Handler) doScanInscriptions(ctx *gin.Context, req *ScanInscriptionsReq)
 	}
 	if req.Search != "" {
 		if constants.InscriptionIdRegexp.MatchString(req.Search) {
-			resp.SearchType = SearchTypeInscriptionId
 			insId := tables.StringToInscriptionId(req.Search)
-			searParams.TxId, searParams.Offset = insId.TxId, insId.Offset
+			ins, err := h.DB().GetInscriptionById(insId)
+			if err != nil {
+				return err
+			}
+			if ins.Id == 0 {
+				ctx.Status(http.StatusNotFound)
+				return nil
+			}
+			resp.Total = 1
+			resp.SearchType = SearchTypeInscriptionId
+			resp.List = append(resp.List, insToScanEntry(&ins))
+			ctx.JSON(http.StatusOK, resp)
+			return nil
+		}
+
+		inscriptionNumber, err := strconv.ParseInt(req.Search, 10, 64)
+		if err == nil {
+			ins, err := h.DB().GetInscriptionByInscriptionNum(inscriptionNumber)
+			if err != nil {
+				return err
+			}
+			if ins.Id == 0 {
+				ctx.Status(http.StatusNotFound)
+				return nil
+			}
+			resp.Total = 1
+			resp.SearchType = SearchTypeInscriptionNumber
+			resp.List = append(resp.List, insToScanEntry(&ins))
+			ctx.JSON(http.StatusOK, resp)
+			return nil
+		}
+
+		if _, err := btcutil.DecodeAddress(req.Search, util.ActiveNet.Params); err != nil {
+			resp.SearchType = SearchTypeProtocol
+			searParams.Ticker = req.Search
 		} else {
-			addressAndProtocol := func() {
-				if _, err := btcutil.DecodeAddress(req.Search, util.ActiveNet.Params); err == nil {
-					resp.SearchType = SearchTypeAddress
-					searParams.Owner = req.Search
-				}
-			}
-			inscriptionNumber, err := strconv.ParseInt(req.Search, 10, 64)
-			if err == nil {
-				inscription, err := h.DB().GetInscriptionByInscriptionNum(inscriptionNumber)
-				if err != nil {
-					return err
-				}
-				if inscription.Id > 0 {
-					resp.SearchType = SearchTypeInscriptionNumber
-					searParams.InscriptionNum = &inscriptionNumber
-				} else {
-					addressAndProtocol()
-				}
-			} else {
-				addressAndProtocol()
-			}
+			resp.SearchType = SearchTypeAddress
+			searParams.Owner = req.Search
 		}
 	}
 
@@ -139,20 +153,24 @@ func (h *Handler) doScanInscriptions(ctx *gin.Context, req *ScanInscriptionsReq)
 	resp.Total = int(total)
 
 	for _, ins := range list {
-		resp.List = append(resp.List, &ScanInscriptionEntry{
-			InscriptionId:     ins.InscriptionId.String(),
-			InscriptionNumber: ins.InscriptionNum,
-			ContentType:       ins.MediaType,
-			ContentLength:     ins.ContentSize,
-			Timestamp:         time.Unix(ins.Timestamp, 0).UTC().Format(time.RFC3339),
-			OwnerOutput:       model.NewOutPoint(ins.TxId, ins.Index).String(),
-			OwnerAddress:      ins.Owner,
-			//Sat:               gconv.String(ins.Sat),
-			CInsDescription: ins.CInsDescription,
-			ContentProtocol: ins.ContentProtocol,
-		})
+		resp.List = append(resp.List, insToScanEntry(ins))
 	}
 
 	ctx.JSON(http.StatusOK, resp)
 	return nil
+}
+
+func insToScanEntry(ins *tables.Inscriptions) *ScanInscriptionEntry {
+	return &ScanInscriptionEntry{
+		InscriptionId:     ins.InscriptionId.String(),
+		InscriptionNumber: ins.InscriptionNum,
+		ContentType:       ins.MediaType,
+		ContentLength:     ins.ContentSize,
+		Timestamp:         time.Unix(ins.Timestamp, 0).UTC().Format(time.RFC3339),
+		OwnerOutput:       model.NewOutPoint(ins.TxId, ins.Index).String(),
+		OwnerAddress:      ins.Owner,
+		//Sat:               gconv.String(ins.Sat),
+		CInsDescription: ins.CInsDescription,
+		ContentProtocol: ins.ContentProtocol,
+	}
 }
