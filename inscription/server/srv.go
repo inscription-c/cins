@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"github.com/btcsuite/btcd/btcutil"
 	"github.com/btcsuite/btcwallet/netparams"
-	"github.com/inscription-c/insc/btcd"
+	"github.com/inscription-c/insc/btcd/rpcclient"
 	"github.com/inscription-c/insc/constants"
 	"github.com/inscription-c/insc/inscription/index"
 	"github.com/inscription-c/insc/inscription/index/dao"
@@ -27,6 +27,10 @@ var (
 	testNetRPCConnect = "localhost:18334"
 )
 
+// SrvOptions is a struct that holds the configuration options for the server.
+// It includes fields for the username, password, rpcListen, testnet, rpcConnect,
+// embedDB, noApi, dataDir, mysqlAddr, mysqlUser, mysqlPassword, mysqlDBName,
+// dbListenPort, dbStatusListenPort, enablePProf, indexSats, indexSpendSats, and indexNoSyncBlock.
 type SrvOptions struct {
 	username           string
 	password           string
@@ -48,92 +52,124 @@ type SrvOptions struct {
 	indexNoSyncBlock   bool
 }
 
+// SrvOption is a function type that takes a pointer to a SrvOptions struct as a parameter.
+// It is used to set the fields of the SrvOptions struct.
 type SrvOption func(*SrvOptions)
 
+// WithUserName is a function that returns a SrvOption.
+// The returned SrvOption sets the username field of the SrvOptions struct to the provided username.
 func WithUserName(username string) SrvOption {
 	return func(options *SrvOptions) {
 		options.username = username
 	}
 }
 
+// WithPassword is a function that returns a SrvOption.
+// The returned SrvOption sets the password field of the SrvOptions struct to the provided password.
 func WithPassword(password string) SrvOption {
 	return func(options *SrvOptions) {
 		options.password = password
 	}
 }
 
+// WithRpcListen is a function that returns a SrvOption.
+// The returned SrvOption sets the rpcListen field of the SrvOptions struct to the provided rpcListen.
 func WithRpcListen(rpcListen string) SrvOption {
 	return func(options *SrvOptions) {
 		options.rpcListen = rpcListen
 	}
 }
 
+// WithTestNet is a function that returns a SrvOption.
+// The returned SrvOption sets the testnet field of the SrvOptions struct to the provided testnet.
 func WithTestNet(testnet bool) SrvOption {
 	return func(options *SrvOptions) {
 		options.testnet = testnet
 	}
 }
 
+// WithRpcConnect is a function that returns a SrvOption.
+// The returned SrvOption sets the rpcConnect field of the SrvOptions struct to the provided rpcConnect.
 func WithRpcConnect(rpcConnect string) SrvOption {
 	return func(options *SrvOptions) {
 		options.rpcConnect = rpcConnect
 	}
 }
 
+// WithEmbedDB is a function that returns a SrvOption.
+// The returned SrvOption sets the embedDB field of the SrvOptions struct to the provided embedDB.
 func WithEmbedDB(embedDB bool) SrvOption {
 	return func(options *SrvOptions) {
 		options.embedDB = embedDB
 	}
 }
 
+// WithNoApi is a function that returns a SrvOption.
+// The returned SrvOption sets the noApi field of the SrvOptions struct to the provided noApi.
 func WithNoApi(noApi bool) SrvOption {
 	return func(options *SrvOptions) {
 		options.noApi = noApi
 	}
 }
 
+// WithDataDir is a function that returns a SrvOption.
+// The returned SrvOption sets the dataDir field of the SrvOptions struct to the provided dataDir.
 func WithDataDir(dataDir string) SrvOption {
 	return func(options *SrvOptions) {
 		options.dataDir = dataDir
 	}
 }
 
+// WithMysqlAddr is a function that returns a SrvOption.
+// The returned SrvOption sets the mysqlAddr field of the SrvOptions struct to the provided mysqlAddr.
 func WithMysqlAddr(mysqlAddr string) SrvOption {
 	return func(options *SrvOptions) {
 		options.mysqlAddr = mysqlAddr
 	}
 }
 
+// WithMysqlUser is a function that returns a SrvOption.
+// The returned SrvOption sets the mysqlUser field of the SrvOptions struct to the provided mysqlUser.
 func WithMysqlUser(mysqlUser string) SrvOption {
 	return func(options *SrvOptions) {
 		options.mysqlUser = mysqlUser
 	}
 }
 
+// WithMysqlPassword is a function that returns a SrvOption.
+// The returned SrvOption sets the mysqlPassword field of the SrvOptions struct to the provided mysqlPassword.
 func WithMysqlPassword(mysqlPassword string) SrvOption {
 	return func(options *SrvOptions) {
 		options.mysqlPassword = mysqlPassword
 	}
 }
 
+// WithMysqlDBName is a function that returns a SrvOption.
+// The returned SrvOption sets the mysqlDBName field of the SrvOptions struct to the provided mysqlDBName.
 func WithMysqlDBName(mysqlDBName string) SrvOption {
 	return func(options *SrvOptions) {
 		options.mysqlDBName = mysqlDBName
 	}
 }
 
+// WithDBListenPort is a function that returns a SrvOption.
+// The returned SrvOption sets the dbListenPort field of the SrvOptions struct to the provided dbListenPort.
 func WithDBListenPort(dbListenPort string) SrvOption {
 	return func(options *SrvOptions) {
 		options.dbListenPort = dbListenPort
 	}
 }
 
+// WithDBStatusListenPort is a function that returns a SrvOption.
+// The returned SrvOption sets the dbStatusListenPort field of the SrvOptions struct to the provided dbStatusListenPort.
 func WithDBStatusListenPort(dbStatusListenPort string) SrvOption {
 	return func(options *SrvOptions) {
 		options.dbStatusListenPort = dbStatusListenPort
 	}
 }
 
+// WithEnablePProf is a function that returns a SrvOption.
+// The returned SrvOption sets the enablePProf field of the SrvOptions struct to the provided enablePProf.
 func WithEnablePProf(enablePProf bool) SrvOption {
 	return func(options *SrvOptions) {
 		options.enablePProf = enablePProf
@@ -193,6 +229,11 @@ func IndexSrv(opts ...SrvOption) error {
 	logFile := btcutil.AppDataDir(filepath.Join(constants.AppName, "inscription", "logs", "index.log"), false)
 	log.InitLogRotator(logFile)
 
+	// Create a new database instance using the server options.
+	// The database is configured with the MySQL address, user, password, and database name from the server options.
+	// The data directory and embedded database flag from the server options are also used.
+	// The server port and status port for the database are set from the server options.
+	// The tables to auto-migrate in the database are set to the tables from the tables package.
 	db, err := dao.NewDB(
 		dao.WithAddr(srvOptions.mysqlAddr),
 		dao.WithUser(srvOptions.mysqlUser),
@@ -208,15 +249,34 @@ func IndexSrv(opts ...SrvOption) error {
 		return err
 	}
 
-	cli, err := btcd.NewClient(srvOptions.rpcConnect, srvOptions.username, srvOptions.password)
-	if err != nil {
-		return err
-	}
-	batchCli, err := btcd.NewBatchClient(srvOptions.rpcConnect, srvOptions.username, srvOptions.password)
+	// Create a new RPC client using the server options.
+	// The client is configured with the RPC connect, username, and password from the server options.
+	cli, err := rpcclient.NewClient(
+		rpcclient.WithClientHost(srvOptions.rpcConnect),
+		rpcclient.WithClientUser(srvOptions.username),
+		rpcclient.WithClientPassword(srvOptions.password),
+	)
 	if err != nil {
 		return err
 	}
 
+	// Create a new batch RPC client using the server options.
+	// The batch client is configured with the RPC connect, username, and password from the server options.
+	// The batch client is also set to operate in batch mode.
+	batchCli, err := rpcclient.NewClient(
+		rpcclient.WithClientHost(srvOptions.rpcConnect),
+		rpcclient.WithClientUser(srvOptions.username),
+		rpcclient.WithClientPassword(srvOptions.password),
+		rpcclient.WithClientBatch(true),
+	)
+	if err != nil {
+		return err
+	}
+
+	// Create a new indexer using the database, the client, the batch client, the index sats, the index spend sats, and the TiDB session memory limit.
+	// The indexer is configured with the database, the client, and the batch client.
+	// The indexer is also configured with the index sats and index spend sats from the server options.
+	// The TiDB session memory limit is set to the TiDB session memory limit constant from the constants package.
 	indexer := index.NewIndexer(
 		index.WithDB(db),
 		index.WithClient(cli),
@@ -225,12 +285,17 @@ func IndexSrv(opts ...SrvOption) error {
 		index.WithIndexSpendSats(srvOptions.indexSpendSats),
 		index.WithTidbSessionMemLimit(constants.TidbSessionMemLimit),
 	)
+	// Start the indexer.
 	indexer.Start()
+	// Add an interrupt handler that stops the indexer when an interrupt signal is received.
 	signal.AddInterruptHandler(func() {
 		indexer.Stop()
 	})
 
+	// If the no API field of the server options is false, create and run a new handler.
 	if !srvOptions.noApi {
+		// Create a new handler using the database, the client, the RPC listen, the testnet,
+		//and to enable pprof from the server options.
 		h, err := handle.New(
 			handle.WithDB(db),
 			handle.WithClient(cli),
@@ -241,6 +306,8 @@ func IndexSrv(opts ...SrvOption) error {
 		if err != nil {
 			return err
 		}
+		// Run the handler.
+		// If there is an error running the handler, return the error.
 		if err := h.Run(); err != nil {
 			return err
 		}

@@ -5,11 +5,6 @@ import (
 	"github.com/inscription-c/insc/inscription/index/tables"
 )
 
-const (
-	ContractTypeOrdinals   = "ordinals"
-	ContractTypeBlockchain = "blockchain"
-)
-
 type Inscription struct {
 	Body            []byte
 	ContentEncoding []byte

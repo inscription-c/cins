@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"github.com/btcsuite/btcd/btcutil"
 	"github.com/btcsuite/btcwallet/netparams"
-	"github.com/inscription-c/insc/btcd"
+	"github.com/inscription-c/insc/btcd/rpcclient"
 	"github.com/inscription-c/insc/constants"
 	"github.com/inscription-c/insc/inscription/index/tables"
 	"github.com/inscription-c/insc/inscription/log"
@@ -134,10 +134,10 @@ func inscribe() error {
 	}
 
 	// Create a new wallet client
-	walletCli, err := btcd.NewClient(
-		walletUrl,
-		walletRpcUser,
-		walletPass,
+	walletCli, err := rpcclient.NewClient(
+		rpcclient.WithClientHost(walletUrl),
+		rpcclient.WithClientUser(walletRpcUser),
+		rpcclient.WithClientPassword(walletRpcPass),
 	)
 	if err != nil {
 		return err

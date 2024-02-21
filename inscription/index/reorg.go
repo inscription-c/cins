@@ -69,6 +69,23 @@ func detectReorg(index *Indexer, wtx *dao.DB, block *wire.MsgBlock, height uint3
 	return ErrDetectReorg
 }
 
+// updateSavePoints is a function that updates the savepoints in the blockchain.
+// It takes a pointer to an Indexer, a pointer to a DB, and a uint32 as parameters.
+// The function first gets the blockchain info from the Indexer and assigns it to chainInfo.
+// If there is an error getting the blockchain info, it returns the error.
+// The function then gets the list of savepoints from the DB and assigns it to savepoints.
+// If there is an error getting the savepoints, it returns the error.
+// The function then checks if the height is less than the savepoint interval or if the height is a multiple of the savepoint interval.
+// It also checks if the difference between the number of headers in the blockchain info and the height is less than or equal to the chain tip distance.
+// If both conditions are true, it checks if the length of the savepoints is greater than or equal to the maximum savepoint.
+// If it is, it deletes the first savepoint and all undo logs with an id less than or equal to the id of the undo log of the first savepoint.
+// It then gets the last undo log and assigns it to latest.
+// If there is an error getting the last undo log, it returns the error.
+// The function then creates a new savepoint with the height and the id of the latest undo log.
+// If there is an error creating the new savepoint, it returns the error.
+// If the length of the savepoints is zero, it deletes all undo logs.
+// If there is an error deleting the undo logs, it returns the error.
+// The function then returns nil.
 func updateSavePoints(index *Indexer, wtx *dao.DB, height uint32) error {
 	chainInfo, err := index.opts.cli.GetBlockChainInfo()
 	if err != nil {
@@ -111,6 +128,23 @@ func updateSavePoints(index *Indexer, wtx *dao.DB, height uint32) error {
 	return nil
 }
 
+// handleReorg is a function that handles a blockchain reorganization.
+// It takes a pointer to an Indexer, a uint32 for the height, and a uint32 for the depth as parameters.
+// The function first logs the depth and height of the reorganization.
+// It then starts a transaction on the DB of the Indexer.
+// Inside the transaction, it gets the undo log and assigns it to undoLog.
+// If there is an error getting the undo log, it returns the error.
+// The function then executes each SQL statement in the undo log.
+// If there is an error executing a SQL statement, it returns the error.
+// The function then deletes the undo log.
+// If there is an error deleting the undo log, it returns the error.
+// The function then deletes the savepoint.
+// If there is an error deleting the savepoint, it returns the error.
+// If there is an error with the transaction, it returns the error.
+// The function then gets the block count from the DB of the Indexer and assigns it to indexHeight.
+// If there is an error getting the block count, it returns the error.
+// The function then logs the height of the blockchain after the rollback.
+// The function then returns nil.
 func handleReorg(index *Indexer, height, depth uint32) error {
 	log.Srv.Infof("rolling back database after reorg of depth %d at height %d", depth, height)
 	if err := index.DB().Transaction(func(tx *dao.DB) error {

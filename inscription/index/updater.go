@@ -303,20 +303,16 @@ func (u *InscriptionUpdater) indexEnvelopers(
 	for inputIndex := range tx.TxIn {
 		txIn := tx.TxIn[inputIndex]
 
-		// Check if the input is a coinbase transaction.
-		// If it is, add the subsidy for the current block height to the total input value and skip to the next iteration.
 		if util.IsNullOutpoint(txIn.PreviousOutPoint) {
 			totalInputValue += int64(NewHeight(u.idx.height).Subsidy())
 			continue
 		}
 
-		// Fetch existing inscriptions on the input (transfers of inscriptions).
 		inscriptions, err := u.wtx.InscriptionsByOutpoint(txIn.PreviousOutPoint.String())
 		if err != nil {
 			return err
 		}
 
-		// Loop over each fetched inscription.
 		for _, v := range inscriptions {
 			offset := uint64(totalInputValue) + v.SatPointToSequenceNum.Offset
 			insId := &tables.InscriptionId{
@@ -331,27 +327,21 @@ func (u *InscriptionUpdater) indexEnvelopers(
 				},
 			})
 
-			// Check if the offset already exists in the inscribed offsets map.
 			offsetEntity, ok := inscribedOffsets[offset]
 			if !ok {
-				// If it doesn't exist, create a new inscribed offset entity with the inscription ID and add it to the map.
 				offsetEntity = &inscribedOffsetEntity{
 					inscriptionId: insId,
 				}
 				inscribedOffsets[offset] = offsetEntity
 			}
-			// Increment the count of the inscribed offset entity.
 			offsetEntity.count++
 		}
 
-		// Initialize the offset as the total input value.
 		offset := uint64(totalInputValue)
 		preOutpoint := txIn.PreviousOutPoint.String()
 
-		// Try to get the current input value from the value cache.
 		currentInputValue, ok := u.valueCache.Read(txIn.PreviousOutPoint.String())
 		if ok {
-			// If the value is in the cache, delete it from the cache.
 			u.valueCache.Delete(preOutpoint)
 		} else {
 			if _, ok := needDelOutpoints[preOutpoint]; !ok {
@@ -367,10 +357,8 @@ func (u *InscriptionUpdater) indexEnvelopers(
 				}
 			}
 		}
-		// Add the current input value to the total input value.
 		totalInputValue += currentInputValue
 
-		// Loop over each inscription in the input.
 		for v := envelopes.Peek(); ; v = envelopes.Peek() {
 			if v == nil {
 				break
@@ -380,15 +368,12 @@ func (u *InscriptionUpdater) indexEnvelopers(
 				break
 			}
 
-			// Create a new inscription ID for the current inscription.
 			inscriptionId := tables.InscriptionId{
 				TxId:   tx.TxHash().String(),
 				Offset: idCounter,
 			}
 
-			// Initialize a variable to store the type of curse, if any, that applies to the inscription.
 			var curse Curse
-			// Check each possible curse condition and set the curse variable accordingly.
 			if inscription.payload.UnRecognizedEvenField {
 				curse = CurseUnrecognizedEvenField
 			} else if inscription.payload.DuplicateField {
@@ -406,7 +391,6 @@ func (u *InscriptionUpdater) indexEnvelopers(
 			} else if inscription.stutter {
 				curse = CurseStutter
 			} else {
-				// If none of the above conditions are met, check if the inscription is a re-inscription.
 				offsetEntity, ok := inscribedOffsets[offset]
 				if ok {
 					if offsetEntity.count > 1 {
@@ -426,19 +410,16 @@ func (u *InscriptionUpdater) indexEnvelopers(
 				}
 			}
 
-			// Determine if the inscription is unbound.
 			unbound := currentInputValue == 0 ||
 				curse == CurseUnrecognizedEvenField ||
 				inscription.payload.UnRecognizedEvenField
 
-			// Get the pointer from the inscription payload.
 			if len(inscription.payload.Pointer) > 0 {
 				pointer := gconv.Int64(string(inscription.payload.Pointer))
 				if pointer < totalOutputValue {
 					offset = uint64(pointer)
 				}
 			}
-			// Check if the offset is a re-inscription.
 			_, reInscription := inscribedOffsets[offset]
 
 			floatingInscriptions = append(floatingInscriptions, &Flotsam{
@@ -457,23 +438,19 @@ func (u *InscriptionUpdater) indexEnvelopers(
 				},
 			})
 
-			// Check if the offset already exists in the inscribed offsets map.
 			inscribedOffset, ok := inscribedOffsets[offset]
 			if !ok {
-				// If it doesn't exist, create a new inscribed offset entity with the inscription ID and add it to the map.
 				inscribedOffset = &inscribedOffsetEntity{
 					inscriptionId: &inscriptionId,
 				}
 				inscribedOffsets[offset] = inscribedOffset
 			}
-			// Increment the count of the inscribed offset entity.
 			inscribedOffset.count++
 			idCounter++
 			envelopes.Next()
 		}
 	}
 
-	// If the value is in the database, delete it from the database.
 	if err := u.wtx.DeleteValueByOutpoint(gutil.Keys(needDelOutpoints)...); err != nil {
 		return err
 	}
