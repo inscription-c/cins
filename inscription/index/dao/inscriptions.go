@@ -267,7 +267,7 @@ func (d *DB) FirstInscriptionByOwner(owner string) (firts tables.Inscriptions, e
 
 type FindProtocolsParams struct {
 	Page            int
-	Size            int
+	Limit           int
 	Owner           string
 	Ticker          string
 	Order           string
@@ -303,6 +303,6 @@ func (d *DB) SearchInscriptions(params *FindProtocolsParams) (list []*tables.Ins
 		}
 		return
 	}
-	err = db.Offset((params.Page - 1) * params.Size).Limit(params.Size).Find(&list).Error
+	err = db.Offset((params.Page - 1) * params.Limit).Limit(params.Limit).Find(&list).Error
 	return
 }

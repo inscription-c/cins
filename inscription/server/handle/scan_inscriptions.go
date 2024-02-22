@@ -3,6 +3,7 @@ package handle
 import (
 	"github.com/btcsuite/btcd/btcutil"
 	"github.com/gin-gonic/gin"
+	"github.com/gogf/gf/v2/util/gconv"
 	"github.com/inscription-c/insc/constants"
 	"github.com/inscription-c/insc/inscription/index/dao"
 	"github.com/inscription-c/insc/inscription/index/model"
@@ -22,7 +23,7 @@ const (
 	SearchTypeInscriptionId     SearchType = "inscription_id"
 	SearchTypeInscriptionNumber SearchType = "inscription_number"
 	SearchTypeAddress           SearchType = "address"
-	SearchTypeProtocol          SearchType = "protocol"
+	SearchTypeTicker            SearchType = "ticker"
 )
 
 type ScanInscriptionsReq struct {
@@ -55,16 +56,16 @@ type ScanInscriptionsResp struct {
 }
 
 type ScanInscriptionEntry struct {
-	InscriptionId     string `json:"inscription_id"`
-	InscriptionNumber int64  `json:"inscription_number"`
-	ContentType       string `json:"content_type"`
-	ContentLength     uint32 `json:"content_length"`
-	Timestamp         string `json:"timestamp"`
-	OwnerOutput       string `json:"owner_output"`
-	OwnerAddress      string `json:"owner_address"`
-	//Sat               string                 `json:"sat"`
-	CInsDescription tables.CInsDescription `json:"c_ins_description"`
-	ContentProtocol string                 `json:"content_protocol"`
+	InscriptionId     string                 `json:"inscription_id"`
+	InscriptionNumber int64                  `json:"inscription_number"`
+	ContentType       string                 `json:"content_type"`
+	ContentLength     uint32                 `json:"content_length"`
+	Timestamp         string                 `json:"timestamp"`
+	OwnerOutput       string                 `json:"owner_output"`
+	OwnerAddress      string                 `json:"owner_address"`
+	Sat               string                 `json:"sat"`
+	CInsDescription   tables.CInsDescription `json:"c_ins_description"`
+	ContentProtocol   string                 `json:"content_protocol"`
 }
 
 func (h *Handler) ScanInscriptions(ctx *gin.Context) {
@@ -92,7 +93,7 @@ func (h *Handler) doScanInscriptions(ctx *gin.Context, req *ScanInscriptionsReq)
 
 	searParams := &dao.FindProtocolsParams{
 		Page:            req.Page,
-		Size:            req.Limit,
+		Limit:           req.Limit,
 		Order:           req.Order,
 		Types:           req.Types,
 		InscriptionType: req.InscriptionType,
@@ -138,7 +139,7 @@ func (h *Handler) doScanInscriptions(ctx *gin.Context, req *ScanInscriptionsReq)
 		}
 
 		if _, err := btcutil.DecodeAddress(req.Search, util.ActiveNet.Params); err != nil {
-			resp.SearchType = SearchTypeProtocol
+			resp.SearchType = SearchTypeTicker
 			searParams.Ticker = req.Search
 		} else {
 			resp.SearchType = SearchTypeAddress
@@ -150,6 +151,11 @@ func (h *Handler) doScanInscriptions(ctx *gin.Context, req *ScanInscriptionsReq)
 	if err != nil {
 		return err
 	}
+	if len(list) == 0 {
+		ctx.Status(http.StatusNotFound)
+		return nil
+	}
+
 	resp.Total = int(total)
 
 	for _, ins := range list {
@@ -169,8 +175,8 @@ func insToScanEntry(ins *tables.Inscriptions) *ScanInscriptionEntry {
 		Timestamp:         time.Unix(ins.Timestamp, 0).UTC().Format(time.RFC3339),
 		OwnerOutput:       model.NewOutPoint(ins.TxId, ins.Index).String(),
 		OwnerAddress:      ins.Owner,
-		//Sat:               gconv.String(ins.Sat),
-		CInsDescription: ins.CInsDescription,
-		ContentProtocol: ins.ContentProtocol,
+		Sat:               gconv.String(ins.Sat),
+		CInsDescription:   ins.CInsDescription,
+		ContentProtocol:   ins.ContentProtocol,
 	}
 }
