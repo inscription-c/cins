@@ -7,6 +7,7 @@ import (
 	chain2 "github.com/btcsuite/btcwallet/chain"
 	"github.com/btcsuite/btcwallet/rpc/legacyrpc"
 	"github.com/btcsuite/btcwallet/wallet"
+	"github.com/inscription-c/insc/btcd/rpcclient"
 	"github.com/inscription-c/insc/constants"
 	log2 "github.com/inscription-c/insc/inscription/log"
 	"github.com/inscription-c/insc/internal/signal"
@@ -19,6 +20,7 @@ import (
 	_ "net/http/pprof"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
 	"time"
 )
@@ -53,7 +55,7 @@ func init() {
 	Cmd.Flags().StringVarP(&Options.BtcdUrl, "rpc_connect", "s", "localhost:8334", "Hostname/IP and port of RPC server to connect to (default localhost:8334, testnet: localhost:18334)")
 	Cmd.Flags().StringVarP(&Options.Username, "user", "u", "root", "rpc server username")
 	Cmd.Flags().StringVarP(&Options.Password, "password", "P", "root", "rpc server password")
-	Cmd.Flags().StringVarP(&Options.WalletPass, "wallet_pass", "", "root", "wallet password")
+	Cmd.Flags().StringVarP(&Options.WalletPass, "wallet_pass", "w", "root", "wallet password")
 	Cmd.Flags().BoolVarP(&Options.Testnet, "testnet", "t", false, "bitcoin testnet3")
 	if err := Cmd.MarkFlagRequired("wallet_pass"); err != nil {
 		fmt.Println(err)
@@ -233,36 +235,63 @@ func rpcClientConnectLoop(legacyRPCServer *legacyrpc.Server, loader *wallet.Load
 
 func startChainRPC() (chain2.Interface, error) {
 	log.Log.Infof("Attempting RPC client connection to %v", cfg.RPCConnect)
-	bitcoindCfg := &chain.BitcoindConfig{
-		ChainParams:        util.ActiveNet.Params,
-		Host:               cfg.RPCConnect,
-		User:               cfg.BtcdUsername,
-		Pass:               cfg.BtcdPassword,
-		Dialer:             nil,
-		PrunedModeMaxPeers: 0,
-		PollingConfig: &chain.PollingConfig{
-			BlockPollingInterval: time.Millisecond * 100,
-			TxPollingInterval:    time.Millisecond * 100,
-		},
-	}
-
-	chainConn, err := chain.NewBitcoindConn(bitcoindCfg)
+	cli, err := rpcclient.NewClient(
+		rpcclient.WithClientHost(cfg.RPCConnect),
+		rpcclient.WithClientUser(cfg.Username),
+		rpcclient.WithClientPassword(cfg.BtcdPassword),
+	)
 	if err != nil {
 		return nil, err
 	}
-	if err := chainConn.Start(); err != nil {
+	backendVersion, err := cli.BackendVersion()
+	if err != nil {
 		return nil, err
 	}
-	signal.AddInterruptHandler(func() {
-		chainConn.Stop()
-	})
+	switch backendVersion {
+	case rpcclient.BitcoindPre19, rpcclient.BitcoindPre22,
+		rpcclient.BitcoindPre25, rpcclient.BitcoindPost25:
+		bitcoindCfg := &chain.BitcoindConfig{
+			ChainParams:        util.ActiveNet.Params,
+			Host:               cfg.RPCConnect,
+			User:               cfg.BtcdUsername,
+			Pass:               cfg.BtcdPassword,
+			Dialer:             nil,
+			PrunedModeMaxPeers: 0,
+			PollingConfig: &chain.PollingConfig{
+				BlockPollingInterval: time.Millisecond * 100,
+				TxPollingInterval:    time.Millisecond * 100,
+			},
+		}
 
-	btcClient := chainConn.NewBitcoindClient()
-	if err := btcClient.Start(); err != nil {
-		return nil, err
+		chainConn, err := chain.NewBitcoindConn(bitcoindCfg)
+		if err != nil {
+			return nil, err
+		}
+		if err := chainConn.Start(); err != nil {
+			return nil, err
+		}
+		signal.AddInterruptHandler(func() {
+			chainConn.Stop()
+		})
+
+		btcClient := chainConn.NewBitcoindClient()
+		if err := btcClient.Start(); err != nil {
+			return nil, err
+		}
+		return btcClient, nil
+	case rpcclient.Btcd:
+		cfg.DisableClientTLS = strings.HasPrefix(cfg.RPCConnect, "http://")
+		cfg.RPCConnect = strings.TrimPrefix(cfg.RPCConnect, "http://")
+		cfg.RPCConnect = strings.TrimPrefix(cfg.RPCConnect, "https://")
+		btcdCli, err := chain2.NewRPCClient(util.ActiveNet.Params, cfg.RPCConnect, cfg.BtcdUsername, cfg.BtcdPassword, nil, cfg.DisableClientTLS, 0)
+		if err != nil {
+			return nil, err
+		}
+		if err := btcdCli.Start(); err != nil {
+			return nil, err
+		}
+		return btcdCli, nil
+	default:
+		return nil, fmt.Errorf("unknown backend version %v", backendVersion)
 	}
-	signal.AddInterruptHandler(func() {
-		btcClient.Stop()
-	})
-	return btcClient, err
 }
