@@ -56,16 +56,23 @@ type ScanInscriptionsResp struct {
 }
 
 type ScanInscriptionEntry struct {
-	InscriptionId     string                 `json:"inscription_id"`
-	InscriptionNumber int64                  `json:"inscription_number"`
-	ContentType       string                 `json:"content_type"`
-	ContentLength     uint32                 `json:"content_length"`
-	Timestamp         string                 `json:"timestamp"`
-	OwnerOutput       string                 `json:"owner_output"`
-	OwnerAddress      string                 `json:"owner_address"`
-	Sat               string                 `json:"sat"`
-	CInsDescription   tables.CInsDescription `json:"c_ins_description"`
-	ContentProtocol   string                 `json:"content_protocol"`
+	InscriptionId     string          `json:"inscription_id"`
+	InscriptionNumber int64           `json:"inscription_number"`
+	ContentType       string          `json:"content_type"`
+	ContentLength     uint32          `json:"content_length"`
+	Timestamp         string          `json:"timestamp"`
+	OwnerOutput       string          `json:"owner_output"`
+	OwnerAddress      string          `json:"owner_address"`
+	Sat               string          `json:"sat"`
+	CInsDescription   CInsDescription `json:"c_ins_description"`
+	ContentProtocol   string          `json:"content_protocol"`
+}
+
+type CInsDescription struct {
+	Type      string `json:"type"`
+	Chain     string `json:"chain"`
+	ChainName string `json:"chain_name"`
+	Contract  string `json:"contract"`
 }
 
 func (h *Handler) ScanInscriptions(ctx *gin.Context) {
@@ -176,7 +183,12 @@ func insToScanEntry(ins *tables.Inscriptions) *ScanInscriptionEntry {
 		OwnerOutput:       model.NewOutPoint(ins.TxId, ins.Index).String(),
 		OwnerAddress:      ins.Owner,
 		Sat:               gconv.String(ins.Sat),
-		CInsDescription:   ins.CInsDescription,
-		ContentProtocol:   ins.ContentProtocol,
+		CInsDescription: CInsDescription{
+			Type:      ins.CInsDescription.Type,
+			Chain:     ins.CInsDescription.Chain,
+			ChainName: constants.Coins[ins.CInsDescription.Chain].Coin,
+			Contract:  ins.CInsDescription.Contract,
+		},
+		ContentProtocol: ins.ContentProtocol,
 	}
 }
