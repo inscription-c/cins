@@ -5,7 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"github.com/gogf/gf/v2/util/gconv"
-	"github.com/inscription-c/insc/constants"
+	"github.com/inscription-c/cins/constants"
 	"os"
 	"strings"
 	"time"

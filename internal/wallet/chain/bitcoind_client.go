@@ -6,7 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"github.com/btcsuite/btcwallet/chain"
-	"github.com/inscription-c/insc/wallet/log"
+	"github.com/inscription-c/cins/wallet/log"
 	"github.com/lightningnetwork/lnd/queue"
 	"sync"
 	"sync/atomic"

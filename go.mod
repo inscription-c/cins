@@ -1,4 +1,4 @@
-module github.com/inscription-c/insc
+module github.com/inscription-c/cins
 
 go 1.21
 

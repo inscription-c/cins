@@ -4,7 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"github.com/btcsuite/btcwallet/chain"
-	"github.com/inscription-c/insc/wallet/log"
+	"github.com/inscription-c/cins/wallet/log"
 	"github.com/lightningnetwork/lnd/queue"
 	"net"
 	"strings"
@@ -16,7 +16,7 @@ import (
 	"github.com/btcsuite/btcd/chaincfg"
 	"github.com/btcsuite/btcd/chaincfg/chainhash"
 	"github.com/btcsuite/btcd/wire"
-	"github.com/inscription-c/insc/btcd/rpcclient"
+	"github.com/inscription-c/cins/btcd/rpcclient"
 	"github.com/lightningnetwork/lnd/ticker"
 )
 

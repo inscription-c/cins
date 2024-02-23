@@ -13,8 +13,8 @@ import (
 
 	"github.com/btcsuite/btcd/chaincfg/chainhash"
 	"github.com/btcsuite/btcd/wire"
-	"github.com/inscription-c/insc/btcd/rpcclient"
-	"github.com/inscription-c/insc/wallet/log"
+	"github.com/inscription-c/cins/btcd/rpcclient"
+	"github.com/inscription-c/cins/wallet/log"
 	"github.com/lightninglabs/gozmq"
 )
 

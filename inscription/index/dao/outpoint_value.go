@@ -2,7 +2,7 @@ package dao
 
 import (
 	"github.com/gogf/gf/v2/util/gutil"
-	"github.com/inscription-c/insc/inscription/index/tables"
+	"github.com/inscription-c/cins/inscription/index/tables"
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
 )

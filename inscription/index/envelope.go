@@ -5,10 +5,10 @@ import (
 	"github.com/btcsuite/btcd/txscript"
 	"github.com/btcsuite/btcd/wire"
 	"github.com/gogf/gf/v2/util/gutil"
-	"github.com/inscription-c/insc/constants"
-	"github.com/inscription-c/insc/inscription/index/model"
-	"github.com/inscription-c/insc/inscription/index/tables"
-	"github.com/inscription-c/insc/internal/util"
+	"github.com/inscription-c/cins/constants"
+	"github.com/inscription-c/cins/inscription/index/model"
+	"github.com/inscription-c/cins/inscription/index/tables"
+	"github.com/inscription-c/cins/internal/util"
 )
 
 // Witness is a struct that represents a witness in a transaction.

@@ -8,7 +8,7 @@ import (
 	"github.com/btcsuite/btcd/wire"
 	"github.com/btcsuite/btcwallet/waddrmgr"
 	"github.com/btcsuite/btcwallet/wtxmgr"
-	"github.com/inscription-c/insc/btcd/rpcclient"
+	"github.com/inscription-c/cins/btcd/rpcclient"
 )
 
 // isCurrentDelta is the delta duration we'll use from the present time to

@@ -3,7 +3,7 @@ package btcd
 import (
 	"fmt"
 	"github.com/btcsuite/btcd/limits"
-	"github.com/inscription-c/insc/internal/signal"
+	"github.com/inscription-c/cins/internal/signal"
 	"github.com/spf13/cobra"
 	"net"
 	"net/http"

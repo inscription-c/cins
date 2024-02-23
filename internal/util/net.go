@@ -1,7 +1,7 @@
 package util
 
 import (
-	"github.com/inscription-c/insc/internal/cfgutil"
+	"github.com/inscription-c/cins/internal/cfgutil"
 	"net"
 )
 

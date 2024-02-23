@@ -1,6 +1,6 @@
 package dao
 
-import "github.com/inscription-c/insc/inscription/index/tables"
+import "github.com/inscription-c/cins/inscription/index/tables"
 
 // FindUndoLog is a method that retrieves all undo logs from the database in descending order of their IDs.
 // It returns a slice of pointers to UndoLog structs and an error.

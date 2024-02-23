@@ -3,11 +3,11 @@ package wallet
 import (
 	"encoding/hex"
 	"fmt"
-	"github.com/inscription-c/insc/constants"
-	"github.com/inscription-c/insc/internal/cfgutil"
-	"github.com/inscription-c/insc/internal/legacy/keystore"
-	"github.com/inscription-c/insc/internal/util"
-	"github.com/inscription-c/insc/wallet/log"
+	"github.com/inscription-c/cins/constants"
+	"github.com/inscription-c/cins/internal/cfgutil"
+	"github.com/inscription-c/cins/internal/legacy/keystore"
+	"github.com/inscription-c/cins/internal/util"
+	"github.com/inscription-c/cins/wallet/log"
 	"net"
 	"os"
 	"os/user"
@@ -288,10 +288,10 @@ func loadConfig() (*Config, []string, error) {
 	cfg.Password = Options.Password
 	cfg.WalletPass = strings.TrimSpace(Options.WalletPass)
 	cfg.TestNet3 = Options.Testnet
-	cfg.RPCConnect = Options.BtcdUrl
+	cfg.RPCConnect = Options.RpcConnect
 
 	if cfg.RPCConnect != "" {
-		rpcConnect, err := cfgutil.NormalizeAddress(Options.BtcdUrl, util.ActiveNet.RPCClientPort)
+		rpcConnect, err := cfgutil.NormalizeAddress(Options.RpcConnect, util.ActiveNet.RPCClientPort)
 		if err != nil {
 			return nil, nil, err
 		}

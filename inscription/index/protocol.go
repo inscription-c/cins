@@ -2,10 +2,10 @@ package index
 
 import (
 	"github.com/gogf/gf/v2/util/gconv"
-	"github.com/inscription-c/insc/constants"
-	"github.com/inscription-c/insc/inscription/index/dao"
-	"github.com/inscription-c/insc/inscription/index/tables"
-	"github.com/inscription-c/insc/internal/util"
+	"github.com/inscription-c/cins/constants"
+	"github.com/inscription-c/cins/inscription/index/dao"
+	"github.com/inscription-c/cins/inscription/index/tables"
+	"github.com/inscription-c/cins/internal/util"
 )
 
 type Protocol struct {

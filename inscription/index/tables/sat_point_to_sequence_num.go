@@ -2,7 +2,7 @@ package tables
 
 import (
 	"fmt"
-	"github.com/inscription-c/insc/constants"
+	"github.com/inscription-c/cins/constants"
 	"time"
 )
 

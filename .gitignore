@@ -19,3 +19,4 @@ vendor/
 inscription/config/config.yaml
 .DS_Store
 logs
+cins

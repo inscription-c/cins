@@ -4,9 +4,9 @@ import (
 	"bytes"
 	"github.com/andybalholm/brotli"
 	"github.com/gin-gonic/gin"
-	"github.com/inscription-c/insc/constants"
-	"github.com/inscription-c/insc/inscription/index/tables"
-	"github.com/inscription-c/insc/internal/util"
+	"github.com/inscription-c/cins/constants"
+	"github.com/inscription-c/cins/inscription/index/tables"
+	"github.com/inscription-c/cins/internal/util"
 	"github.com/kataras/iris/v12/context"
 	"net/http"
 )

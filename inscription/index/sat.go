@@ -2,7 +2,7 @@
 package index
 
 import (
-	"github.com/inscription-c/insc/constants"
+	"github.com/inscription-c/cins/constants"
 	"github.com/shopspring/decimal"
 )
 

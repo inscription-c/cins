@@ -2,10 +2,12 @@ package handle
 
 import (
 	"github.com/gin-contrib/pprof"
-	"github.com/inscription-c/insc/inscription/server/handle/middlewares"
+	"github.com/gin-gonic/gin"
+	"github.com/inscription-c/cins/inscription/server/handle/middlewares"
 )
 
 func (h *Handler) InitRouter() {
+	h.Engine().Use(gin.Recovery())
 	if h.options.enablePProf {
 		pprof.Register(h.Engine())
 	}

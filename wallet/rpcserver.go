@@ -4,7 +4,7 @@ import (
 	"errors"
 	"github.com/btcsuite/btcwallet/rpc/legacyrpc"
 	"github.com/btcsuite/btcwallet/wallet"
-	"github.com/inscription-c/insc/wallet/log"
+	"github.com/inscription-c/cins/wallet/log"
 	"net"
 	"runtime"
 	"strings"

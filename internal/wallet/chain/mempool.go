@@ -2,7 +2,7 @@ package chain
 
 import (
 	"fmt"
-	"github.com/inscription-c/insc/wallet/log"
+	"github.com/inscription-c/cins/wallet/log"
 	"strings"
 	"sync"
 	"time"

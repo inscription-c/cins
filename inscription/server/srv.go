@@ -4,15 +4,15 @@ import (
 	"fmt"
 	"github.com/btcsuite/btcd/btcutil"
 	"github.com/btcsuite/btcwallet/netparams"
-	"github.com/inscription-c/insc/btcd/rpcclient"
-	"github.com/inscription-c/insc/constants"
-	"github.com/inscription-c/insc/inscription/index"
-	"github.com/inscription-c/insc/inscription/index/dao"
-	"github.com/inscription-c/insc/inscription/index/tables"
-	"github.com/inscription-c/insc/inscription/log"
-	"github.com/inscription-c/insc/inscription/server/handle"
-	"github.com/inscription-c/insc/internal/signal"
-	"github.com/inscription-c/insc/internal/util"
+	"github.com/inscription-c/cins/btcd/rpcclient"
+	"github.com/inscription-c/cins/constants"
+	"github.com/inscription-c/cins/inscription/index"
+	"github.com/inscription-c/cins/inscription/index/dao"
+	"github.com/inscription-c/cins/inscription/index/tables"
+	"github.com/inscription-c/cins/inscription/log"
+	"github.com/inscription-c/cins/inscription/server/handle"
+	"github.com/inscription-c/cins/internal/signal"
+	"github.com/inscription-c/cins/internal/util"
 	"github.com/spf13/cobra"
 	"os"
 	"path/filepath"
@@ -23,8 +23,8 @@ var (
 
 	mainNetRPCListen  = ":8335"
 	testNetRPCListen  = ":18335"
-	mainNetRPCConnect = "localhost:8334"
-	testNetRPCConnect = "localhost:18334"
+	mainNetRPCConnect = "http://localhost:8334"
+	testNetRPCConnect = "http://localhost:18334"
 )
 
 // SrvOptions is a struct that holds the configuration options for the server.
@@ -177,7 +177,7 @@ func WithEnablePProf(enablePProf bool) SrvOption {
 }
 
 var Cmd = &cobra.Command{
-	Use:   "srv",
+	Use:   "indexer",
 	Short: "inscription index server",
 	Run: func(cmd *cobra.Command, args []string) {
 		if err := IndexSrv(); err != nil {
@@ -193,7 +193,7 @@ func init() {
 	Cmd.Flags().StringVarP(&srvOptions.password, "password", "P", "root", "btcd rpc server password")
 	Cmd.Flags().StringVarP(&srvOptions.rpcListen, "rpc_listen", "l", mainNetRPCListen, "rpc server listen address. Default `mainnet :8335, testnet :18335`")
 	Cmd.Flags().BoolVarP(&srvOptions.testnet, "testnet", "t", false, "bitcoin testnet3")
-	Cmd.Flags().StringVarP(&srvOptions.rpcConnect, "rpc_connect", "s", mainNetRPCConnect, "the URL of RPC server to connect to (default localhost:8334, testnet: localhost:18334)")
+	Cmd.Flags().StringVarP(&srvOptions.rpcConnect, "rpc_connect", "s", mainNetRPCConnect, "the bitcoin backend URL of RPC server to connect to (default http://localhost:8334, testnet: http://localhost:18334)")
 	//Cmd.Flags().BoolVarP(&srvOptions.embedDB, "embed_db", "", false, "use embed db")
 	Cmd.Flags().BoolVarP(&srvOptions.noApi, "no_api", "", false, "don't start api server")
 	//Cmd.Flags().StringVarP(&srvOptions.dataDir, "data_dir", "", "", "embed database data dir")

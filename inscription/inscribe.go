@@ -6,14 +6,13 @@ import (
 	"fmt"
 	"github.com/btcsuite/btcd/btcutil"
 	"github.com/btcsuite/btcwallet/netparams"
-	"github.com/inscription-c/insc/btcd/rpcclient"
-	"github.com/inscription-c/insc/constants"
-	"github.com/inscription-c/insc/inscription/index/tables"
-	"github.com/inscription-c/insc/inscription/log"
-	"github.com/inscription-c/insc/inscription/server"
-	"github.com/inscription-c/insc/internal/indexer"
-	"github.com/inscription-c/insc/internal/signal"
-	"github.com/inscription-c/insc/internal/util"
+	"github.com/inscription-c/cins/btcd/rpcclient"
+	"github.com/inscription-c/cins/constants"
+	"github.com/inscription-c/cins/inscription/index/tables"
+	"github.com/inscription-c/cins/inscription/log"
+	"github.com/inscription-c/cins/internal/indexer"
+	"github.com/inscription-c/cins/internal/signal"
+	"github.com/inscription-c/cins/internal/util"
 	"github.com/spf13/cobra"
 	"os"
 	"path/filepath"
@@ -48,7 +47,7 @@ var InsufficientBalanceError = errors.New("InsufficientBalanceError")
 
 func init() {
 	Cmd.Flags().StringVarP(&indexerUrl, "indexer_url", "", DefaultMainNetIndexerUrl, "the URL of indexer server (default http://localhost:8335, testnet: http://localhost:18335)")
-	Cmd.Flags().StringVarP(&walletUrl, "wallet_url", "", "localhost:8332", "the URL of wallet RPC server to connect to (default localhost:8332, testnet: localhost:18332)")
+	Cmd.Flags().StringVarP(&walletUrl, "wallet_url", "", "localhost:8332", "the URL of wallet RPC server to connect to (default http://localhost:8332, testnet: localhost:18332)")
 	Cmd.Flags().StringVarP(&walletRpcUser, "wallet_rpc_user", "", "root", "wallet rpc server user")
 	Cmd.Flags().StringVarP(&walletRpcPass, "wallet_rpc_pass", "", "root", "wallet rpc server password")
 	Cmd.Flags().StringVarP(&walletPass, "wallet_pass", "", "root", "wallet password for master private key")
@@ -79,7 +78,7 @@ func init() {
 
 func configCheck() error {
 	if testnet {
-		walletUrl = "localhost:18332"
+		walletUrl = "http://localhost:18332"
 		if indexerUrl == DefaultMainNetIndexerUrl {
 			indexerUrl = DefaultTestNet3IndexerUrl
 		}
@@ -118,10 +117,6 @@ var Cmd = &cobra.Command{
 		signal.SimulateInterrupt()
 		<-signal.InterruptHandlersDone
 	},
-}
-
-func init() {
-	Cmd.AddCommand(server.Cmd)
 }
 
 // inscribe is a function that performs the inscription process.

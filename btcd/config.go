@@ -7,7 +7,7 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
-	"github.com/inscription-c/insc/constants"
+	"github.com/inscription-c/cins/constants"
 	"io"
 	"net"
 	"os"

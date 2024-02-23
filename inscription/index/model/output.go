@@ -5,7 +5,7 @@ import (
 	"github.com/btcsuite/btcd/chaincfg/chainhash"
 	"github.com/btcsuite/btcd/wire"
 	"github.com/gogf/gf/v2/util/gconv"
-	"github.com/inscription-c/insc/constants"
+	"github.com/inscription-c/cins/constants"
 	"strings"
 )
 

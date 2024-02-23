@@ -2,14 +2,14 @@ package chain
 
 import (
 	"github.com/btcsuite/btcwallet/chain"
-	"github.com/inscription-c/insc/wallet/log"
+	"github.com/inscription-c/cins/wallet/log"
 	"math/rand"
 	"sync"
 	"time"
 
 	"github.com/btcsuite/btcd/chaincfg/chainhash"
 	"github.com/btcsuite/btcd/wire"
-	"github.com/inscription-c/insc/btcd/rpcclient"
+	"github.com/inscription-c/cins/btcd/rpcclient"
 )
 
 const (

@@ -3,9 +3,9 @@ package dao
 import (
 	"encoding/hex"
 	"errors"
-	"github.com/inscription-c/insc/constants"
-	"github.com/inscription-c/insc/inscription/index/model"
-	"github.com/inscription-c/insc/inscription/index/tables"
+	"github.com/inscription-c/cins/constants"
+	"github.com/inscription-c/cins/inscription/index/model"
+	"github.com/inscription-c/cins/inscription/index/tables"
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
 	"strings"

@@ -6,7 +6,7 @@ import (
 
 	"github.com/btcsuite/btcd/chaincfg/chainhash"
 	"github.com/btcsuite/btcd/wire"
-	"github.com/inscription-c/insc/btcd/rpcclient"
+	"github.com/inscription-c/cins/btcd/rpcclient"
 )
 
 // BitcoindEvents is the interface that must be satisfied by any type that

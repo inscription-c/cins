@@ -1,6 +1,6 @@
 package index
 
-import "github.com/inscription-c/insc/constants"
+import "github.com/inscription-c/cins/constants"
 
 // SubsidyHalvingInterval is the interval at which the subsidy halves.
 const SubsidyHalvingInterval uint32 = 210_000

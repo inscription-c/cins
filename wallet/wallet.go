@@ -7,13 +7,13 @@ import (
 	chain2 "github.com/btcsuite/btcwallet/chain"
 	"github.com/btcsuite/btcwallet/rpc/legacyrpc"
 	"github.com/btcsuite/btcwallet/wallet"
-	"github.com/inscription-c/insc/btcd/rpcclient"
-	"github.com/inscription-c/insc/constants"
-	log2 "github.com/inscription-c/insc/inscription/log"
-	"github.com/inscription-c/insc/internal/signal"
-	"github.com/inscription-c/insc/internal/util"
-	"github.com/inscription-c/insc/internal/wallet/chain"
-	"github.com/inscription-c/insc/wallet/log"
+	"github.com/inscription-c/cins/btcd/rpcclient"
+	"github.com/inscription-c/cins/constants"
+	log2 "github.com/inscription-c/cins/inscription/log"
+	"github.com/inscription-c/cins/internal/signal"
+	"github.com/inscription-c/cins/internal/util"
+	"github.com/inscription-c/cins/internal/wallet/chain"
+	"github.com/inscription-c/cins/wallet/log"
 	"github.com/spf13/cobra"
 	"net"
 	"net/http"
@@ -32,7 +32,7 @@ var (
 type walletOptions struct {
 	Username   string
 	Password   string
-	BtcdUrl    string
+	RpcConnect string
 	WalletPass string
 	Testnet    bool
 }
@@ -52,11 +52,15 @@ var Cmd = &cobra.Command{
 }
 
 func init() {
-	Cmd.Flags().StringVarP(&Options.BtcdUrl, "rpc_connect", "s", "localhost:8334", "Hostname/IP and port of RPC server to connect to (default localhost:8334, testnet: localhost:18334)")
+	Cmd.Flags().StringVarP(&Options.RpcConnect, "rpc_connect", "s", "http://localhost:8334", "url of bitcoin backend RPC server to connect to (default http://localhost:8334, testnet: http://localhost:18334)")
 	Cmd.Flags().StringVarP(&Options.Username, "user", "u", "root", "rpc server username")
 	Cmd.Flags().StringVarP(&Options.Password, "password", "P", "root", "rpc server password")
 	Cmd.Flags().StringVarP(&Options.WalletPass, "wallet_pass", "w", "root", "wallet password")
 	Cmd.Flags().BoolVarP(&Options.Testnet, "testnet", "t", false, "bitcoin testnet3")
+	if err := Cmd.MarkFlagRequired("rpc_connect"); err != nil {
+		fmt.Println(err)
+		os.Exit(1)
+	}
 	if err := Cmd.MarkFlagRequired("wallet_pass"); err != nil {
 		fmt.Println(err)
 		os.Exit(1)

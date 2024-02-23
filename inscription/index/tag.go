@@ -1,7 +1,7 @@
 package index
 
 import (
-	"github.com/inscription-c/insc/constants"
+	"github.com/inscription-c/cins/constants"
 )
 
 // TagType represents the type of tag in the blockchain.

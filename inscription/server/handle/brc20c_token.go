@@ -2,8 +2,8 @@ package handle
 
 import (
 	"github.com/gin-gonic/gin"
-	"github.com/inscription-c/insc/constants"
-	"github.com/inscription-c/insc/inscription/index/tables"
+	"github.com/inscription-c/cins/constants"
+	"github.com/inscription-c/cins/inscription/index/tables"
 	"net/http"
 )
 

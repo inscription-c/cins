@@ -15,7 +15,7 @@ import (
 	"syscall"
 	"time"
 
-	inscLog "github.com/inscription-c/insc/inscription/log"
+	inscLog "github.com/inscription-c/cins/inscription/log"
 	_ "github.com/pingcap/tidb/pkg/extension/_import"
 )
 

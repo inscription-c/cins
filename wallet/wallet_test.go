@@ -1,7 +1,7 @@
 package wallet
 
 import (
-	"github.com/inscription-c/insc/internal/signal"
+	"github.com/inscription-c/cins/internal/signal"
 	"testing"
 )
 

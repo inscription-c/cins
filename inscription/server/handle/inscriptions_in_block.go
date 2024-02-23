@@ -3,7 +3,7 @@ package handle
 import (
 	"github.com/gin-gonic/gin"
 	"github.com/gogf/gf/v2/util/gconv"
-	"github.com/inscription-c/insc/inscription/index/model"
+	"github.com/inscription-c/cins/inscription/index/model"
 	"golang.org/x/sync/errgroup"
 	"net/http"
 )

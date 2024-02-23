@@ -1,9 +1,10 @@
 package main
 
 import (
-	"github.com/inscription-c/insc/btcd"
-	"github.com/inscription-c/insc/inscription"
-	"github.com/inscription-c/insc/wallet"
+	"github.com/inscription-c/cins/btcd"
+	"github.com/inscription-c/cins/inscription"
+	"github.com/inscription-c/cins/inscription/server"
+	"github.com/inscription-c/cins/wallet"
 	"github.com/spf13/cobra"
 	"os"
 )
@@ -16,6 +17,7 @@ var rootCmd = &cobra.Command{
 func init() {
 	rootCmd.AddCommand(wallet.Cmd)
 	rootCmd.AddCommand(inscription.Cmd)
+	rootCmd.AddCommand(server.Cmd)
 	rootCmd.AddCommand(btcd.Cmd)
 }
 
