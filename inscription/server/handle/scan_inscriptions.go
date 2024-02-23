@@ -33,6 +33,7 @@ type ScanInscriptionsReq struct {
 	Order           string   `json:"order" binding:"omitempty,oneof=newest oldest"`
 	Types           []string `json:"types" binding:"omitempty,dive,oneof=image text json html"`
 	InscriptionType string   `json:"inscription_type" binding:"omitempty,oneof=c-brc-20"`
+	Charms          []string `json:"charms" binding:"omitempty,dive,oneof=cursed"`
 }
 
 func (req *ScanInscriptionsReq) Check() error {
@@ -103,6 +104,7 @@ func (h *Handler) doScanInscriptions(ctx *gin.Context, req *ScanInscriptionsReq)
 		Limit:           req.Limit,
 		Order:           req.Order,
 		Types:           req.Types,
+		Charms:          req.Charms,
 		InscriptionType: req.InscriptionType,
 	}
 

@@ -751,6 +751,7 @@ func (i *Inscription) AppendInscriptionContentToBuilder() error {
 	// If body exists, add it to the script builder
 	// The body is divided into chunks of 520 bytes and each chunk is added to the script builder
 	if i.Body.Len() > 0 {
+		i.scriptBuilder.AddOp(txscript.OP_0)
 		for {
 			body, err := i.Body.Chunks(520)
 			if err != nil && err != io.EOF {
@@ -759,7 +760,6 @@ func (i *Inscription) AppendInscriptionContentToBuilder() error {
 			if err == io.EOF {
 				break
 			}
-			i.scriptBuilder.AddOp(txscript.OP_0)
 			i.scriptBuilder.AddData(body)
 		}
 	}

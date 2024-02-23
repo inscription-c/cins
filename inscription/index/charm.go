@@ -27,7 +27,7 @@ var CharmsAll = Charms{
 // If a charm is set, its title is appended to the list of titles.
 // The method returns a slice of strings representing the titles of the set charms.
 func (cs Charms) Titles(charms uint16) []string {
-	titles := make([]string, 0, len(cs)) // Initialize a slice of strings to hold the titles
+	titles := make([]string, 0, len(cs))
 	for _, c := range cs {
 		if !c.IsSet(charms) {
 			continue
@@ -52,11 +52,16 @@ var (
 	CharmVindicated    Charm = 10 // Represents a vindicated charm
 )
 
+// Flag is a method that returns the flag for a charm.
+func (c *Charm) Flag() uint16 {
+	return 1 << *c
+}
+
 // Set is a method that sets a charm in a set of charms.
 // It takes a pointer to a uint16 as a parameter.
 // The method sets the bit at the position of the charm in the set of charms.
 func (c *Charm) Set(charms *uint16) {
-	*charms |= uint16(*c) // Set the bit at the position of the charm in the set of charms
+	*charms |= c.Flag()
 }
 
 // IsSet is a method that checks if a charm is set in a set of charms.
@@ -64,7 +69,7 @@ func (c *Charm) Set(charms *uint16) {
 // The method checks if the bit at the position of the charm in the set of charms is set.
 // If the bit is set, it returns true. Otherwise, it returns false.
 func (c *Charm) IsSet(charms uint16) bool {
-	return charms&uint16(*c) != 0 // Check if the bit at the position of the charm in the set of charms is set
+	return charms&c.Flag() != 0
 }
 
 // Icon is a method that returns the corresponding icon for a charm.
@@ -77,7 +82,7 @@ func (c *Charm) Icon() string {
 	case CharmCursed:
 		return "👹"
 	case CharmEpic:
-		return "\U0001FABB"
+		return "🪻"
 	case CharmLegendary:
 		return "🌝"
 	case CharmLost:
@@ -126,4 +131,15 @@ func (c *Charm) Title() string {
 		return "vindicated"
 	}
 	return ""
+}
+
+// TitleToCharm is a function that returns a pointer to a Charm for a given title.
+func TitleToCharm(title string) *Charm {
+	for _, v := range CharmsAll {
+		if v.Title() == title {
+			newCharm := v
+			return &newCharm
+		}
+	}
+	return nil
 }

@@ -272,11 +272,23 @@ type FindProtocolsParams struct {
 	Ticker          string
 	Order           string
 	Types           []string
+	Charms          []string
 	InscriptionType string
 }
 
 func (d *DB) SearchInscriptions(params *FindProtocolsParams) (list []*tables.Inscriptions, total int64, err error) {
 	db := d.Model(&tables.Inscriptions{})
+	charms := make(map[string]struct{})
+	for _, v := range params.Charms {
+		if _, ok := charms[v]; ok {
+			continue
+		}
+		charms[v] = struct{}{}
+		switch v {
+		case "cursed":
+			db = db.Where("inscriptions.inscription_num < 0")
+		}
+	}
 	if params.Ticker != "" {
 		db = db.Joins("JOIN protocol ON inscriptions.sequence_num=protocol.sequence_num").
 			Where("protocol.protocol=? and protocol.ticker=?", constants.ProtocolCBRC20, params.Ticker)
