@@ -60,6 +60,7 @@ type ScanInscriptionEntry struct {
 	InscriptionId     string          `json:"inscription_id"`
 	InscriptionNumber int64           `json:"inscription_number"`
 	ContentType       string          `json:"content_type"`
+	MediaType         string          `json:"media_type"`
 	ContentLength     uint32          `json:"content_length"`
 	Timestamp         string          `json:"timestamp"`
 	OwnerOutput       string          `json:"owner_output"`
@@ -179,7 +180,8 @@ func insToScanEntry(ins *tables.Inscriptions) *ScanInscriptionEntry {
 	return &ScanInscriptionEntry{
 		InscriptionId:     ins.InscriptionId.String(),
 		InscriptionNumber: ins.InscriptionNum,
-		ContentType:       ins.MediaType,
+		ContentType:       ins.ContentType,
+		MediaType:         ins.MediaType,
 		ContentLength:     ins.ContentSize,
 		Timestamp:         time.Unix(ins.Timestamp, 0).UTC().Format(time.RFC3339),
 		OwnerOutput:       model.NewOutPoint(ins.TxId, ins.Index).String(),
