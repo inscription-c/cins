@@ -10,9 +10,14 @@ import (
 
 func (h *Handler) InitRouter() {
 	h.Engine().Use(gin.Recovery())
-	if h.options.enablePProf {
+	if config.SrvCfg.EnablePProf {
 		pprof.Register(h.Engine())
 	}
+	if config.SrvCfg.Prometheus {
+		p := middlewares.NewPrometheus("gin")
+		p.Use(h.Engine())
+	}
+
 	h.Engine().Use(middlewares.Cors(config.SrvCfg.Origins...))
 	if config.SrvCfg.Sentry.Dsn != "" {
 		h.Engine().Use(sentrygin.New(sentrygin.Options{

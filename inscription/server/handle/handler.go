@@ -16,12 +16,11 @@ import (
 
 // Options is a struct that holds the configuration options for a Handler.
 type Options struct {
-	addr        string            // The address to bind the server to
-	testnet     bool              // Whether to use the testnet or not
-	engin       *gin.Engine       // The gin engine for handling HTTP requests
-	db          *dao.DB           // The database for storing data
-	cli         *rpcclient.Client // The RPC client for interacting with the Bitcoin network
-	enablePProf bool              // Whether to enable pprof or not
+	addr    string            // The address to bind the server to
+	testnet bool              // Whether to use the testnet or not
+	engin   *gin.Engine       // The gin engine for handling HTTP requests
+	db      *dao.DB           // The database for storing data
+	cli     *rpcclient.Client // The RPC client for interacting with the Bitcoin network
 }
 
 // Option is a function type that sets a specific option in an Options struct.
@@ -64,15 +63,6 @@ func WithTestNet(testnet bool) func(*Options) {
 func WithClient(cli *rpcclient.Client) func(*Options) {
 	return func(options *Options) {
 		options.cli = cli
-	}
-}
-
-// WithEnablePProf is a function that sets the enablePProf option for an Options struct.
-func WithEnablePProf(pprof bool) func(*Options) {
-	return func(options *Options) {
-		if pprof {
-			options.enablePProf = pprof
-		}
 	}
 }
 

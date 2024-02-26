@@ -40,6 +40,7 @@ require (
 	github.com/pingcap/tidb/pkg/parser v0.0.0-20240126183920-6a87b80e2c8d
 	github.com/prometheus/client_golang v1.18.0
 	github.com/shopspring/decimal v1.3.1
+	github.com/sirupsen/logrus v1.9.3
 	github.com/spf13/cobra v1.7.0
 	github.com/stretchr/testify v1.8.4
 	github.com/tikv/client-go/v2 v2.0.8-0.20231227070846-61c486af13a5

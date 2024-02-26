@@ -152,6 +152,7 @@ func init() {
 	Cmd.Flags().StringVarP(&config.SrvCfg.IndexSpendSats, "index_spend_sats", "", "", "Keep sat index entries of spent outputs, true/false")
 	Cmd.Flags().StringVarP(&config.SrvCfg.Sentry.Dsn, "sentry_dsn", "", "", "sentry dsn")
 	Cmd.Flags().Float64VarP(&config.SrvCfg.Sentry.TracesSampleRate, "sentry_traces_sample_rate", "", 1.0, "sentry traces sample rate")
+	Cmd.Flags().BoolVarP(&config.SrvCfg.Prometheus, "prometheus", "", false, "enable prometheus metrics")
 	Cmd.Flags().StringSliceVarP(&config.SrvCfg.Origins, "origins", "", []string{}, "allowed origins for CORS")
 }
 
@@ -280,7 +281,6 @@ func IndexSrv(opts ...SrvOption) error {
 			handle.WithClient(cli),
 			handle.WithAddr(config.SrvCfg.RpcListen),
 			handle.WithTestNet(config.SrvCfg.Testnet),
-			handle.WithEnablePProf(config.SrvCfg.EnablePProf),
 		)
 		if err != nil {
 			return err
