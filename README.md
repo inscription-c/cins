@@ -15,7 +15,7 @@ See the [docs](https://github.com/inscription-c/cins/wiki) for documentation and
 
 go version >= 1.21 is required.
 ```bash
-go install github.com/inscription-c/cins
+go install github.com/inscription-c/cins@latest
 ```
 
 # Wallet

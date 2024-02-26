@@ -55,7 +55,7 @@ func init() {
 	Cmd.Flags().StringVarP(&inscriptionsFilePath, "filepath", "f", "", "inscription file path")
 	Cmd.Flags().StringVarP(&cInsDescriptionFile, "c_ins_description", "", "", "cins protocol description.")
 	Cmd.Flags().StringVarP(&destination, "dest", "", "", "Send inscription to <DESTINATION> address.")
-	Cmd.Flags().Uint64VarP(&postage, "postage", "p", constants.DefaultPostage, "Amount of postage to include in the inscription. Default `10000sat`.")
+	Cmd.Flags().Uint64VarP(&postage, "postage", "p", constants.DefaultPostage, "Amount of postage to include in the inscription.")
 	Cmd.Flags().BoolVarP(&compress, "compress", "", false, "Compress inscription content with brotli.")
 	Cmd.Flags().StringVarP(&cborMetadata, "cbor_metadata", "", "", "Include CBOR in file at <METADATA> as inscription metadata")
 	Cmd.Flags().StringVarP(&jsonMetadata, "json_metadata", "", "", "Include JSON in file at <METADATA> converted to CBOR as inscription metadata")

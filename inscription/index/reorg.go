@@ -50,7 +50,7 @@ func detectReorg(index *Indexer, wtx *dao.DB, block *wire.MsgBlock, height uint3
 	}
 
 	maxRecoverableReorgDepth := (maxSavepoint-1)*savepointInterval + height%savepointInterval
-	for depth := uint32(1); depth <= maxRecoverableReorgDepth; depth++ {
+	for depth := uint32(1); depth < maxRecoverableReorgDepth; depth++ {
 		if height < depth {
 			return errors.New("depth is greater than height")
 		}
@@ -114,7 +114,7 @@ func updateSavePoints(index *Indexer, wtx *dao.DB, height uint32) error {
 			return err
 		}
 
-		log.Srv.Infof("creating savepoint at height %d", height)
+		log.Srv.Infof("creating savepoint at he ight %d", height)
 		return wtx.Create(&tables.SavePoint{
 			Height:    height,
 			UndoLogId: latest.Id,
@@ -148,6 +148,14 @@ func updateSavePoints(index *Indexer, wtx *dao.DB, height uint32) error {
 func handleReorg(index *Indexer, height, depth uint32) error {
 	log.Srv.Infof("rolling back database after reorg of depth %d at height %d", depth, height)
 	if err := index.DB().Transaction(func(tx *dao.DB) error {
+		oldestSavepoint, err := tx.OldestSavepoint()
+		if err != nil {
+			return err
+		}
+		if oldestSavepoint.Id == 0 {
+			return errors.New("no savepoint found")
+		}
+
 		undoLog, err := tx.FindUndoLog()
 		if err != nil {
 			return err

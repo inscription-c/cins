@@ -26,6 +26,9 @@ func (d *DB) ListSavepoint() (list []*tables.SavePoint, err error) {
 // If an error occurs during the retrieval, it returns the savepoint and the error.
 func (d *DB) OldestSavepoint() (savepoint *tables.SavePoint, err error) {
 	err = d.First(&savepoint).Error
+	if errors.Is(err, gorm.ErrRecordNotFound) {
+		err = nil
+	}
 	return
 }
 
