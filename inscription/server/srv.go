@@ -14,6 +14,7 @@ import (
 	"github.com/inscription-c/cins/internal/signal"
 	"github.com/inscription-c/cins/internal/util"
 	"github.com/spf13/cobra"
+	"gopkg.in/yaml.v2"
 	"os"
 	"path/filepath"
 )
@@ -32,24 +33,22 @@ var (
 // embedDB, noApi, dataDir, mysqlAddr, mysqlUser, mysqlPassword, mysqlDBName,
 // dbListenPort, dbStatusListenPort, enablePProf, indexSats, indexSpendSats, and indexNoSyncBlock.
 type SrvOptions struct {
-	username           string
-	password           string
-	rpcListen          string
-	testnet            bool
-	rpcConnect         string
-	embedDB            bool
-	noApi              bool
-	dataDir            string
-	mysqlAddr          string
-	mysqlUser          string
-	mysqlPassword      string
-	mysqlDBName        string
-	dbListenPort       string
-	dbStatusListenPort string
-	enablePProf        bool
-	indexSats          string
-	indexSpendSats     string
-	indexNoSyncBlock   bool
+	configFile     string
+	Testnet        bool   `yaml:"testnet"`
+	RpcListen      string `yaml:"rpc_listen"`
+	Username       string `yaml:"username"`
+	Password       string `yaml:"password"`
+	RpcConnect     string `yaml:"rpc_connect"`
+	NoApi          bool   `yaml:"no_api"`
+	IndexSats      string `yaml:"index_sats"`
+	IndexSpendSats string `yaml:"index_spend_sats"`
+	Mysql          struct {
+		Addr     string `yaml:"addr"`
+		User     string `yaml:"user"`
+		Password string `yaml:"password"`
+		DB       string `yaml:"db"`
+	} `yaml:"mysql"`
+	EnablePProf bool `yaml:"pprof"`
 }
 
 // SrvOption is a function type that takes a pointer to a SrvOptions struct as a parameter.
@@ -60,7 +59,7 @@ type SrvOption func(*SrvOptions)
 // The returned SrvOption sets the username field of the SrvOptions struct to the provided username.
 func WithUserName(username string) SrvOption {
 	return func(options *SrvOptions) {
-		options.username = username
+		options.Username = username
 	}
 }
 
@@ -68,7 +67,7 @@ func WithUserName(username string) SrvOption {
 // The returned SrvOption sets the password field of the SrvOptions struct to the provided password.
 func WithPassword(password string) SrvOption {
 	return func(options *SrvOptions) {
-		options.password = password
+		options.Password = password
 	}
 }
 
@@ -76,7 +75,7 @@ func WithPassword(password string) SrvOption {
 // The returned SrvOption sets the rpcListen field of the SrvOptions struct to the provided rpcListen.
 func WithRpcListen(rpcListen string) SrvOption {
 	return func(options *SrvOptions) {
-		options.rpcListen = rpcListen
+		options.RpcListen = rpcListen
 	}
 }
 
@@ -84,7 +83,7 @@ func WithRpcListen(rpcListen string) SrvOption {
 // The returned SrvOption sets the testnet field of the SrvOptions struct to the provided testnet.
 func WithTestNet(testnet bool) SrvOption {
 	return func(options *SrvOptions) {
-		options.testnet = testnet
+		options.Testnet = testnet
 	}
 }
 
@@ -92,15 +91,7 @@ func WithTestNet(testnet bool) SrvOption {
 // The returned SrvOption sets the rpcConnect field of the SrvOptions struct to the provided rpcConnect.
 func WithRpcConnect(rpcConnect string) SrvOption {
 	return func(options *SrvOptions) {
-		options.rpcConnect = rpcConnect
-	}
-}
-
-// WithEmbedDB is a function that returns a SrvOption.
-// The returned SrvOption sets the embedDB field of the SrvOptions struct to the provided embedDB.
-func WithEmbedDB(embedDB bool) SrvOption {
-	return func(options *SrvOptions) {
-		options.embedDB = embedDB
+		options.RpcConnect = rpcConnect
 	}
 }
 
@@ -108,15 +99,7 @@ func WithEmbedDB(embedDB bool) SrvOption {
 // The returned SrvOption sets the noApi field of the SrvOptions struct to the provided noApi.
 func WithNoApi(noApi bool) SrvOption {
 	return func(options *SrvOptions) {
-		options.noApi = noApi
-	}
-}
-
-// WithDataDir is a function that returns a SrvOption.
-// The returned SrvOption sets the dataDir field of the SrvOptions struct to the provided dataDir.
-func WithDataDir(dataDir string) SrvOption {
-	return func(options *SrvOptions) {
-		options.dataDir = dataDir
+		options.NoApi = noApi
 	}
 }
 
@@ -124,7 +107,7 @@ func WithDataDir(dataDir string) SrvOption {
 // The returned SrvOption sets the mysqlAddr field of the SrvOptions struct to the provided mysqlAddr.
 func WithMysqlAddr(mysqlAddr string) SrvOption {
 	return func(options *SrvOptions) {
-		options.mysqlAddr = mysqlAddr
+		options.Mysql.Addr = mysqlAddr
 	}
 }
 
@@ -132,7 +115,7 @@ func WithMysqlAddr(mysqlAddr string) SrvOption {
 // The returned SrvOption sets the mysqlUser field of the SrvOptions struct to the provided mysqlUser.
 func WithMysqlUser(mysqlUser string) SrvOption {
 	return func(options *SrvOptions) {
-		options.mysqlUser = mysqlUser
+		options.Mysql.User = mysqlUser
 	}
 }
 
@@ -140,7 +123,7 @@ func WithMysqlUser(mysqlUser string) SrvOption {
 // The returned SrvOption sets the mysqlPassword field of the SrvOptions struct to the provided mysqlPassword.
 func WithMysqlPassword(mysqlPassword string) SrvOption {
 	return func(options *SrvOptions) {
-		options.mysqlPassword = mysqlPassword
+		options.Mysql.Password = mysqlPassword
 	}
 }
 
@@ -148,23 +131,7 @@ func WithMysqlPassword(mysqlPassword string) SrvOption {
 // The returned SrvOption sets the mysqlDBName field of the SrvOptions struct to the provided mysqlDBName.
 func WithMysqlDBName(mysqlDBName string) SrvOption {
 	return func(options *SrvOptions) {
-		options.mysqlDBName = mysqlDBName
-	}
-}
-
-// WithDBListenPort is a function that returns a SrvOption.
-// The returned SrvOption sets the dbListenPort field of the SrvOptions struct to the provided dbListenPort.
-func WithDBListenPort(dbListenPort string) SrvOption {
-	return func(options *SrvOptions) {
-		options.dbListenPort = dbListenPort
-	}
-}
-
-// WithDBStatusListenPort is a function that returns a SrvOption.
-// The returned SrvOption sets the dbStatusListenPort field of the SrvOptions struct to the provided dbStatusListenPort.
-func WithDBStatusListenPort(dbStatusListenPort string) SrvOption {
-	return func(options *SrvOptions) {
-		options.dbStatusListenPort = dbStatusListenPort
+		options.Mysql.DB = mysqlDBName
 	}
 }
 
@@ -172,7 +139,7 @@ func WithDBStatusListenPort(dbStatusListenPort string) SrvOption {
 // The returned SrvOption sets the enablePProf field of the SrvOptions struct to the provided enablePProf.
 func WithEnablePProf(enablePProf bool) SrvOption {
 	return func(options *SrvOptions) {
-		options.enablePProf = enablePProf
+		options.EnablePProf = enablePProf
 	}
 }
 
@@ -189,44 +156,65 @@ var Cmd = &cobra.Command{
 }
 
 func init() {
-	Cmd.Flags().StringVarP(&srvOptions.username, "user", "u", "root", "btcd rpc server username")
-	Cmd.Flags().StringVarP(&srvOptions.password, "password", "P", "root", "btcd rpc server password")
-	Cmd.Flags().StringVarP(&srvOptions.rpcListen, "rpc_listen", "l", mainNetRPCListen, "rpc server listen address. Default `mainnet :8335, testnet :18335`")
-	Cmd.Flags().BoolVarP(&srvOptions.testnet, "testnet", "t", false, "bitcoin testnet3")
-	Cmd.Flags().StringVarP(&srvOptions.rpcConnect, "rpc_connect", "s", mainNetRPCConnect, "the bitcoin backend URL of RPC server to connect to (default http://localhost:8334, testnet: http://localhost:18334)")
-	//Cmd.Flags().BoolVarP(&srvOptions.embedDB, "embed_db", "", false, "use embed db")
-	Cmd.Flags().BoolVarP(&srvOptions.noApi, "no_api", "", false, "don't start api server")
-	//Cmd.Flags().StringVarP(&srvOptions.dataDir, "data_dir", "", "", "embed database data dir")
-	Cmd.Flags().StringVarP(&srvOptions.mysqlAddr, "mysql_addr", "d", "127.0.0.1:3306", "inscription index mysql database addr")
-	Cmd.Flags().StringVarP(&srvOptions.mysqlUser, "mysql_user", "", "root", "inscription index mysql database user")
-	Cmd.Flags().StringVarP(&srvOptions.mysqlPassword, "mysql_pass", "", "root", "inscription index mysql database password")
-	Cmd.Flags().StringVarP(&srvOptions.mysqlDBName, "dbname", "", constants.DefaultDBName, "inscription index mysql database name")
-	//Cmd.Flags().StringVarP(&srvOptions.dbListenPort, "db_listen", "", "4000", "inscription index database server listen port")
-	//Cmd.Flags().StringVarP(&srvOptions.dbStatusListenPort, "db_status_listen", "", "10080", "inscription index database server status listen port")
-	Cmd.Flags().BoolVarP(&srvOptions.enablePProf, "pprof", "", false, "enable pprof")
-	Cmd.Flags().StringVarP(&srvOptions.indexSats, "index_sats", "", "", "Track location of all satoshis, true/false")
-	Cmd.Flags().StringVarP(&srvOptions.indexSpendSats, "index_spend_sats", "", "", "Keep sat index entries of spent outputs, true/false")
-	//Cmd.Flags().BoolVarP(&srvOptions.indexNoSyncBlock, "no_sync_block", "", false, "no sync block")
+	Cmd.Flags().StringVarP(&srvOptions.configFile, "config", "c", "", "config file path")
+	Cmd.Flags().BoolVarP(&srvOptions.Testnet, "testnet", "t", false, "bitcoin testnet3")
+	Cmd.Flags().StringVarP(&srvOptions.Username, "user", "u", "root", "bitcoin rpc server username")
+	Cmd.Flags().StringVarP(&srvOptions.Password, "password", "P", "root", "bitcoin rpc server password")
+	Cmd.Flags().StringVarP(&srvOptions.RpcListen, "rpc_listen", "l", "", "rpc server listen address. Default `mainnet :8335, testnet :18335`")
+	Cmd.Flags().StringVarP(&srvOptions.RpcConnect, "rpc_connect", "s", "", "the bitcoin backend URL of RPC server to connect to (default http://localhost:8334, testnet: http://localhost:18334)")
+	Cmd.Flags().BoolVarP(&srvOptions.NoApi, "no_api", "", false, "don't start api server")
+	Cmd.Flags().StringVarP(&srvOptions.Mysql.Addr, "mysql_addr", "d", "", "inscription index mysql database addr")
+	Cmd.Flags().StringVarP(&srvOptions.Mysql.User, "mysql_user", "", "root", "inscription index mysql database user")
+	Cmd.Flags().StringVarP(&srvOptions.Mysql.Password, "mysql_pass", "", "root", "inscription index mysql database password")
+	Cmd.Flags().StringVarP(&srvOptions.Mysql.DB, "db", "", "", "inscription index mysql database name")
+	Cmd.Flags().BoolVarP(&srvOptions.EnablePProf, "pprof", "", false, "enable pprof")
+	Cmd.Flags().StringVarP(&srvOptions.IndexSats, "index_sats", "", "", "Track location of all satoshis, true/false")
+	Cmd.Flags().StringVarP(&srvOptions.IndexSpendSats, "index_spend_sats", "", "", "Keep sat index entries of spent outputs, true/false")
 }
 
 func IndexSrv(opts ...SrvOption) error {
+	if srvOptions.configFile != "" {
+		configFile, err := os.Open(srvOptions.configFile)
+		if err != nil {
+			return err
+		}
+		defer configFile.Close()
+		if err := yaml.NewDecoder(configFile).Decode(srvOptions); err != nil {
+			return err
+		}
+	}
+
 	for _, v := range opts {
 		v(srvOptions)
 	}
-	if srvOptions.testnet {
+
+	if srvOptions.Mysql.DB == "" {
+		srvOptions.Mysql.DB = constants.DefaultDBName
+	}
+	if srvOptions.Mysql.Addr == "" {
+		srvOptions.Mysql.Addr = "127.0.0.1:3306"
+	}
+	if srvOptions.Testnet {
 		util.ActiveNet = &netparams.TestNet3Params
-		if srvOptions.rpcListen == mainNetRPCListen {
-			srvOptions.rpcListen = testNetRPCListen
+		if srvOptions.RpcListen == "" {
+			srvOptions.RpcListen = testNetRPCListen
 		}
-		if srvOptions.rpcConnect == mainNetRPCConnect {
-			srvOptions.rpcConnect = testNetRPCConnect
+		if srvOptions.RpcConnect == "" {
+			srvOptions.RpcConnect = testNetRPCConnect
+		}
+	} else {
+		if srvOptions.RpcListen == "" {
+			srvOptions.RpcListen = mainNetRPCListen
+		}
+		if srvOptions.RpcConnect == "" {
+			srvOptions.RpcConnect = mainNetRPCConnect
 		}
 	}
-	srvOptions.dataDir = constants.DBDatDir(srvOptions.testnet)
 
 	// Initialize log rotation.  After log rotation has been initialized, the
 	// logger variables may be used.
-	logFile := btcutil.AppDataDir(filepath.Join(constants.AppName, "inscription", "logs", "index.log"), false)
+	logDir := filepath.Join(constants.AppName, "inscription", "logs", "index.log")
+	logFile := btcutil.AppDataDir(logDir, false)
 	log.InitLogRotator(logFile)
 
 	// Create a new database instance using the server options.
@@ -235,14 +223,10 @@ func IndexSrv(opts ...SrvOption) error {
 	// The server port and status port for the database are set from the server options.
 	// The tables to auto-migrate in the database are set to the tables from the tables package.
 	db, err := dao.NewDB(
-		dao.WithAddr(srvOptions.mysqlAddr),
-		dao.WithUser(srvOptions.mysqlUser),
-		dao.WithPassword(srvOptions.mysqlPassword),
-		dao.WithDBName(srvOptions.mysqlDBName),
-		dao.WithDataDir(srvOptions.dataDir),
-		dao.WithEmbedDB(srvOptions.embedDB),
-		dao.WithServerPort(srvOptions.dbListenPort),
-		dao.WithStatusPort(srvOptions.dbStatusListenPort),
+		dao.WithAddr(srvOptions.Mysql.Addr),
+		dao.WithUser(srvOptions.Mysql.User),
+		dao.WithPassword(srvOptions.Mysql.Password),
+		dao.WithDBName(srvOptions.Mysql.DB),
 		dao.WithAutoMigrateTables(tables.Tables...),
 	)
 	if err != nil {
@@ -252,9 +236,9 @@ func IndexSrv(opts ...SrvOption) error {
 	// Create a new RPC client using the server options.
 	// The client is configured with the RPC connect, username, and password from the server options.
 	cli, err := rpcclient.NewClient(
-		rpcclient.WithClientHost(srvOptions.rpcConnect),
-		rpcclient.WithClientUser(srvOptions.username),
-		rpcclient.WithClientPassword(srvOptions.password),
+		rpcclient.WithClientHost(srvOptions.RpcConnect),
+		rpcclient.WithClientUser(srvOptions.Username),
+		rpcclient.WithClientPassword(srvOptions.Password),
 	)
 	if err != nil {
 		return err
@@ -264,9 +248,9 @@ func IndexSrv(opts ...SrvOption) error {
 	// The batch client is configured with the RPC connect, username, and password from the server options.
 	// The batch client is also set to operate in batch mode.
 	batchCli, err := rpcclient.NewClient(
-		rpcclient.WithClientHost(srvOptions.rpcConnect),
-		rpcclient.WithClientUser(srvOptions.username),
-		rpcclient.WithClientPassword(srvOptions.password),
+		rpcclient.WithClientHost(srvOptions.RpcConnect),
+		rpcclient.WithClientUser(srvOptions.Username),
+		rpcclient.WithClientPassword(srvOptions.Password),
 		rpcclient.WithClientBatch(true),
 	)
 	if err != nil {
@@ -281,8 +265,8 @@ func IndexSrv(opts ...SrvOption) error {
 		index.WithDB(db),
 		index.WithClient(cli),
 		index.WithBatchClient(batchCli),
-		index.WithIndexSats(srvOptions.indexSats),
-		index.WithIndexSpendSats(srvOptions.indexSpendSats),
+		index.WithIndexSats(srvOptions.IndexSats),
+		index.WithIndexSpendSats(srvOptions.IndexSpendSats),
 		index.WithTidbSessionMemLimit(constants.TidbSessionMemLimit),
 	)
 	// Start the indexer.
@@ -293,15 +277,15 @@ func IndexSrv(opts ...SrvOption) error {
 	})
 
 	// If the no API field of the server options is false, create and run a new handler.
-	if !srvOptions.noApi {
+	if !srvOptions.NoApi {
 		// Create a new handler using the database, the client, the RPC listen, the testnet,
 		//and to enable pprof from the server options.
 		h, err := handle.New(
 			handle.WithDB(db),
 			handle.WithClient(cli),
-			handle.WithAddr(srvOptions.rpcListen),
-			handle.WithTestNet(srvOptions.testnet),
-			handle.WithEnablePProf(srvOptions.enablePProf),
+			handle.WithAddr(srvOptions.RpcListen),
+			handle.WithTestNet(srvOptions.Testnet),
+			handle.WithEnablePProf(srvOptions.EnablePProf),
 		)
 		if err != nil {
 			return err

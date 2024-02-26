@@ -20,3 +20,4 @@ inscription/config/config.yaml
 .DS_Store
 logs
 cins
+config.yaml

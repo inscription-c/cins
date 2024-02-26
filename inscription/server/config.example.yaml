@@ -1,0 +1,13 @@
+testnet: true
+rpc_listen: ":18335"
+username: "root"
+password: "root"
+rpc_connect: "http://127.0.0.1:18334"
+no_api: false
+index_sats: true
+index_spend_sats: false
+mysql:
+  addr: "127.0.0.1:3306"
+  user: "root"
+  password: "root"
+  db: "cins"
