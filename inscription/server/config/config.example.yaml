@@ -11,3 +11,6 @@ mysql:
   user: "root"
   password: "root"
   db: "cins"
+sentry:
+  dsn: ""
+  traces_sample_rate: 1.0

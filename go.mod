@@ -18,15 +18,16 @@ require (
 	github.com/davecgh/go-spew v1.1.2-0.20180830191138-d8f796af33cc
 	github.com/decred/dcrd/dcrec/secp256k1/v4 v4.2.0
 	github.com/decred/dcrd/lru v1.1.2
+	github.com/getsentry/sentry-go v0.27.0
 	github.com/gin-contrib/pprof v1.4.0
 	github.com/gin-gonic/gin v1.9.1
 	github.com/go-playground/validator/v10 v10.16.0
 	github.com/go-sql-driver/mysql v1.7.1
 	github.com/gogf/gf/v2 v2.6.1
+	github.com/gorilla/websocket v1.5.0
 	github.com/jessevdk/go-flags v1.5.0
 	github.com/jrick/logrotate v1.0.0
 	github.com/kataras/iris/v12 v12.2.0
-	github.com/labstack/gommon v0.3.0
 	github.com/lightninglabs/gozmq v0.0.0-20191113021534-d20a764486bf
 	github.com/lightninglabs/neutrino v0.16.0
 	github.com/lightningnetwork/lnd/queue v1.0.1
@@ -44,12 +45,12 @@ require (
 	github.com/tikv/client-go/v2 v2.0.8-0.20231227070846-61c486af13a5
 	github.com/tikv/pd/client v0.0.0-20240109100024-dd8df25316e9
 	github.com/ugorji/go/codec v1.2.12
-	go.etcd.io/etcd/pkg/v3 v3.5.10
 	go.uber.org/automaxprocs v1.5.3
 	go.uber.org/zap v1.26.0
 	golang.org/x/crypto v0.18.0
 	golang.org/x/sync v0.6.0
 	golang.org/x/term v0.16.0
+	gopkg.in/yaml.v2 v2.4.0
 	gorm.io/driver/mysql v1.5.2
 	gorm.io/gorm v1.25.6
 	gotest.tools v2.2.0+incompatible
@@ -236,8 +237,6 @@ require (
 	github.com/twmb/murmur3 v1.1.6 // indirect
 	github.com/uber/jaeger-client-go v2.22.1+incompatible // indirect
 	github.com/uber/jaeger-lib v2.4.1+incompatible // indirect
-	github.com/valyala/bytebufferpool v1.0.0 // indirect
-	github.com/valyala/fasttemplate v1.0.1 // indirect
 	github.com/vbauerster/mpb/v7 v7.5.3 // indirect
 	github.com/vmihailenco/msgpack/v5 v5.3.5 // indirect
 	github.com/vmihailenco/tagparser/v2 v2.0.0 // indirect
@@ -274,7 +273,6 @@ require (
 	google.golang.org/protobuf v1.32.0 // indirect
 	gopkg.in/inf.v0 v0.9.1 // indirect
 	gopkg.in/natefinch/lumberjack.v2 v2.2.1 // indirect
-	gopkg.in/yaml.v2 v2.4.0 // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect
 	k8s.io/api v0.28.2 // indirect
 	k8s.io/apimachinery v0.28.2 // indirect

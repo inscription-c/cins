@@ -1,8 +1,10 @@
 package handle
 
 import (
+	sentrygin "github.com/getsentry/sentry-go/gin"
 	"github.com/gin-contrib/pprof"
 	"github.com/gin-gonic/gin"
+	"github.com/inscription-c/cins/inscription/server/config"
 	"github.com/inscription-c/cins/inscription/server/handle/middlewares"
 )
 
@@ -12,6 +14,11 @@ func (h *Handler) InitRouter() {
 		pprof.Register(h.Engine())
 	}
 	h.Engine().Use(middlewares.Cors())
+	if config.SrvCfg.Sentry.Dsn != "" {
+		h.Engine().Use(sentrygin.New(sentrygin.Options{
+			Repanic: true,
+		}))
+	}
 	// inscriptions
 	h.Engine().GET("/inscription/:query", h.Inscription)
 	h.Engine().GET("/content/:inscriptionId", h.Content)
