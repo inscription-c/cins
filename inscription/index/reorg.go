@@ -114,13 +114,13 @@ func updateSavePoints(index *Indexer, wtx *dao.DB, height uint32) error {
 			return err
 		}
 
-		log.Srv.Infof("creating savepoint at he ight %d", height)
+		log.Srv.Infof("creating savepoint at height %d", height)
 		return wtx.Create(&tables.SavePoint{
 			Height:    height,
 			UndoLogId: latest.Id,
 		}).Error
 	}
-	if len(savepoints) == 0 {
+	if len(savepoints) == 0 && chainInfo.Headers-int32(height) >= int32(3*savepointInterval) {
 		if err := wtx.DeleteUndoLog(); err != nil {
 			return err
 		}
