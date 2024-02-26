@@ -13,7 +13,7 @@ func (h *Handler) InitRouter() {
 	if h.options.enablePProf {
 		pprof.Register(h.Engine())
 	}
-	h.Engine().Use(middlewares.Cors())
+	h.Engine().Use(middlewares.Cors(config.SrvCfg.Origins...))
 	if config.SrvCfg.Sentry.Dsn != "" {
 		h.Engine().Use(sentrygin.New(sentrygin.Options{
 			Repanic: true,

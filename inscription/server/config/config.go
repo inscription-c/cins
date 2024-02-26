@@ -23,4 +23,5 @@ type SrvConfigs struct {
 		Dsn              string  `yaml:"dsn"`
 		TracesSampleRate float64 `yaml:"traces_sample_rate"`
 	} `yaml:"sentry"`
+	Origins []string `yaml:"origins"`
 }
