@@ -37,7 +37,6 @@ func (d *DB) OldestSavepoint() (savepoint *tables.SavePoint, err error) {
 // The method creates a new SavePoint struct and uses its TableName method to get the name of the table.
 // It then uses the Exec method of the DB struct to execute a SQL delete statement on the table.
 // If an error occurs during the deletion, it returns the error.
-func (d *DB) DeleteSavepoint() error {
-	s := tables.SavePoint{}
-	return d.Exec("delete from " + s.TableName()).Error
+func (d *DB) DeleteSavepoint(id uint64) error {
+	return d.Where("id>?", id).Delete(&tables.SavePoint{}).Error
 }

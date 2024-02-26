@@ -9,7 +9,7 @@ import (
 
 // SaveProtocol saves a protocol to the database.
 // It returns any error encountered during the operation.
-func (d *DB) SaveProtocol(protocol *tables.Protocol) error {
+func (d *DB) SaveProtocol(height uint32, protocol *tables.Protocol) error {
 	old := &tables.Protocol{}
 	err := d.Where("tx_id = ? AND offset = ?", protocol.TxId, protocol.Offset).First(old).Error
 	if err != nil && !errors.Is(err, gorm.ErrRecordNotFound) {
@@ -22,6 +22,7 @@ func (d *DB) SaveProtocol(protocol *tables.Protocol) error {
 			return err
 		}
 		return d.Create(&tables.UndoLog{
+			Height: height,
 			Sql: d.ToSQL(func(tx *gorm.DB) *gorm.DB {
 				return tx.Save(old)
 			}),
@@ -31,6 +32,7 @@ func (d *DB) SaveProtocol(protocol *tables.Protocol) error {
 		return err
 	}
 	return d.Create(&tables.UndoLog{
+		Height: height,
 		Sql: d.ToSQL(func(tx *gorm.DB) *gorm.DB {
 			return tx.Delete(protocol)
 		}),

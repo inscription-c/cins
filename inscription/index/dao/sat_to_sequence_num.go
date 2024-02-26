@@ -10,7 +10,7 @@ import (
 // SaveSatToSequenceNumber saves a SAT (Satisfiability) to a sequence number in the database.
 // It takes a SAT and a sequence number as parameters, both of type uint64.
 // It returns any error encountered during the operation.
-func (d *DB) SaveSatToSequenceNumber(sat uint64, sequenceNum int64) error {
+func (d *DB) SaveSatToSequenceNumber(height uint32, sat uint64, sequenceNum int64) error {
 	old := &tables.SatToSequenceNum{}
 	err := d.Where("sat=?", sat).First(old).Error
 	if err != nil && !errors.Is(err, gorm.ErrRecordNotFound) {
@@ -26,6 +26,7 @@ func (d *DB) SaveSatToSequenceNumber(sat uint64, sequenceNum int64) error {
 			return err
 		}
 		return d.Create(&tables.UndoLog{
+			Height: height,
 			Sql: d.ToSQL(func(tx *gorm.DB) *gorm.DB {
 				old.SequenceNum = oldSequenceNum
 				return tx.Save(old)
@@ -39,6 +40,7 @@ func (d *DB) SaveSatToSequenceNumber(sat uint64, sequenceNum int64) error {
 		return err
 	}
 	return d.Create(&tables.UndoLog{
+		Height: height,
 		Sql: d.ToSQL(func(tx *gorm.DB) *gorm.DB {
 			return tx.Delete(old)
 		}),

@@ -10,7 +10,7 @@ import (
 // DeleteBySatPoint deletes records by a given SatPoint.
 // It takes a SatPoint as a parameter.
 // It returns any error encountered during the operation.
-func (d *DB) DeleteBySatPoint(satpoint *tables.SatPointToSequenceNum) error {
+func (d *DB) DeleteBySatPoint(height uint32, satpoint *tables.SatPointToSequenceNum) error {
 	if err := d.Clauses(clause.Returning{}).
 		Where("outpoint = ? AND offset = ?", satpoint.Outpoint, satpoint.Offset).
 		Delete(satpoint).Error; err != nil {
@@ -18,6 +18,7 @@ func (d *DB) DeleteBySatPoint(satpoint *tables.SatPointToSequenceNum) error {
 	}
 	if satpoint.Id > 0 {
 		return d.Create(&tables.UndoLog{
+			Height: height,
 			Sql: d.ToSQL(func(tx *gorm.DB) *gorm.DB {
 				return tx.Create(satpoint)
 			}),
@@ -29,7 +30,7 @@ func (d *DB) DeleteBySatPoint(satpoint *tables.SatPointToSequenceNum) error {
 // SetSatPointToSequenceNum sets a SatPoint to a sequence number in the database.
 // It takes a SatPoint and a sequence number as parameters.
 // It returns any error encountered during the operation.
-func (d *DB) SetSatPointToSequenceNum(satPoint *tables.SatPointToSequenceNum) error {
+func (d *DB) SetSatPointToSequenceNum(height uint32, satPoint *tables.SatPointToSequenceNum) error {
 	old := &tables.SatPointToSequenceNum{}
 	err := d.Where("outpoint = ? AND offset = ?", satPoint.Outpoint, satPoint.Offset).First(old).Error
 	if err != nil && !errors.Is(err, gorm.ErrRecordNotFound) {

@@ -48,7 +48,7 @@ func (p *Protocol) brc20(brc20 *util.CBRC20) error {
 		//	return nil
 		//}
 
-		if err := p.wtx.SaveProtocol(&tables.Protocol{
+		if err := p.wtx.SaveProtocol(p.entry.Height, &tables.Protocol{
 			InscriptionId: tables.InscriptionId{
 				TxId:   p.entry.TxId,
 				Offset: p.entry.Offset,

@@ -11,11 +11,12 @@ import (
 // SetOutpointToSatRange sets the satoshi range for a set of outpoints.
 // It takes a map where the keys are outpoints and the values are the corresponding satoshi ranges.
 // It returns any error encountered during the operation.
-func (d *DB) SetOutpointToSatRange(satRanges ...*tables.OutpointSatRange) (err error) {
+func (d *DB) SetOutpointToSatRange(height uint32, satRanges ...*tables.OutpointSatRange) (err error) {
 	if err := d.CreateInBatches(&satRanges, 10_000).Error; err != nil {
 		return err
 	}
 	return d.Create(&tables.UndoLog{
+		Height: height,
 		Sql: d.ToSQL(func(tx *gorm.DB) *gorm.DB {
 			return tx.Delete(&satRanges)
 		}),
@@ -32,7 +33,7 @@ func (d *DB) OutpointToSatRanges(outpoint string) (satRange tables.OutpointSatRa
 }
 
 // DelSatRangesByOutpoint deletes the satoshi ranges for a given outpoint.
-func (d *DB) DelSatRangesByOutpoint(outpoint string) (satRange tables.OutpointSatRange, err error) {
+func (d *DB) DelSatRangesByOutpoint(height uint32, outpoint string) (satRange tables.OutpointSatRange, err error) {
 	satRange, err = d.OutpointToSatRanges(outpoint)
 	if err != nil {
 		return
@@ -50,7 +51,8 @@ func (d *DB) DelSatRangesByOutpoint(outpoint string) (satRange tables.OutpointSa
 	})
 	sql = strings.ReplaceAll(sql, "<binary>", "0x"+hex.EncodeToString(satRange.SatRange))
 	err = d.Create(&tables.UndoLog{
-		Sql: sql,
+		Height: height,
+		Sql:    sql,
 	}).Error
 	return
 }

@@ -451,7 +451,7 @@ func (u *InscriptionUpdater) indexEnvelopers(
 		}
 	}
 
-	if err := u.wtx.DeleteValueByOutpoint(gutil.Keys(needDelOutpoints)...); err != nil {
+	if err := u.wtx.DeleteValueByOutpoint(u.idx.height, gutil.Keys(needDelOutpoints)...); err != nil {
 		return err
 	}
 
@@ -611,7 +611,7 @@ func (u *InscriptionUpdater) updateInscriptionLocation(
 
 	// If the origin of the flotsam is old, delete all by SatPoint and delete the inscription by ID.
 	if flotsam.Origin.Old != nil {
-		if err := u.wtx.DeleteBySatPoint(&flotsam.Origin.Old.OldSatPoint); err != nil {
+		if err := u.wtx.DeleteBySatPoint(u.idx.height, &flotsam.Origin.Old.OldSatPoint); err != nil {
 			return err
 		}
 		inscription, err := u.wtx.GetInscriptionById(inscriptionId)
@@ -701,7 +701,7 @@ func (u *InscriptionUpdater) updateInscriptionLocation(
 
 		// If the Sat is not nil, save it to the sequence number in the database.
 		if sat != nil {
-			if err := u.wtx.SaveSatToSequenceNumber(uint64(*sat), sequenceNumber); err != nil {
+			if err := u.wtx.SaveSatToSequenceNumber(u.idx.height, uint64(*sat), sequenceNumber); err != nil {
 				return err
 			}
 		}
@@ -757,7 +757,7 @@ func (u *InscriptionUpdater) updateInscriptionLocation(
 		satPoint.Offset = unboundNum
 	}
 	satPoint.SequenceNum = sequenceNumber
-	if err := u.wtx.SetSatPointToSequenceNum(satPoint); err != nil {
+	if err := u.wtx.SetSatPointToSequenceNum(u.idx.height, satPoint); err != nil {
 		return err
 	}
 	return nil

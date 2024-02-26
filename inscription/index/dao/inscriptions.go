@@ -93,7 +93,7 @@ func (d *DB) InscriptionsByOutpoint(outpoint string) (res []*Inscription, err er
 
 // DeleteInscriptionById deletes an inscription by its outpoint.
 // It returns the sequence number of the deleted inscription and any error encountered.
-func (d *DB) DeleteInscriptionById(inscriptionId *tables.InscriptionId) (sequenceNum int64, err error) {
+func (d *DB) DeleteInscriptionById(height uint32, inscriptionId *tables.InscriptionId) (sequenceNum int64, err error) {
 	ins := &tables.Inscriptions{}
 	err = d.Clauses(clause.Returning{}).Where("tx_id=? and offset=?", inscriptionId.TxId, inscriptionId.Offset).Delete(ins).Error
 	if err != nil {
@@ -122,7 +122,8 @@ func (d *DB) DeleteInscriptionById(inscriptionId *tables.InscriptionId) (sequenc
 			num++
 		}
 		err = d.Create(&tables.UndoLog{
-			Sql: sql,
+			Height: height,
+			Sql:    sql,
 		}).Error
 	}
 	return
@@ -135,6 +136,7 @@ func (d *DB) CreateInscription(ins *tables.Inscriptions) error {
 		return err
 	}
 	return d.Create(&tables.UndoLog{
+		Height: ins.Height,
 		Sql: d.ToSQL(func(tx *gorm.DB) *gorm.DB {
 			return tx.Delete(ins)
 		}),

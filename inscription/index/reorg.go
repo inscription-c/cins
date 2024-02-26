@@ -99,12 +99,13 @@ func updateSavePoints(index *Indexer, wtx *dao.DB, height uint32) error {
 	if (height < savepointInterval || height%savepointInterval == 0) &&
 		chainInfo.Headers-int32(height) <= int32(chainTipDistance) {
 		if len(savepoints) >= int(maxSavepoint) {
+			// delete oldest savepoint
 			if err := wtx.Delete(&tables.SavePoint{
 				Id: savepoints[0].Id,
 			}).Error; err != nil {
 				return err
 			}
-			if err := wtx.Where("id<=?", savepoints[0].UndoLogId).
+			if err := wtx.Where("id<=?", savepoints[1].UndoLogId).
 				Delete(&tables.UndoLog{}).Error; err != nil {
 				return err
 			}
@@ -120,7 +121,7 @@ func updateSavePoints(index *Indexer, wtx *dao.DB, height uint32) error {
 			UndoLogId: latest.Id,
 		}).Error
 	}
-	if len(savepoints) == 0 && chainInfo.Headers-int32(height) >= int32(3*savepointInterval) {
+	if len(savepoints) == 0 {
 		if err := wtx.DeleteUndoLog(); err != nil {
 			return err
 		}
@@ -156,19 +157,25 @@ func handleReorg(index *Indexer, height, depth uint32) error {
 			return errors.New("no savepoint found")
 		}
 
-		undoLog, err := tx.FindUndoLog()
+		rows, err := tx.FindUndoLog()
 		if err != nil {
 			return err
 		}
-		for _, v := range undoLog {
-			if err := tx.Exec(v.Sql).Error; err != nil {
+		defer rows.Close()
+
+		for rows.Next() {
+			var undoLog tables.UndoLog
+			if err := tx.ScanRows(rows, &undoLog); err != nil {
+				return err
+			}
+			if err := tx.Exec(undoLog.Sql).Error; err != nil {
 				return err
 			}
 		}
 		if err := tx.DeleteUndoLog(); err != nil {
 			return err
 		}
-		return tx.DeleteSavepoint()
+		return tx.DeleteSavepoint(oldestSavepoint.Id)
 	}); err != nil {
 		return err
 	}

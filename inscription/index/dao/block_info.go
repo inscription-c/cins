@@ -93,20 +93,18 @@ func (d *DB) SaveBlockInfo(block *tables.BlockInfo) error {
 		if err := d.Save(block).Error; err != nil {
 			return err
 		}
-		return d.Create(&tables.UndoLog{
-			Sql: d.ToSQL(func(tx *gorm.DB) *gorm.DB {
-				return tx.Save(old)
-			}),
-		}).Error
+		sql := d.ToSQL(func(tx *gorm.DB) *gorm.DB {
+			return tx.Save(old)
+		})
+		return d.AddUndoLog(block.Height, sql)
 	}
 	if err := d.Create(block).Error; err != nil {
 		return err
 	}
-	return d.Create(&tables.UndoLog{
-		Sql: d.ToSQL(func(tx *gorm.DB) *gorm.DB {
-			return tx.Delete(block)
-		}),
-	}).Error
+	sql := d.ToSQL(func(tx *gorm.DB) *gorm.DB {
+		return tx.Delete(block)
+	})
+	return d.AddUndoLog(block.Height, sql)
 }
 
 // DeleteBlockInfoByHeight deletes a block info from the database by height.
@@ -119,9 +117,7 @@ func (d *DB) DeleteBlockInfoByHeight(height uint32) (info tables.BlockInfo, err 
 			return tx.Create(&info)
 		})
 		sql = strings.ReplaceAll(sql, "<binary>", "0x"+hex.EncodeToString(info.Header))
-		err = d.Create(&tables.UndoLog{
-			Sql: sql,
-		}).Error
+		err = d.AddUndoLog(height, sql)
 	}
 	return
 }

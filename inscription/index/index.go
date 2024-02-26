@@ -203,11 +203,11 @@ func (idx *Indexer) UpdateIndex() error {
 	if idx.opts.indexSats != "" || idx.opts.indexSpentSats != "" {
 		if err := idx.DB().Transaction(func(tx *dao.DB) error {
 			indexSats := gconv.Uint64(gconv.Bool(idx.opts.indexSats) || gconv.Bool(idx.opts.indexSpentSats))
-			if err := tx.SetStatistic(tables.StatisticIndexSats, indexSats); err != nil {
+			if err := tx.SetStatistic(idx.height, tables.StatisticIndexSats, indexSats); err != nil {
 				return err
 			}
 			if idx.opts.indexSpentSats != "" {
-				if err := tx.SetStatistic(tables.StatisticIndexSpentSats, gconv.Uint64(gconv.Bool(idx.opts.indexSpentSats))); err != nil {
+				if err := tx.SetStatistic(idx.height, tables.StatisticIndexSpentSats, gconv.Uint64(gconv.Bool(idx.opts.indexSpentSats))); err != nil {
 					return err
 				}
 			}
@@ -417,7 +417,7 @@ func (idx *Indexer) indexBlock(
 								return err
 							}
 						} else {
-							outpointSatRanges, err = wtx.DelSatRangesByOutpoint(outpoint)
+							outpointSatRanges, err = wtx.DelSatRangesByOutpoint(idx.height, outpoint)
 							if err != nil {
 								return err
 							}
@@ -472,7 +472,7 @@ func (idx *Indexer) indexBlock(
 
 		if len(coinbaseInputs) > 0 {
 			nullOutpoint := util.NullOutpoint().String()
-			lostSatRanges, err := wtx.DelSatRangesByOutpoint(nullOutpoint)
+			lostSatRanges, err := wtx.DelSatRangesByOutpoint(idx.height, nullOutpoint)
 			if err != nil {
 				return err
 			}
@@ -481,7 +481,7 @@ func (idx *Indexer) indexBlock(
 			for _, coinBase := range coinbaseInputs {
 				start := Sat(coinBase.Start)
 				if !start.Common() {
-					if err := wtx.SatToSatPoint(&tables.SatSatPoint{
+					if err := wtx.SatToSatPoint(idx.height, &tables.SatSatPoint{
 						Sat:      start.N(),
 						Outpoint: nullOutpoint,
 						Offset:   lostSats,
@@ -492,7 +492,7 @@ func (idx *Indexer) indexBlock(
 				lostSatRanges.SatRange = append(lostSatRanges.SatRange, coinBase.Store()...)
 				lostSats += coinBase.End - coinBase.Start
 			}
-			if err := wtx.SetOutpointToSatRange(&lostSatRanges); err != nil {
+			if err := wtx.SetOutpointToSatRange(idx.height, &lostSatRanges); err != nil {
 				return err
 			}
 		}
@@ -525,21 +525,21 @@ func (idx *Indexer) indexBlock(
 	}
 
 	if idx.indexSats {
-		if err := wtx.SetStatistic(tables.StatisticLostSats, lostSats); err != nil {
+		if err := wtx.SetStatistic(idx.height, tables.StatisticLostSats, lostSats); err != nil {
 			return err
 		}
 	} else {
-		if err := wtx.SetStatistic(tables.StatisticLostSats, *inscriptionUpdater.lostSats); err != nil {
+		if err := wtx.SetStatistic(idx.height, tables.StatisticLostSats, *inscriptionUpdater.lostSats); err != nil {
 			return err
 		}
 	}
-	if err := wtx.SetStatistic(tables.StatisticCursedInscriptions, *inscriptionUpdater.cursedInscriptionCount); err != nil {
+	if err := wtx.SetStatistic(idx.height, tables.StatisticCursedInscriptions, *inscriptionUpdater.cursedInscriptionCount); err != nil {
 		return err
 	}
-	if err := wtx.SetStatistic(tables.StatisticBlessedInscriptions, *inscriptionUpdater.blessedInscriptionCount); err != nil {
+	if err := wtx.SetStatistic(idx.height, tables.StatisticBlessedInscriptions, *inscriptionUpdater.blessedInscriptionCount); err != nil {
 		return err
 	}
-	if err := wtx.SetStatistic(tables.StatisticUnboundInscriptions, *inscriptionUpdater.unboundInscriptions); err != nil {
+	if err := wtx.SetStatistic(idx.height, tables.StatisticUnboundInscriptions, *inscriptionUpdater.unboundInscriptions); err != nil {
 		return err
 	}
 
@@ -605,7 +605,7 @@ func (idx *Indexer) indexTransactionSats(
 					if offset < 0 {
 						return errors.New("negative offset")
 					}
-					if err := wtx.SatToSatPoint(&tables.SatSatPoint{
+					if err := wtx.SatToSatPoint(idx.height, &tables.SatSatPoint{
 						Sat:      firstRange.Start,
 						Outpoint: outpoint,
 						Offset:   uint64(offset),
@@ -693,27 +693,27 @@ func (idx *Indexer) commit(wtx *dao.DB) (err error) {
 				})
 			}
 		})
-		if err = wtx.SetOutpointToSatRange(setRanges...); err != nil {
+		if err = wtx.SetOutpointToSatRange(idx.height, setRanges...); err != nil {
 			return err
 		}
 		setRanges = nil
 	}
 
 	// Update the value cache.
-	if err = wtx.SetOutpointToValue(idx.valueCache.Values()); err != nil {
+	if err = wtx.SetOutpointToValue(idx.height, idx.valueCache.Values()); err != nil {
 		return err
 	}
 
 	// Update various statistics related to the indexing process.
-	if err = wtx.IncrementStatistic(tables.StatisticOutputsTraversed, idx.outputsTraversed); err != nil {
+	if err = wtx.IncrementStatistic(idx.height, tables.StatisticOutputsTraversed, idx.outputsTraversed); err != nil {
 		return err
 	}
 	idx.outputsTraversed = 0
-	if err = wtx.IncrementStatistic(tables.StatisticSatRanges, idx.satRangesSinceFlush); err != nil {
+	if err = wtx.IncrementStatistic(idx.height, tables.StatisticSatRanges, idx.satRangesSinceFlush); err != nil {
 		return err
 	}
 	idx.satRangesSinceFlush = 0
-	if err = wtx.IncrementStatistic(tables.StatisticCommits, 1); err != nil {
+	if err = wtx.IncrementStatistic(idx.height, tables.StatisticCommits, 1); err != nil {
 		return err
 	}
 

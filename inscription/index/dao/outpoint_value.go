@@ -21,7 +21,7 @@ func (d *DB) GetValueByOutpoint(outpoint string) (value int64, err error) {
 
 // DeleteValueByOutpoint deletes the values associated with a list of outpoints.
 // It returns any error encountered during the operation.
-func (d *DB) DeleteValueByOutpoint(outpoints ...string) (err error) {
+func (d *DB) DeleteValueByOutpoint(height uint32, outpoints ...string) (err error) {
 	if len(outpoints) == 0 {
 		return
 	}
@@ -34,6 +34,7 @@ func (d *DB) DeleteValueByOutpoint(outpoints ...string) (err error) {
 		return
 	}
 	return d.Create(&tables.UndoLog{
+		Height: height,
 		Sql: d.ToSQL(func(tx *gorm.DB) *gorm.DB {
 			return tx.CreateInBatches(list, 10_000)
 		}),
@@ -43,7 +44,7 @@ func (d *DB) DeleteValueByOutpoint(outpoints ...string) (err error) {
 // SetOutpointToValue sets the values for a set of outpoints.
 // It takes a map where the keys are outpoints and the values are the corresponding values.
 // It returns any error encountered during the operation.
-func (d *DB) SetOutpointToValue(values map[string]int64) (err error) {
+func (d *DB) SetOutpointToValue(height uint32, values map[string]int64) (err error) {
 	if len(values) == 0 {
 		return
 	}
@@ -58,6 +59,7 @@ func (d *DB) SetOutpointToValue(values map[string]int64) (err error) {
 		return err
 	}
 	return d.Create(&tables.UndoLog{
+		Height: height,
 		Sql: d.ToSQL(func(tx *gorm.DB) *gorm.DB {
 			return tx.Where("outpoint in (?)", gutil.Keys(values)).Delete(&tables.OutpointValue{})
 		}),

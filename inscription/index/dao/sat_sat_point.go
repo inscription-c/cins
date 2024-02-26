@@ -7,7 +7,7 @@ import (
 )
 
 // SatToSatPoint saves a SAT (Satisfiability) to a sequence number in the database.
-func (d *DB) SatToSatPoint(satSatPoint *tables.SatSatPoint) error {
+func (d *DB) SatToSatPoint(height uint32, satSatPoint *tables.SatSatPoint) error {
 	old := &tables.SatSatPoint{}
 	err := d.Where("sat=?", satSatPoint.Sat).First(old).Error
 	if err != nil && !errors.Is(err, gorm.ErrRecordNotFound) {
@@ -20,6 +20,7 @@ func (d *DB) SatToSatPoint(satSatPoint *tables.SatSatPoint) error {
 			return err
 		}
 		return d.Create(&tables.UndoLog{
+			Height: height,
 			Sql: d.ToSQL(func(tx *gorm.DB) *gorm.DB {
 				return tx.Save(old)
 			}),
@@ -29,6 +30,7 @@ func (d *DB) SatToSatPoint(satSatPoint *tables.SatSatPoint) error {
 		return err
 	}
 	return d.Create(&tables.UndoLog{
+		Height: height,
 		Sql: d.ToSQL(func(tx *gorm.DB) *gorm.DB {
 			return tx.Delete(satSatPoint)
 		}),
