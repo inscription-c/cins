@@ -53,7 +53,7 @@ func (d *DB) BlockHash(height ...uint32) (blockHash string, err error) {
 // BlockHeight retrieves the height of the last block in the database.
 func (d *DB) BlockHeight() (height uint32, err error) {
 	block := &tables.BlockInfo{}
-	err = d.DB.Order("id desc").First(block).Error
+	err = d.DB.Last(block).Error
 	if errors.Is(err, gorm.ErrRecordNotFound) {
 		err = nil
 		return

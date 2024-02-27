@@ -50,4 +50,7 @@ func (h *Handler) InitRouter() {
 	scan := h.Engine().Group("/scan")
 	scan.GET("/home/page/statistics", h.HomePageStatistics)
 	scan.POST("/inscriptions", h.ScanInscriptions)
+
+	r := h.Engine().Group("/r")
+	r.GET("/blockheight", h.BlockHeight)
 }
