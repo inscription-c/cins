@@ -7,7 +7,6 @@ import (
 	"github.com/inscription-c/cins/inscription/index/tables"
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
-	"strings"
 )
 
 // BlockHeader retrieves the block header for a given block height.
@@ -116,7 +115,7 @@ func (d *DB) DeleteBlockInfoByHeight(height uint32) (info tables.BlockInfo, err 
 		sql := d.ToSQL(func(tx *gorm.DB) *gorm.DB {
 			return tx.Create(&info)
 		})
-		sql = strings.ReplaceAll(sql, "<binary>", "0x"+hex.EncodeToString(info.Header))
+		sql = SqlFix(sql, hex.EncodeToString(info.Header))
 		err = d.AddUndoLog(height, sql)
 	}
 	return

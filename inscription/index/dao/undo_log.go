@@ -5,6 +5,20 @@ import (
 	"github.com/inscription-c/cins/inscription/index/tables"
 )
 
+// AddUndoLog is a method that adds an undo log to the database.
+// It takes two parameters: height of type uint32 and sql of type string.
+// The height parameter represents the height of the undo log.
+// The sql parameter represents the SQL statement of the undo log.
+//
+// The method first calls the OldestSavepoint method to get the oldest savepoint.
+// If an error occurs during this operation, it returns the error.
+// If the ID of the oldest savepoint is 0, it returns nil.
+//
+// The method then creates a new UndoLog struct with the provided height and SQL statement,
+// and calls the Create method to add the undo log to the database.
+// If an error occurs during this operation, it returns the error.
+//
+// The method returns an error if any operation fails, or nil if the operations succeed.
 func (d *DB) AddUndoLog(height uint32, sql string) error {
 	oldest, err := d.OldestSavepoint()
 	if err != nil {

@@ -15,7 +15,6 @@ import (
 	"github.com/inscription-c/cins/internal/signal"
 	"github.com/inscription-c/cins/internal/util"
 	"golang.org/x/sync/errgroup"
-	"io"
 	"sync/atomic"
 	"time"
 )
@@ -655,9 +654,10 @@ func (idx *Indexer) needCommit(
 
 // detectReorg is a method that detects if there is a reorganization in the blockchain.
 func (idx *Indexer) commit(wtx *dao.DB) (err error) {
+	height := idx.height - 1
 	log.Srv.Infof(
 		"Committing at block %d, %d outputs traversed, %d in map, %d cached",
-		idx.height-1, idx.outputsTraversed, idx.valueCache.Len(), idx.outputsCached,
+		height, idx.outputsTraversed, idx.valueCache.Len(), idx.outputsCached,
 	)
 
 	if idx.indexSats {
@@ -669,55 +669,38 @@ func (idx *Indexer) commit(wtx *dao.DB) (err error) {
 			idx.outputsInsertedSinceFlush,
 		)
 
-		buf := make([]byte, constants.MaxSatRangesDataSize)
 		setRanges := make([]*tables.OutpointSatRange, 0)
 		idx.rangeCache.Range(func(k string, v *bytes.Buffer) {
-			if v.Len() <= constants.MaxSatRangesDataSize {
-				setRanges = append(setRanges, &tables.OutpointSatRange{
-					Outpoint: k,
-					SatRange: v.Bytes(),
-				})
-				return
-			}
-
-			for {
-				n, err := v.Read(buf)
-				if err == io.EOF {
-					break
-				}
-				dest := make([]byte, n)
-				copy(dest, buf[:n])
-				setRanges = append(setRanges, &tables.OutpointSatRange{
-					Outpoint: k,
-					SatRange: dest,
-				})
-			}
+			setRanges = append(setRanges, &tables.OutpointSatRange{
+				Outpoint: k,
+				SatRange: v.Bytes(),
+			})
 		})
-		if err = wtx.SetOutpointToSatRange(idx.height, setRanges...); err != nil {
+		if err = wtx.SetOutpointToSatRange(height, setRanges...); err != nil {
 			return err
 		}
-		setRanges = nil
 	}
 
 	// Update the value cache.
-	if err = wtx.SetOutpointToValue(idx.height, idx.valueCache.Values()); err != nil {
+	if err = wtx.SetOutpointToValue(height, idx.valueCache.Values()); err != nil {
 		return err
 	}
 
 	// Update various statistics related to the indexing process.
-	if err = wtx.IncrementStatistic(idx.height, tables.StatisticOutputsTraversed, idx.outputsTraversed); err != nil {
+	if err = wtx.IncrementStatistic(height, tables.StatisticOutputsTraversed, idx.outputsTraversed); err != nil {
 		return err
 	}
 	idx.outputsTraversed = 0
-	if err = wtx.IncrementStatistic(idx.height, tables.StatisticSatRanges, idx.satRangesSinceFlush); err != nil {
+	if err = wtx.IncrementStatistic(height, tables.StatisticSatRanges, idx.satRangesSinceFlush); err != nil {
 		return err
 	}
 	idx.satRangesSinceFlush = 0
-	if err = wtx.IncrementStatistic(idx.height, tables.StatisticCommits, 1); err != nil {
+	if err = wtx.IncrementStatistic(height, tables.StatisticCommits, 1); err != nil {
 		return err
 	}
 
-	if err := updateSavePoints(idx, wtx, idx.height); err != nil {
+	// update undo log save points
+	if err := updateSavePoints(idx, wtx, height); err != nil {
 		return err
 	}
 	wtx.Commit()

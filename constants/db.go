@@ -14,7 +14,6 @@ const (
 	DefaultDbStatusListenPort   = "10080"
 	DefaultDBUser               = "root"
 	DefaultDBPass               = ""
-	MaxSatRangesDataSize        = 5 * 1024 * 1024
 )
 
 const (

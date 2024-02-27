@@ -5,7 +5,6 @@ import (
 	"errors"
 	"github.com/inscription-c/cins/inscription/index/tables"
 	"gorm.io/gorm"
-	"strings"
 )
 
 // SetOutpointToSatRange sets the satoshi range for a set of outpoints.
@@ -49,7 +48,7 @@ func (d *DB) DelSatRangesByOutpoint(height uint32, outpoint string) (satRange ta
 	sql := d.ToSQL(func(tx *gorm.DB) *gorm.DB {
 		return tx.Create(&satRange)
 	})
-	sql = strings.ReplaceAll(sql, "<binary>", "0x"+hex.EncodeToString(satRange.SatRange))
+	sql = SqlFix(sql, hex.EncodeToString(satRange.SatRange))
 	err = d.Create(&tables.UndoLog{
 		Height: height,
 		Sql:    sql,

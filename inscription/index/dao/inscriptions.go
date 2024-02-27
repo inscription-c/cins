@@ -105,22 +105,7 @@ func (d *DB) DeleteInscriptionById(height uint32, inscriptionId *tables.Inscript
 		sql := d.ToSQL(func(tx *gorm.DB) *gorm.DB {
 			return tx.Create(ins)
 		})
-		num := 0
-		for {
-			idx := strings.Index(sql, "<binary>")
-			if idx == -1 {
-				break
-			}
-			switch num {
-			case 0:
-				sql = sql[:idx] + "0x" + hex.EncodeToString(ins.Body) + sql[idx+8:]
-			case 1:
-				sql = sql[:idx] + "0x" + hex.EncodeToString(ins.Metadata) + sql[idx+8:]
-			default:
-				break
-			}
-			num++
-		}
+		sql = SqlFix(sql, hex.EncodeToString(ins.Body), hex.EncodeToString(ins.Metadata))
 		err = d.Create(&tables.UndoLog{
 			Height: height,
 			Sql:    sql,
@@ -319,4 +304,15 @@ func (d *DB) SearchInscriptions(params *FindProtocolsParams) (list []*tables.Ins
 	}
 	err = db.Offset((params.Page - 1) * params.Limit).Limit(params.Limit).Find(&list).Error
 	return
+}
+
+// SqlFix replaces the <binary> placeholder in a SQL string with the provided arguments.
+func SqlFix(sql string, args ...string) string {
+	for _, arg := range args {
+		if !strings.HasPrefix(arg, "0x") {
+			arg = "0x" + arg
+		}
+		sql = strings.Replace(sql, "<binary>", arg, 1)
+	}
+	return sql
 }

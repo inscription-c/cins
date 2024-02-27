@@ -70,7 +70,7 @@ func detectReorg(index *Indexer, wtx *dao.DB, block *wire.MsgBlock, height uint3
 }
 
 // updateSavePoints is a function that updates the savepoints in the blockchain.
-// It takes a pointer to an Indexer, a pointer to a DB, and a uint32 as parameters.
+// It takes a pointer to an Indexer, a pointer to a DB, and an uint32 as parameters.
 // The function first gets the blockchain info from the Indexer and assigns it to chainInfo.
 // If there is an error getting the blockchain info, it returns the error.
 // The function then gets the list of savepoints from the DB and assigns it to savepoints.
