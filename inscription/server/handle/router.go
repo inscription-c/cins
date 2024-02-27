@@ -24,6 +24,8 @@ func (h *Handler) InitRouter() {
 			Repanic: true,
 		}))
 	}
+	h.Engine().Use(middlewares.Logger())
+
 	// inscriptions
 	h.Engine().GET("/inscription/:query", h.Inscription)
 	h.Engine().GET("/content/:inscriptionId", h.Content)
