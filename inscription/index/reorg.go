@@ -157,7 +157,7 @@ func handleReorg(index *Indexer, height, depth uint32) error {
 			return errors.New("no savepoint found")
 		}
 
-		rows, err := tx.FindUndoLog()
+		rows, err := index.DB().FindUndoLog()
 		if err != nil {
 			return err
 		}
@@ -165,7 +165,7 @@ func handleReorg(index *Indexer, height, depth uint32) error {
 
 		for rows.Next() {
 			var undoLog tables.UndoLog
-			if err := tx.ScanRows(rows, &undoLog); err != nil {
+			if err := index.DB().ScanRows(rows, &undoLog); err != nil {
 				return err
 			}
 			if err := tx.Exec(undoLog.Sql).Error; err != nil {
