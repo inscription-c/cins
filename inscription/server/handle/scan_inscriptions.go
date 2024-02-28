@@ -94,6 +94,14 @@ func (h *Handler) ScanInscriptions(ctx *gin.Context) {
 }
 
 func (h *Handler) doScanInscriptions(ctx *gin.Context, req *ScanInscriptionsReq) error {
+	insTypes := make([]string, 0)
+	for _, v := range req.Types {
+		if v != string(constants.ExtensionHtml) {
+			insTypes = append(insTypes, v)
+		}
+		insTypes = append(insTypes, string(constants.ContentTypeTextHtml), string(constants.ContentTypeTextHtmlUtf8))
+	}
+
 	resp := &ScanInscriptionsResp{
 		SearchType: SearchTypeUnknown,
 		Page:       req.Page,
@@ -104,7 +112,7 @@ func (h *Handler) doScanInscriptions(ctx *gin.Context, req *ScanInscriptionsReq)
 		Page:            req.Page,
 		Limit:           req.Limit,
 		Order:           req.Order,
-		Types:           req.Types,
+		Types:           insTypes,
 		Charms:          req.Charms,
 		InscriptionType: req.InscriptionType,
 	}
