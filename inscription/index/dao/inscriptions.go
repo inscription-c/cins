@@ -258,7 +258,8 @@ type FindProtocolsParams struct {
 	Owner           string
 	Ticker          string
 	Order           string
-	Types           []string
+	MediaTypes      []string
+	ContentTypes    []string
 	Charms          []string
 	InscriptionType string
 }
@@ -286,8 +287,11 @@ func (d *DB) SearchInscriptions(params *FindProtocolsParams) (list []*tables.Ins
 	if params.InscriptionType != "" {
 		db = db.Where("inscriptions.content_protocol=?", params.InscriptionType)
 	}
-	if len(params.Types) > 0 {
-		db = db.Where("inscriptions.media_type in (?)", params.Types)
+	if len(params.MediaTypes) > 0 {
+		db = db.Where("inscriptions.media_type in (?)", params.MediaTypes)
+	}
+	if len(params.ContentTypes) > 0 {
+		db = db.Where("inscriptions.content_type in (?)", params.ContentTypes)
 	}
 	switch params.Order {
 	case "newest":
