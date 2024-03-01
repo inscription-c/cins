@@ -32,7 +32,7 @@ var (
 type walletOptions struct {
 	Username   string
 	Password   string
-	RpcConnect string
+	ChainUrl   string
 	WalletPass string
 	Testnet    bool
 }
@@ -52,9 +52,9 @@ var Cmd = &cobra.Command{
 }
 
 func init() {
-	Cmd.Flags().StringVarP(&Options.RpcConnect, "rpc_connect", "s", "http://localhost:8334", "url of bitcoin backend RPC server to connect to (default http://localhost:8334, testnet: http://localhost:18334)")
-	Cmd.Flags().StringVarP(&Options.Username, "user", "u", "root", "rpc server username")
-	Cmd.Flags().StringVarP(&Options.Password, "password", "P", "root", "rpc server password")
+	Cmd.Flags().StringVarP(&Options.ChainUrl, "chain_url", "s", "http://localhost:8334", "url of bitcoin backend RPC server to connect to (default http://localhost:8334, testnet: http://localhost:18334)")
+	Cmd.Flags().StringVarP(&Options.Username, "chain_user", "u", "root", "rpc server username")
+	Cmd.Flags().StringVarP(&Options.Password, "chain_password", "P", "root", "rpc server password")
 	Cmd.Flags().StringVarP(&Options.WalletPass, "wallet_pass", "w", "root", "wallet password")
 	Cmd.Flags().BoolVarP(&Options.Testnet, "testnet", "t", false, "bitcoin testnet3")
 	if err := Cmd.MarkFlagRequired("rpc_connect"); err != nil {

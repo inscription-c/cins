@@ -29,7 +29,7 @@ go install  github.com/btcsuite/btcd/cmd/btcctl@v0.24.0
 
 Start wallet service with:
 ```bash
-cins wallet --wallet_pass root --rpc_connect <bitcoin_rpc_connect>
+cins wallet --wallet_pass root --chain_url <bitcoin_rpc_connect>
 ```
 
 ## example
@@ -47,5 +47,5 @@ cins inscribe -f <inscription_file_path> --c_ins_description <c_ins_description_
 # Indexer
 
 ```bash
-cins indexer -u root -P root --mysql_addr <mysql_addr> --mysql_user <mysql_user> --mysql_pass <mysql_pass> --mysql_db <mysql_db> --rpc_connect <bitcoin_rpc_connect>
+cins indexer -u root -P root --mysql_addr <mysql_addr> --mysql_user <mysql_user> --mysql_pass <mysql_pass> --mysql_db <mysql_db> --chain_url <bitcoin_rpc_connect>
 ```

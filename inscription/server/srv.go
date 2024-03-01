@@ -37,7 +37,7 @@ type SrvOption func(*config.SrvConfigs)
 // The returned SrvOption sets the username field of the config.SrvConfigs struct to the provided username.
 func WithUserName(username string) SrvOption {
 	return func(options *config.SrvConfigs) {
-		options.Username = username
+		options.Chain.Username = username
 	}
 }
 
@@ -45,7 +45,7 @@ func WithUserName(username string) SrvOption {
 // The returned SrvOption sets the password field of the config.SrvConfigs struct to the provided password.
 func WithPassword(password string) SrvOption {
 	return func(options *config.SrvConfigs) {
-		options.Password = password
+		options.Chain.Password = password
 	}
 }
 
@@ -53,7 +53,7 @@ func WithPassword(password string) SrvOption {
 // The returned SrvOption sets the rpcListen field of the config.SrvConfigs struct to the provided rpcListen.
 func WithRpcListen(rpcListen string) SrvOption {
 	return func(options *config.SrvConfigs) {
-		options.RpcListen = rpcListen
+		options.Server.RpcListen = rpcListen
 	}
 }
 
@@ -61,7 +61,7 @@ func WithRpcListen(rpcListen string) SrvOption {
 // The returned SrvOption sets the testnet field of the config.SrvConfigs struct to the provided testnet.
 func WithTestNet(testnet bool) SrvOption {
 	return func(options *config.SrvConfigs) {
-		options.Testnet = testnet
+		options.Server.Testnet = testnet
 	}
 }
 
@@ -69,7 +69,7 @@ func WithTestNet(testnet bool) SrvOption {
 // The returned SrvOption sets the rpcConnect field of the config.SrvConfigs struct to the provided rpcConnect.
 func WithRpcConnect(rpcConnect string) SrvOption {
 	return func(options *config.SrvConfigs) {
-		options.RpcConnect = rpcConnect
+		options.Chain.Url = rpcConnect
 	}
 }
 
@@ -77,7 +77,7 @@ func WithRpcConnect(rpcConnect string) SrvOption {
 // The returned SrvOption sets the noApi field of the config.SrvConfigs struct to the provided noApi.
 func WithNoApi(noApi bool) SrvOption {
 	return func(options *config.SrvConfigs) {
-		options.NoApi = noApi
+		options.Server.NoApi = noApi
 	}
 }
 
@@ -85,7 +85,7 @@ func WithNoApi(noApi bool) SrvOption {
 // The returned SrvOption sets the mysqlAddr field of the config.SrvConfigs struct to the provided mysqlAddr.
 func WithMysqlAddr(mysqlAddr string) SrvOption {
 	return func(options *config.SrvConfigs) {
-		options.Mysql.Addr = mysqlAddr
+		options.DB.Mysql.Addr = mysqlAddr
 	}
 }
 
@@ -93,7 +93,7 @@ func WithMysqlAddr(mysqlAddr string) SrvOption {
 // The returned SrvOption sets the mysqlUser field of the config.SrvConfigs struct to the provided mysqlUser.
 func WithMysqlUser(mysqlUser string) SrvOption {
 	return func(options *config.SrvConfigs) {
-		options.Mysql.User = mysqlUser
+		options.DB.Mysql.User = mysqlUser
 	}
 }
 
@@ -101,7 +101,7 @@ func WithMysqlUser(mysqlUser string) SrvOption {
 // The returned SrvOption sets the mysqlPassword field of the config.SrvConfigs struct to the provided mysqlPassword.
 func WithMysqlPassword(mysqlPassword string) SrvOption {
 	return func(options *config.SrvConfigs) {
-		options.Mysql.Password = mysqlPassword
+		options.DB.Mysql.Password = mysqlPassword
 	}
 }
 
@@ -109,7 +109,7 @@ func WithMysqlPassword(mysqlPassword string) SrvOption {
 // The returned SrvOption sets the mysqlDBName field of the config.SrvConfigs struct to the provided mysqlDBName.
 func WithMysqlDBName(mysqlDBName string) SrvOption {
 	return func(options *config.SrvConfigs) {
-		options.Mysql.DB = mysqlDBName
+		options.DB.Mysql.DB = mysqlDBName
 	}
 }
 
@@ -117,7 +117,7 @@ func WithMysqlDBName(mysqlDBName string) SrvOption {
 // The returned SrvOption sets the enablePProf field of the config.SrvConfigs struct to the provided enablePProf.
 func WithEnablePProf(enablePProf bool) SrvOption {
 	return func(options *config.SrvConfigs) {
-		options.EnablePProf = enablePProf
+		options.Server.EnablePProf = enablePProf
 	}
 }
 
@@ -137,22 +137,22 @@ var configFilePath string
 
 func init() {
 	Cmd.Flags().StringVarP(&configFilePath, "config", "c", "", "config file path")
-	Cmd.Flags().BoolVarP(&config.SrvCfg.Testnet, "testnet", "t", false, "bitcoin testnet3")
-	Cmd.Flags().StringVarP(&config.SrvCfg.Username, "user", "u", "root", "bitcoin rpc server username")
-	Cmd.Flags().StringVarP(&config.SrvCfg.Password, "password", "P", "root", "bitcoin rpc server password")
-	Cmd.Flags().StringVarP(&config.SrvCfg.RpcListen, "rpc_listen", "l", "", "rpc server listen address. Default `mainnet :8335, testnet :18335`")
-	Cmd.Flags().StringVarP(&config.SrvCfg.RpcConnect, "rpc_connect", "s", "", "the bitcoin backend URL of RPC server to connect to (default http://localhost:8334, testnet: http://localhost:18334)")
-	Cmd.Flags().BoolVarP(&config.SrvCfg.NoApi, "no_api", "", false, "don't start api server")
-	Cmd.Flags().StringVarP(&config.SrvCfg.Mysql.Addr, "mysql_addr", "d", "", "inscription index mysql database addr")
-	Cmd.Flags().StringVarP(&config.SrvCfg.Mysql.User, "mysql_user", "", "root", "inscription index mysql database user")
-	Cmd.Flags().StringVarP(&config.SrvCfg.Mysql.Password, "mysql_pass", "", "root", "inscription index mysql database password")
-	Cmd.Flags().StringVarP(&config.SrvCfg.Mysql.DB, "db", "", "", "inscription index mysql database name")
-	Cmd.Flags().BoolVarP(&config.SrvCfg.EnablePProf, "pprof", "", false, "enable pprof")
-	Cmd.Flags().StringVarP(&config.SrvCfg.IndexSats, "index_sats", "", "", "Track location of all satoshis, true/false")
-	Cmd.Flags().StringVarP(&config.SrvCfg.IndexSpendSats, "index_spend_sats", "", "", "Keep sat index entries of spent outputs, true/false")
+	Cmd.Flags().BoolVarP(&config.SrvCfg.Server.Testnet, "testnet", "t", false, "bitcoin testnet3")
+	Cmd.Flags().StringVarP(&config.SrvCfg.Server.RpcListen, "rpc_listen", "l", "", "rpc server listen address. Default `mainnet :8335, testnet :18335`")
+	Cmd.Flags().StringVarP(&config.SrvCfg.Chain.Url, "chain_url", "s", "", "the bitcoin backend URL of RPC server to connect to (default http://localhost:8334, testnet: http://localhost:18334)")
+	Cmd.Flags().StringVarP(&config.SrvCfg.Chain.Username, "chain_user", "u", "root", "bitcoin rpc server username")
+	Cmd.Flags().StringVarP(&config.SrvCfg.Chain.Password, "chain_password", "P", "root", "bitcoin rpc server password")
+	Cmd.Flags().BoolVarP(&config.SrvCfg.Server.NoApi, "no_api", "", false, "don't start api server")
+	Cmd.Flags().StringVarP(&config.SrvCfg.DB.Mysql.Addr, "mysql_addr", "d", "", "inscription index mysql database addr")
+	Cmd.Flags().StringVarP(&config.SrvCfg.DB.Mysql.User, "mysql_user", "", "root", "inscription index mysql database user")
+	Cmd.Flags().StringVarP(&config.SrvCfg.DB.Mysql.Password, "mysql_pass", "", "root", "inscription index mysql database password")
+	Cmd.Flags().StringVarP(&config.SrvCfg.DB.Mysql.DB, "db", "", "", "inscription index mysql database name")
+	Cmd.Flags().BoolVarP(&config.SrvCfg.Server.EnablePProf, "pprof", "", false, "enable pprof")
+	Cmd.Flags().StringVarP(&config.SrvCfg.Server.IndexSats, "index_sats", "", "", "Track location of all satoshis, true/false")
+	Cmd.Flags().StringVarP(&config.SrvCfg.Server.IndexSpendSats, "index_spend_sats", "", "", "Keep sat index entries of spent outputs, true/false")
 	Cmd.Flags().StringVarP(&config.SrvCfg.Sentry.Dsn, "sentry_dsn", "", "", "sentry dsn")
 	Cmd.Flags().Float64VarP(&config.SrvCfg.Sentry.TracesSampleRate, "sentry_traces_sample_rate", "", 1.0, "sentry traces sample rate")
-	Cmd.Flags().BoolVarP(&config.SrvCfg.Prometheus, "prometheus", "", false, "enable prometheus metrics")
+	Cmd.Flags().BoolVarP(&config.SrvCfg.Server.Prometheus, "prometheus", "", false, "enable prometheus metrics")
 	Cmd.Flags().StringSliceVarP(&config.SrvCfg.Origins, "origins", "", []string{}, "allowed origins for CORS")
 }
 
@@ -172,26 +172,26 @@ func IndexSrv(opts ...SrvOption) error {
 		v(config.SrvCfg)
 	}
 
-	if config.SrvCfg.Mysql.DB == "" {
-		config.SrvCfg.Mysql.DB = constants.DefaultDBName
+	if config.SrvCfg.DB.Mysql.DB == "" {
+		config.SrvCfg.DB.Mysql.DB = constants.DefaultDBName
 	}
-	if config.SrvCfg.Mysql.Addr == "" {
-		config.SrvCfg.Mysql.Addr = "127.0.0.1:3306"
+	if config.SrvCfg.DB.Mysql.Addr == "" {
+		config.SrvCfg.DB.Mysql.Addr = "127.0.0.1:3306"
 	}
-	if config.SrvCfg.Testnet {
+	if config.SrvCfg.Server.Testnet {
 		util.ActiveNet = &netparams.TestNet3Params
-		if config.SrvCfg.RpcListen == "" {
-			config.SrvCfg.RpcListen = testNetRPCListen
+		if config.SrvCfg.Server.RpcListen == "" {
+			config.SrvCfg.Server.RpcListen = testNetRPCListen
 		}
-		if config.SrvCfg.RpcConnect == "" {
-			config.SrvCfg.RpcConnect = testNetRPCConnect
+		if config.SrvCfg.Chain.Url == "" {
+			config.SrvCfg.Chain.Url = testNetRPCConnect
 		}
 	} else {
-		if config.SrvCfg.RpcListen == "" {
-			config.SrvCfg.RpcListen = mainNetRPCListen
+		if config.SrvCfg.Server.RpcListen == "" {
+			config.SrvCfg.Server.RpcListen = mainNetRPCListen
 		}
-		if config.SrvCfg.RpcConnect == "" {
-			config.SrvCfg.RpcConnect = mainNetRPCConnect
+		if config.SrvCfg.Chain.Url == "" {
+			config.SrvCfg.Chain.Url = mainNetRPCConnect
 		}
 	}
 
@@ -219,10 +219,10 @@ func IndexSrv(opts ...SrvOption) error {
 	// The server port and status port for the database are set from the server options.
 	// The tables to auto-migrate in the database are set to the tables from the tables package.
 	db, err := dao.NewDB(
-		dao.WithAddr(config.SrvCfg.Mysql.Addr),
-		dao.WithUser(config.SrvCfg.Mysql.User),
-		dao.WithPassword(config.SrvCfg.Mysql.Password),
-		dao.WithDBName(config.SrvCfg.Mysql.DB),
+		dao.WithAddr(config.SrvCfg.DB.Mysql.Addr),
+		dao.WithUser(config.SrvCfg.DB.Mysql.User),
+		dao.WithPassword(config.SrvCfg.DB.Mysql.Password),
+		dao.WithDBName(config.SrvCfg.DB.Mysql.DB),
 		dao.WithAutoMigrateTables(tables.Tables...),
 	)
 	if err != nil {
@@ -232,9 +232,9 @@ func IndexSrv(opts ...SrvOption) error {
 	// Create a new RPC client using the server options.
 	// The client is configured with the RPC connect, username, and password from the server options.
 	cli, err := rpcclient.NewClient(
-		rpcclient.WithClientHost(config.SrvCfg.RpcConnect),
-		rpcclient.WithClientUser(config.SrvCfg.Username),
-		rpcclient.WithClientPassword(config.SrvCfg.Password),
+		rpcclient.WithClientHost(config.SrvCfg.Chain.Url),
+		rpcclient.WithClientUser(config.SrvCfg.Chain.Username),
+		rpcclient.WithClientPassword(config.SrvCfg.Chain.Password),
 	)
 	if err != nil {
 		return err
@@ -244,9 +244,9 @@ func IndexSrv(opts ...SrvOption) error {
 	// The batch client is configured with the RPC connect, username, and password from the server options.
 	// The batch client is also set to operate in batch mode.
 	batchCli, err := rpcclient.NewClient(
-		rpcclient.WithClientHost(config.SrvCfg.RpcConnect),
-		rpcclient.WithClientUser(config.SrvCfg.Username),
-		rpcclient.WithClientPassword(config.SrvCfg.Password),
+		rpcclient.WithClientHost(config.SrvCfg.Chain.Url),
+		rpcclient.WithClientUser(config.SrvCfg.Chain.Username),
+		rpcclient.WithClientPassword(config.SrvCfg.Chain.Password),
 		rpcclient.WithClientBatch(true),
 	)
 	if err != nil {
@@ -261,8 +261,8 @@ func IndexSrv(opts ...SrvOption) error {
 		index.WithDB(db),
 		index.WithClient(cli),
 		index.WithBatchClient(batchCli),
-		index.WithIndexSats(config.SrvCfg.IndexSats),
-		index.WithIndexSpendSats(config.SrvCfg.IndexSpendSats),
+		index.WithIndexSats(config.SrvCfg.Server.IndexSats),
+		index.WithIndexSpendSats(config.SrvCfg.Server.IndexSpendSats),
 		index.WithTidbSessionMemLimit(constants.TidbSessionMemLimit),
 	)
 	// Start the indexer.
@@ -273,14 +273,14 @@ func IndexSrv(opts ...SrvOption) error {
 	})
 
 	// If the no API field of the server options is false, create and run a new handler.
-	if !config.SrvCfg.NoApi {
+	if !config.SrvCfg.Server.NoApi {
 		// Create a new handler using the database, the client, the RPC listen, the testnet,
 		//and to enable pprof from the server options.
 		h, err := handle.New(
 			handle.WithDB(db),
 			handle.WithClient(cli),
-			handle.WithAddr(config.SrvCfg.RpcListen),
-			handle.WithTestNet(config.SrvCfg.Testnet),
+			handle.WithAddr(config.SrvCfg.Server.RpcListen),
+			handle.WithTestNet(config.SrvCfg.Server.Testnet),
 		)
 		if err != nil {
 			return err

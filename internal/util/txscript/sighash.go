@@ -617,25 +617,22 @@ func CalcTaprootSignatureHash(sigHashes *TxSigHashes, hType SigHashType,
 	)
 }
 
-// CalcTaprootSignatureHash is similar to CalcTaprootSignatureHash but for
+// CalcTapScriptSignatureHash is similar to CalcTaprootSignatureHash but for
 // _tapscript_ spends instead. A proper TapLeaf instance (the script leaf being
 // signed) must be passed in. The functional options can be used to specify an
 // annex if the signature was bound to that context.
-//
 // NOTE: This function is able to compute the sighash of scripts that contain a
 // code separator if the caller passes in an instance of
 // WithBaseTapscriptVersion with the valid position.
-func CalcTapscriptSignaturehash(sigHashes *TxSigHashes, hType SigHashType,
+func CalcTapScriptSignatureHash(sigHashes *TxSigHashes, hType SigHashType,
 	tx *wire.MsgTx, idx int, prevOutFetcher PrevOutputFetcher,
 	tapLeaf TapLeaf,
 	sigHashOpts ...TaprootSigHashOption) ([]byte, error) {
 
 	tapLeafHash := tapLeaf.TapHash()
 
-	var opts []TaprootSigHashOption
-	opts = append(
-		opts, WithBaseTapscriptVersion(blankCodeSepValue, tapLeafHash[:]),
-	)
+	opts := []TaprootSigHashOption{WithBaseTapscriptVersion(blankCodeSepValue, tapLeafHash[:])}
+
 	opts = append(opts, sigHashOpts...)
 
 	return calcTaprootSignatureHashRaw(

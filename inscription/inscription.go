@@ -17,6 +17,7 @@ import (
 	"github.com/btcsuite/btcwallet/waddrmgr"
 	secp "github.com/decred/dcrd/dcrec/secp256k1/v4"
 	"github.com/go-playground/validator/v10"
+	"github.com/gogf/gf/v2/util/gconv"
 	"github.com/inscription-c/cins/btcd/rpcclient"
 	"github.com/inscription-c/cins/constants"
 	"github.com/inscription-c/cins/inscription/index"
@@ -406,9 +407,27 @@ func (i *Inscription) rawTx(tx *wire.MsgTx, noWitness ...bool) string {
 // commit transaction. It returns an error if there is an error in any of the steps.
 func (i *Inscription) CreateInscriptionTx() error {
 	// get fee rate
-	feeRate, err := i.Wallet().EstimateFee(10)
+	backendVersion, err := i.Wallet().BackendVersion()
 	if err != nil {
 		return err
+	}
+
+	var feeRate float64
+	if backendVersion == rpcclient.Btcd {
+		feeRate, err = i.Wallet().EstimateFee(10)
+		if err != nil {
+			return err
+		}
+	} else {
+		var resp *btcjson.EstimateSmartFeeResult
+		resp, err = i.Wallet().EstimateSmartFee(10, &btcjson.EstimateModeConservative)
+		if err != nil {
+			return err
+		}
+		if len(resp.Errors) > 0 {
+			return errors.New(gconv.String(resp.Errors))
+		}
+		feeRate = *resp.FeeRate
 	}
 	i.feeRate = int64(index.AmountToSat(feeRate))
 
@@ -690,7 +709,7 @@ func (i *Inscription) SignRevealTx() error {
 	sigHashes := txscript.NewTxSigHashes(i.revealTx, prevFetcher)
 
 	// It calculates the signature hash for the reveal transaction.
-	signHash, err := txscript.CalcTapscriptSignaturehash(sigHashes, txscript.SigHashDefault, i.revealTx, 0, prevFetcher, i.tapLeafNode)
+	signHash, err := txscript.CalcTapScriptSignatureHash(sigHashes, txscript.SigHashDefault, i.revealTx, 0, prevFetcher, i.tapLeafNode)
 	if err != nil {
 		return err
 	}
