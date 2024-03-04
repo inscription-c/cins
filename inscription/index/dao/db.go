@@ -3,20 +3,15 @@ package dao
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"github.com/btcsuite/btclog"
 	"github.com/go-sql-driver/mysql"
 	gormMysqlDriver "gorm.io/driver/mysql"
 	"gorm.io/gorm"
 	"gorm.io/gorm/logger"
-	"net"
-	"os"
-	"syscall"
 	"time"
 
 	inscLog "github.com/inscription-c/cins/inscription/log"
-	_ "github.com/pingcap/tidb/pkg/extension/_import"
 )
 
 // DB is a struct that embeds gorm.DB to provide additional database functionality.
@@ -126,50 +121,10 @@ func NewDB(opts ...DBOption) (*DB, error) {
 	}
 
 	conn := "%s:%s@tcp(%s)/%s?charset=utf8mb4&parseTime=True&loc=Local"
-	dsn := fmt.Sprintf(conn, options.user, options.password, options.addr, "")
-
-	var err error
-	var db *gorm.DB
-
-	if options.embedDB {
-		go TIDB(options)
-
-		timeout := time.After(time.Second * 30)
-		ticker := time.NewTicker(time.Second)
-		defer ticker.Stop()
-		for range ticker.C {
-			select {
-			case <-timeout:
-				return nil, fmt.Errorf("gorm open timeout")
-			default:
-				db, err = gorm.Open(gormMysqlDriver.Open(dsn), &gorm.Config{Logger: logger.Discard})
-				if err != nil {
-					var opErr *net.OpError
-					if errors.As(err, &opErr) {
-						var syscallErr *os.SyscallError
-						if errors.As(opErr.Err, &syscallErr) &&
-							errors.Is(syscallErr.Err, syscall.ECONNREFUSED) {
-							continue
-						}
-					}
-					return nil, err
-				}
-			}
-			break
-		}
-
-		db.Exec(fmt.Sprintf("CREATE DATABASE IF NOT EXISTS %s;", options.dbName))
-		dsn = fmt.Sprintf(conn, options.user, options.password, options.addr, options.dbName)
-		db, err = gorm.Open(gormMysqlDriver.Open(dsn), &gorm.Config{Logger: gormLog})
-		if err != nil {
-			return nil, fmt.Errorf("gorm open :%v", err)
-		}
-	} else {
-		dsn = fmt.Sprintf(conn, options.user, options.password, options.addr, options.dbName)
-		db, err = gorm.Open(gormMysqlDriver.Open(dsn), &gorm.Config{Logger: gormLog})
-		if err != nil {
-			return nil, fmt.Errorf("gorm open :%v", err)
-		}
+	dsn := fmt.Sprintf(conn, options.user, options.password, options.addr, options.dbName)
+	db, err := gorm.Open(gormMysqlDriver.Open(dsn), &gorm.Config{Logger: gormLog})
+	if err != nil {
+		return nil, fmt.Errorf("gorm open :%v", err)
 	}
 	if err := db.AutoMigrate(options.autoMigrateTables...); err != nil {
 		return nil, err
