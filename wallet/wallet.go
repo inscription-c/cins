@@ -10,9 +10,9 @@ import (
 	"github.com/inscription-c/cins/btcd/rpcclient"
 	"github.com/inscription-c/cins/constants"
 	log2 "github.com/inscription-c/cins/inscription/log"
-	"github.com/inscription-c/cins/internal/signal"
-	"github.com/inscription-c/cins/internal/util"
-	"github.com/inscription-c/cins/internal/wallet/chain"
+	"github.com/inscription-c/cins/pkg/signal"
+	"github.com/inscription-c/cins/pkg/util"
+	"github.com/inscription-c/cins/pkg/wallet/chain"
 	"github.com/inscription-c/cins/wallet/log"
 	"github.com/spf13/cobra"
 	"net"
@@ -57,7 +57,7 @@ func init() {
 	Cmd.Flags().StringVarP(&Options.Password, "chain_password", "P", "root", "rpc server password")
 	Cmd.Flags().StringVarP(&Options.WalletPass, "wallet_pass", "w", "root", "wallet password")
 	Cmd.Flags().BoolVarP(&Options.Testnet, "testnet", "t", false, "bitcoin testnet3")
-	if err := Cmd.MarkFlagRequired("rpc_connect"); err != nil {
+	if err := Cmd.MarkFlagRequired("chain_url"); err != nil {
 		fmt.Println(err)
 		os.Exit(1)
 	}

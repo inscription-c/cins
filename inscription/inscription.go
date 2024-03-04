@@ -24,9 +24,9 @@ import (
 	"github.com/inscription-c/cins/inscription/index/model"
 	"github.com/inscription-c/cins/inscription/index/tables"
 	"github.com/inscription-c/cins/inscription/log"
-	"github.com/inscription-c/cins/internal/indexer"
-	"github.com/inscription-c/cins/internal/util"
-	"github.com/inscription-c/cins/internal/util/txscript"
+	"github.com/inscription-c/cins/pkg/indexer"
+	"github.com/inscription-c/cins/pkg/util"
+	"github.com/inscription-c/cins/pkg/util/txscript"
 	"github.com/shopspring/decimal"
 	"github.com/ugorji/go/codec"
 	"io"
@@ -84,9 +84,6 @@ type Inscription struct {
 	// revealScript is the reveal script for the transaction.
 	revealScript []byte
 
-	// tapLeafNode is the tap leaf node for the transaction.
-	tapLeafNode txscript.TapLeaf
-
 	// controlBlock is the control block for the transaction.
 	controlBlock *txscript2.ControlBlock
 
@@ -139,7 +136,8 @@ type options struct {
 	// jsonMetadata is the JSON metadata for the inscription.
 	jsonMetadata string
 
-	indexer *indexer.Indexer
+	// indexer is the indexer for the inscription.
+	indexer indexer.IndexerInterface
 }
 
 // Option is a function type that takes a pointer to an options' struct.
@@ -200,7 +198,7 @@ func WithWalletClient(cli *rpcclient.Client) func(*options) {
 	}
 }
 
-func WithIndexer(indexer *indexer.Indexer) func(*options) {
+func WithIndexer(indexer indexer.IndexerInterface) func(*options) {
 	return func(options *options) {
 		options.indexer = indexer
 	}
@@ -213,6 +211,18 @@ func WithIndexer(indexer *indexer.Indexer) func(*options) {
 // content encoding, and sets the body of the Inscription. It returns a pointer to the
 // created Inscription and any error that occurred during the process.
 func NewFromPath(path string, inputOpts ...Option) (*Inscription, error) {
+	media, err := util.ContentTypeForPath(path)
+	if err != nil {
+		return nil, err
+	}
+	body, err := os.ReadFile(path)
+	if err != nil {
+		return nil, err
+	}
+	return NewFromData(body, media, inputOpts...)
+}
+
+func NewFromData(body []byte, media *constants.Media, inputOpts ...Option) (*Inscription, error) {
 	// Create a new options struct and apply all the provided options to it
 	opts := &options{}
 	for _, option := range inputOpts {
@@ -266,19 +276,8 @@ func NewFromPath(path string, inputOpts ...Option) (*Inscription, error) {
 		return nil, err
 	}
 
-	// Determine the content type of the file at the provided path
-	media, err := util.ContentTypeForPath(path)
-	if err != nil {
-		return nil, err
-	}
 	// Set the content type of the Inscription
 	inscription.Header.ContentType = media.ContentType
-
-	// Read the file at the provided path
-	body, err := os.ReadFile(path)
-	if err != nil {
-		return nil, err
-	}
 
 	// Initialize the content encoding as an empty string
 	contentEncoding := ""
@@ -406,7 +405,6 @@ func (i *Inscription) rawTx(tx *wire.MsgTx, noWitness ...bool) string {
 // generates a temporary private key, builds the reveal transaction, and builds the
 // commit transaction. It returns an error if there is an error in any of the steps.
 func (i *Inscription) CreateInscriptionTx() error {
-	// get fee rate
 	backendVersion, err := i.Wallet().BackendVersion()
 	if err != nil {
 		return err
@@ -490,7 +488,7 @@ func (i *Inscription) BuildCommitTx() error {
 	// output end
 
 	// change calculate
-	change := inTotal - outTotal - calculateTxFee(commitTx, i.feeRate)
+	change := inTotal - outTotal - CalculateTxFee(commitTx, i.feeRate)
 	if change < 0 {
 		return InsufficientBalanceError
 	}
@@ -505,7 +503,7 @@ func (i *Inscription) BuildCommitTx() error {
 		return err
 	}
 	commitTx.AddTxOut(wire.NewTxOut(change, changeScript))
-	fee := calculateTxFee(commitTx, i.feeRate)
+	fee := CalculateTxFee(commitTx, i.feeRate)
 	i.totalFee += fee
 	change = inTotal - outTotal - fee
 	commitTx.TxOut[len(commitTx.TxOut)-1].Value = change
@@ -527,28 +525,27 @@ func (i *Inscription) BuildCommitTx() error {
 // there is an error in any of the steps.
 func (i *Inscription) BuildRevealTx() error {
 	// Generate a temporary key
-	internalKey := i.priKey.PubKey()
-	i.internalKey = internalKey
+	i.internalKey = i.priKey.PubKey()
 
 	// Start building the reveal script
-	// Append check sign op to the script
-	i.scriptBuilder = txscript.NewScriptBuilder()
-	i.scriptBuilder.AddData(schnorr.SerializePubKey(internalKey))
-	i.scriptBuilder.AddOp(txscript.OP_CHECKSIG)
 	// Append the inscription content to the script builder
-	if err := i.AppendInscriptionContentToBuilder(); err != nil {
-		return err
-	}
-	revealScript, err := i.scriptBuilder.Script()
+	revealScript, err := InscriptionToScript(
+		i.internalKey,
+		i.Header,
+		i.Body,
+	)
 	if err != nil {
 		return err
 	}
 	i.revealScript = revealScript
 
 	// Generate the script address
-	if err := i.RevealScriptAddress(); err != nil {
+	controlBlock, taprootAddress, err := RevealScriptAddress(i.internalKey, revealScript)
+	if err != nil {
 		return err
 	}
+	i.controlBlock = controlBlock
+	i.revealTxAddress = taprootAddress
 	log.Log.Info("taprootAddress", i.revealTxAddress.String())
 
 	// Create the witness for the transaction
@@ -584,7 +581,7 @@ func (i *Inscription) BuildRevealTx() error {
 	i.revealTx = revealTx
 	revealTx.AddTxIn(revealTxIn)
 	revealTx.AddTxOut(revealTxOutput)
-	i.revealFee = calculateTxFee(revealTx, i.feeRate)
+	i.revealFee = CalculateTxFee(revealTx, i.feeRate)
 	i.totalFee += i.revealFee
 
 	// Clear the input scripts for the transaction
@@ -709,7 +706,7 @@ func (i *Inscription) SignRevealTx() error {
 	sigHashes := txscript.NewTxSigHashes(i.revealTx, prevFetcher)
 
 	// It calculates the signature hash for the reveal transaction.
-	signHash, err := txscript.CalcTapScriptSignatureHash(sigHashes, txscript.SigHashDefault, i.revealTx, 0, prevFetcher, i.tapLeafNode)
+	signHash, err := txscript.CalcTapScriptSignatureHash(sigHashes, txscript.SigHashDefault, i.revealTx, 0, prevFetcher, txscript.NewBaseTapLeaf(i.revealScript))
 	if err != nil {
 		return err
 	}
@@ -726,66 +723,78 @@ func (i *Inscription) SignRevealTx() error {
 	return nil
 }
 
-// AppendInscriptionContentToBuilder is a method of the Inscription struct. It is
+// InscriptionToScript is a method of the Inscription struct. It is
 // responsible for appending the reveal script to the script builder. It adds the
 // protocol ID, content type, metadata, content encoding, and body to the script builder.
 // It returns an error if there is an error in any of the steps.
-func (i *Inscription) AppendInscriptionContentToBuilder() error {
+func InscriptionToScript(
+	internalKey *btcec.PublicKey,
+	header Header,
+	body util.Protocol,
+) ([]byte, error) {
 	// This block of code is part of the appendRevealScriptToBuilder method of the Inscription struct.
 	// It is responsible for appending the reveal script to the script builder.
+	// Append check sign op to the script
+	scriptBuilder := txscript.NewScriptBuilder()
+	scriptBuilder.AddData(schnorr.SerializePubKey(internalKey))
+	scriptBuilder.AddOp(txscript.OP_CHECKSIG)
 
 	// Start building the reveal script
 	// Add the initial operations and the protocol ID to the script builder
-	i.scriptBuilder.
+	scriptBuilder.
 		AddOp(txscript.OP_FALSE).
 		AddOp(txscript.OP_IF).
 		AddData([]byte(constants.ProtocolId)).
 		AddData([]byte(constants.CInsDescription)).
-		AddData(i.Header.CInsDescription.Data()).
+		AddData(header.CInsDescription.Data()).
 		AddOp(txscript.OP_1).
-		AddData(i.Header.ContentType.Bytes())
+		AddData(header.ContentType.Bytes())
 
 	// If metadata exists, add it to the script builder
 	// The metadata is divided into chunks of 520 bytes and each chunk is added to the script builder
-	if i.Header.Metadata.Len() > 0 {
+	if header.Metadata.Len() > 0 {
 		for {
-			data, err := i.Header.Metadata.Chunks(520)
+			data, err := header.Metadata.Chunks(520)
 			if err != nil && err != io.EOF {
-				return err
+				return nil, err
 			}
 			if err == io.EOF {
 				break
 			}
-			i.scriptBuilder.AddOp(txscript.OP_5)
-			i.scriptBuilder.AddData(data)
+			scriptBuilder.AddOp(txscript.OP_5)
+			scriptBuilder.AddData(data)
 		}
 	}
 
 	// If content encoding exists, add it to the script builder
-	if i.Header.ContentEncoding != "" {
-		i.scriptBuilder.AddOp(txscript.OP_9)
-		i.scriptBuilder.AddData([]byte(i.Header.ContentEncoding))
+	if header.ContentEncoding != "" {
+		scriptBuilder.AddOp(txscript.OP_9)
+		scriptBuilder.AddData([]byte(header.ContentEncoding))
 	}
 
 	// If body exists, add it to the script builder
 	// The body is divided into chunks of 520 bytes and each chunk is added to the script builder
-	if i.Body.Len() > 0 {
-		i.scriptBuilder.AddOp(txscript.OP_0)
+	if body.Len() > 0 {
+		scriptBuilder.AddOp(txscript.OP_0)
 		for {
-			body, err := i.Body.Chunks(520)
+			d, err := body.Chunks(520)
 			if err != nil && err != io.EOF {
-				return err
+				return nil, err
 			}
 			if err == io.EOF {
 				break
 			}
-			i.scriptBuilder.AddData(body)
+			scriptBuilder.AddData(d)
 		}
 	}
 
 	// Add the end if operation to the script builder
-	i.scriptBuilder.AddOp(txscript.OP_ENDIF)
-	return nil
+	scriptBuilder.AddOp(txscript.OP_ENDIF)
+	revealScript, err := scriptBuilder.Script()
+	if err != nil {
+		return nil, err
+	}
+	return revealScript, nil
 }
 
 // RevealScriptAddress is a method of the Inscription struct.
@@ -793,32 +802,31 @@ func (i *Inscription) AppendInscriptionContentToBuilder() error {
 // It creates a control block, a leaf node, a tap script, and an output key.
 // It then generates the taproot address from the output key.
 // It returns an error if there is an error in any of the steps.
-func (i *Inscription) RevealScriptAddress() error {
+func RevealScriptAddress(internalKey *btcec.PublicKey, revealScript []byte) (
+	controlBlock *txscript2.ControlBlock,
+	taprootAddress *btcutil.AddressTaproot,
+	err error) {
 	// Create a control block
-	controlBlock := &txscript2.ControlBlock{
-		InternalKey: i.internalKey,
+	controlBlock = &txscript2.ControlBlock{
+		InternalKey: internalKey,
 		LeafVersion: txscript2.BaseLeafVersion,
 	}
-	i.controlBlock = controlBlock
-
-	// Create a leaf node
-	leafNode := txscript.NewBaseTapLeaf(i.revealScript)
-	i.tapLeafNode = leafNode
 
 	// Create a tap script
 	tapScript := waddrmgr.Tapscript{
 		Type: waddrmgr.TapscriptTypeFullTree,
 		Leaves: []txscript2.TapLeaf{{
 			LeafVersion: txscript2.BaseLeafVersion,
-			Script:      i.revealScript,
+			Script:      revealScript,
 		}},
 		ControlBlock: controlBlock,
 	}
 
 	// Generate the output key
-	outputKey, err := tapScript.TaprootKey()
+	var outputKey *btcec.PublicKey
+	outputKey, err = tapScript.TaprootKey()
 	if err != nil {
-		return err
+		return
 	}
 
 	// Determine if the y-coordinate of the output key is odd
@@ -826,9 +834,8 @@ func (i *Inscription) RevealScriptAddress() error {
 	controlBlock.OutputKeyYIsOdd = yIsOdd
 
 	// Generate the taproot address
-	taprootAddress, err := btcutil.NewAddressTaproot(schnorr.SerializePubKey(outputKey), util.ActiveNet.Params)
-	i.revealTxAddress = taprootAddress
-	return nil
+	taprootAddress, err = btcutil.NewAddressTaproot(schnorr.SerializePubKey(outputKey), util.ActiveNet.Params)
+	return
 }
 
 // getUtxo is a method of the Inscription struct.
@@ -863,12 +870,12 @@ func (i *Inscription) Data() []byte {
 	return i.body
 }
 
-// calculateTxFee is a function that calculates the transaction fee
+// CalculateTxFee is a function that calculates the transaction fee
 // for a given transaction and fee rate. It first calculates the weight
 // of the transaction, then calculates the fee based on the weight and fee rate.
 // If the calculated fee is less than the dust limit, it sets the fee to the dust limit.
 // It returns the calculated fee.
-func calculateTxFee(tx *wire.MsgTx, feeRate int64) int64 {
+func CalculateTxFee(tx *wire.MsgTx, feeRate int64) int64 {
 	weight := tx.SerializeSizeStripped()*3 + tx.SerializeSize()
 	fee := decimal.NewFromInt(int64(weight)).
 		Div(decimal.NewFromInt(4)).

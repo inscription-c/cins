@@ -447,7 +447,6 @@ func loadConfig() (*Config, []string, error) {
 		AddrIndex:            defaultAddrIndex,
 		DisableTLS:           true,
 		RPCListeners:         []string{},
-		MiningAddrs:          options.miningAddrs,
 	}
 	if options.rpcListen != "" {
 		cfg.RPCListeners = append(cfg.RPCListeners, options.rpcListen)

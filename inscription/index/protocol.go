@@ -5,7 +5,7 @@ import (
 	"github.com/inscription-c/cins/constants"
 	"github.com/inscription-c/cins/inscription/index/dao"
 	"github.com/inscription-c/cins/inscription/index/tables"
-	"github.com/inscription-c/cins/internal/util"
+	"github.com/inscription-c/cins/pkg/util"
 )
 
 type Protocol struct {

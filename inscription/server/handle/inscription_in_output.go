@@ -4,7 +4,7 @@ import (
 	"github.com/btcsuite/btcd/txscript"
 	"github.com/gin-gonic/gin"
 	"github.com/inscription-c/cins/inscription/index/model"
-	"github.com/inscription-c/cins/internal/util"
+	"github.com/inscription-c/cins/pkg/util"
 	"net/http"
 )
 

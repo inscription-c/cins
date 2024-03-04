@@ -4,7 +4,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/gogf/gf/v2/util/gconv"
 	"github.com/inscription-c/cins/constants"
-	"github.com/inscription-c/cins/internal/util"
+	"github.com/inscription-c/cins/pkg/util"
 	"github.com/shopspring/decimal"
 	"golang.org/x/sync/errgroup"
 	"net/http"
