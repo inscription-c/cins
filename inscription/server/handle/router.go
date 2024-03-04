@@ -10,10 +10,10 @@ import (
 
 func (h *Handler) InitRouter() {
 	h.Engine().Use(gin.Recovery())
-	if config.SrvCfg.EnablePProf {
+	if config.SrvCfg.Server.EnablePProf {
 		pprof.Register(h.Engine())
 	}
-	if config.SrvCfg.Prometheus {
+	if config.SrvCfg.Server.Prometheus {
 		p := middlewares.NewPrometheus("gin")
 		p.Use(h.Engine())
 	}

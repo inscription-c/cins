@@ -9,7 +9,7 @@ import (
 	"github.com/inscription-c/cins/btcd/rpcclient"
 	"github.com/inscription-c/cins/inscription/index/dao"
 	"github.com/inscription-c/cins/inscription/log"
-	"github.com/inscription-c/cins/internal/signal"
+	"github.com/inscription-c/cins/pkg/signal"
 	"net/http"
 	"os"
 )

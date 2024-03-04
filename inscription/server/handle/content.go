@@ -6,7 +6,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/inscription-c/cins/constants"
 	"github.com/inscription-c/cins/inscription/index/tables"
-	"github.com/inscription-c/cins/internal/util"
+	"github.com/inscription-c/cins/pkg/util"
 	"github.com/kataras/iris/v12/context"
 	"net/http"
 )

@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"github.com/btcsuite/btcd/btcutil"
 	"github.com/inscription-c/cins/constants"
-	"github.com/inscription-c/cins/internal/signal"
+	"github.com/inscription-c/cins/pkg/signal"
 	"github.com/opentracing/opentracing-go"
 	"github.com/pingcap/failpoint"
 	"github.com/pingcap/log"

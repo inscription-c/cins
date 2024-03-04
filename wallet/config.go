@@ -6,7 +6,7 @@ import (
 	"github.com/inscription-c/cins/constants"
 	"github.com/inscription-c/cins/internal/cfgutil"
 	"github.com/inscription-c/cins/internal/legacy/keystore"
-	"github.com/inscription-c/cins/internal/util"
+	"github.com/inscription-c/cins/pkg/util"
 	"github.com/inscription-c/cins/wallet/log"
 	"net"
 	"os"
@@ -36,7 +36,6 @@ const (
 
 var (
 	defaultAppDataDir  = btcutil.AppDataDir(filepath.Join(constants.AppName, "wallet"), false)
-	btcdDefaultCAFile  = filepath.Join(btcutil.AppDataDir(filepath.Join(constants.AppName, "btcd"), false), "rpc.cert")
 	defaultConfigFile  = filepath.Join(defaultAppDataDir, defaultConfigFilename)
 	defaultRPCKeyFile  = filepath.Join(defaultAppDataDir, "rpc.key")
 	defaultRPCCertFile = filepath.Join(defaultAppDataDir, "rpc.cert")
@@ -288,10 +287,10 @@ func loadConfig() (*Config, []string, error) {
 	cfg.Password = Options.Password
 	cfg.WalletPass = strings.TrimSpace(Options.WalletPass)
 	cfg.TestNet3 = Options.Testnet
-	cfg.RPCConnect = Options.RpcConnect
+	cfg.RPCConnect = Options.ChainUrl
 
 	if cfg.RPCConnect != "" {
-		rpcConnect, err := cfgutil.NormalizeAddress(Options.RpcConnect, util.ActiveNet.RPCClientPort)
+		rpcConnect, err := cfgutil.NormalizeAddress(Options.ChainUrl, util.ActiveNet.RPCClientPort)
 		if err != nil {
 			return nil, nil, err
 		}

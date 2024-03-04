@@ -8,7 +8,7 @@ import (
 	"github.com/inscription-c/cins/constants"
 	"github.com/inscription-c/cins/inscription/index/model"
 	"github.com/inscription-c/cins/inscription/index/tables"
-	"github.com/inscription-c/cins/internal/util"
+	"github.com/inscription-c/cins/pkg/util"
 )
 
 // Witness is a struct that represents a witness in a transaction.

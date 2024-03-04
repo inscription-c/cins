@@ -8,7 +8,7 @@ import (
 	"github.com/inscription-c/cins/inscription/index"
 	"github.com/inscription-c/cins/inscription/index/model"
 	"github.com/inscription-c/cins/inscription/index/tables"
-	"github.com/inscription-c/cins/internal/util"
+	"github.com/inscription-c/cins/pkg/util"
 	"gorm.io/gorm"
 	"net/http"
 	"strconv"

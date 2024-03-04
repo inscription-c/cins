@@ -11,14 +11,6 @@ type Indexer struct {
 	indexerUrl string
 }
 
-type OutpointResp struct {
-	Address      string   `json:"address"`
-	Inscriptions []string `json:"inscriptions"`
-	ScriptPubKey string   `json:"script_pubkey"`
-	Transaction  string   `json:"transaction"`
-	Value        int64    `json:"value"`
-}
-
 func NewIndexer(indexerUrl string) *Indexer {
 	return &Indexer{indexerUrl: indexerUrl}
 }

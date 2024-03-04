@@ -10,9 +10,9 @@ import (
 	"github.com/inscription-c/cins/constants"
 	"github.com/inscription-c/cins/inscription/index/tables"
 	"github.com/inscription-c/cins/inscription/log"
-	"github.com/inscription-c/cins/internal/indexer"
-	"github.com/inscription-c/cins/internal/signal"
-	"github.com/inscription-c/cins/internal/util"
+	"github.com/inscription-c/cins/pkg/indexer"
+	"github.com/inscription-c/cins/pkg/signal"
+	"github.com/inscription-c/cins/pkg/util"
 	"github.com/spf13/cobra"
 	"os"
 	"path/filepath"
@@ -147,11 +147,9 @@ func inscribe() error {
 		return err
 	}
 
-	index := indexer.NewIndexer(indexerUrl)
-
 	// Create a new inscription from the file path
 	inscription, err := NewFromPath(inscriptionsFilePath,
-		WithIndexer(index),
+		WithIndexer(indexer.NewIndexer(indexerUrl)),
 		WithWalletClient(walletCli),
 		WithPostage(postage),
 		WithCInsDescription(cInsDescription),

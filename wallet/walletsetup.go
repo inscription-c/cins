@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"github.com/btcsuite/btcd/btcutil/hdkeychain"
 	"github.com/inscription-c/cins/internal/legacy/keystore"
-	"github.com/inscription-c/cins/internal/util"
+	"github.com/inscription-c/cins/pkg/util"
 	"os"
 	"path/filepath"
 	"time"
