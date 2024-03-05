@@ -752,7 +752,7 @@ func InscriptionToScript(
 
 	// If metadata exists, add it to the script builder
 	// The metadata is divided into chunks of 520 bytes and each chunk is added to the script builder
-	if header.Metadata.Len() > 0 {
+	if header.Metadata != nil && header.Metadata.Len() > 0 {
 		for {
 			data, err := header.Metadata.Chunks(520)
 			if err != nil && err != io.EOF {
