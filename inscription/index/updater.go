@@ -3,6 +3,7 @@ package index
 import (
 	"bytes"
 	"errors"
+	"fmt"
 	"github.com/btcsuite/btcd/blockchain"
 	"github.com/btcsuite/btcd/wire"
 	"github.com/gogf/gf/v2/util/gconv"
@@ -463,7 +464,11 @@ func (u *InscriptionUpdater) indexEnvelopers(
 		if flotsam.Origin.New == nil {
 			continue
 		}
-		flotsam.Origin.New.Fee = (totalInputValue - totalOutputValue) / int64(idCounter)
+		totalFee := totalInputValue - totalOutputValue
+		if totalFee <= 0 {
+			return fmt.Errorf("totalFee <= 0, %d", totalFee)
+		}
+		flotsam.Origin.New.Fee = totalFee / int64(idCounter)
 	}
 
 	// Check if the transaction is a coinbase transaction.

@@ -40,6 +40,17 @@ func (b *CBRC20) Name() string {
 	return constants.ProtocolCBRC20
 }
 
+func (b *CBRC20) Len() int {
+	return len(b.Data())
+}
+
+func (b *CBRC20) Data() []byte {
+	if b.data == nil {
+		b.data, _ = json.Marshal(b)
+	}
+	return b.data
+}
+
 // Check is a method of the BRC20C struct.
 // It checks the BRC20C protocol.
 // It unmarshals the data into a new BRC20C struct and checks the protocol name, tick name, and operation.
