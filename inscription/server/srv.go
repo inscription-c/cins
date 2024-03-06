@@ -136,7 +136,7 @@ var Cmd = &cobra.Command{
 var configFilePath string
 
 func init() {
-	Cmd.Flags().StringVarP(&configFilePath, "config", "c", "", "config file path")
+	Cmd.Flags().StringVarP(&configFilePath, "config", "c", "./config/config.yaml", "config file path")
 	Cmd.Flags().BoolVarP(&config.SrvCfg.Server.Testnet, "testnet", "t", false, "bitcoin testnet3")
 	Cmd.Flags().StringVarP(&config.SrvCfg.Server.RpcListen, "rpc_listen", "l", "", "rpc server listen address. Default `mainnet :8335, testnet :18335`")
 	Cmd.Flags().StringVarP(&config.SrvCfg.Chain.Url, "chain_url", "s", "", "the bitcoin backend URL of RPC server to connect to (default http://localhost:8334, testnet: http://localhost:18334)")
