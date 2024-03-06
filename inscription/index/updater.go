@@ -346,7 +346,7 @@ func (u *InscriptionUpdater) indexEnvelopers(
 		if ok {
 			u.valueCache.Delete(preOutpoint)
 		} else {
-			if _, ok := needDelOutpoints[preOutpoint]; !ok {
+			if currentInputValue, ok = needDelOutpoints[preOutpoint]; !ok {
 				select {
 				case <-signal.InterruptChannel:
 					return signal.ErrInterrupted
@@ -506,6 +506,7 @@ func (u *InscriptionUpdater) indexEnvelopers(
 	if err != nil {
 		return err
 	}
+
 	for index, txOut := range tx.TxOut {
 		end := outputValue + uint64(txOut.Value)
 
@@ -805,7 +806,7 @@ func (u *InscriptionUpdater) calculateSat(
 }
 
 // fetchOutputValues fetches the output values of a transaction.
-func (u *InscriptionUpdater) fetchOutputValues(tx *wire.MsgTx, maxCurrentNum int) (valueCh chan int64, errCh chan error, needDelOutpoints map[string]struct{}, err error) {
+func (u *InscriptionUpdater) fetchOutputValues(tx *wire.MsgTx, maxCurrentNum int) (valueCh chan int64, errCh chan error, needDelOutpoints map[string]int64, err error) {
 	// Calculate the current number of outpoints to fetch.
 	currentNum := len(tx.TxIn)/2 + 2
 	if currentNum > maxCurrentNum {
@@ -822,7 +823,7 @@ func (u *InscriptionUpdater) fetchOutputValues(tx *wire.MsgTx, maxCurrentNum int
 	needFetchOutpointsCh := make(chan *wire.OutPoint, currentNum)
 
 	needDelOutpointsLock := &sync.Mutex{}
-	needDelOutpoints = make(map[string]struct{})
+	needDelOutpoints = make(map[string]int64)
 
 	errWg := &errgroup.Group{}
 	for inputIndex := range tx.TxIn {
@@ -848,12 +849,13 @@ func (u *InscriptionUpdater) fetchOutputValues(tx *wire.MsgTx, maxCurrentNum int
 					return nil
 				}
 				// Try to get the value of the input from the database.
-				if _, err := u.idx.DB().GetValueByOutpoint(txIn.PreviousOutPoint.String()); err != nil && !errors.Is(err, gorm.ErrRecordNotFound) {
+				value, err := u.idx.DB().GetValueByOutpoint(txIn.PreviousOutPoint.String())
+				if err != nil && !errors.Is(err, gorm.ErrRecordNotFound) {
 					return err
 				}
 				if err == nil {
 					needDelOutpointsLock.Lock()
-					needDelOutpoints[txIn.PreviousOutPoint.String()] = struct{}{}
+					needDelOutpoints[txIn.PreviousOutPoint.String()] = value
 					needDelOutpointsLock.Unlock()
 				}
 				return nil
