@@ -1,6 +1,7 @@
 package handle
 
 import (
+	"errors"
 	"github.com/btcsuite/btcd/txscript"
 	"github.com/gin-gonic/gin"
 	"github.com/inscription-c/cins/inscription/index/model"
@@ -31,13 +32,18 @@ func (h *Handler) doInscriptionsInOutput(ctx *gin.Context, outputStr string) err
 		return err
 	}
 	txOut := tx.MsgTx().TxOut[output.Index]
-	_, addresses, num, err := txscript.ExtractPkScriptAddrs(txOut.PkScript, util.ActiveNet.Params)
-	if err != nil {
+
+	var addressStr string
+	pkScript, err := txscript.ParsePkScript(txOut.PkScript)
+	if err != nil && !errors.Is(err, txscript.ErrUnsupportedScriptType) {
 		return err
 	}
-	address := ""
-	if num > 0 {
-		address = addresses[0].String()
+	if err == nil {
+		address, err := pkScript.Address(util.ActiveNet.Params)
+		if err != nil {
+			return err
+		}
+		addressStr = address.String()
 	}
 
 	scriptPk, err := txscript.DisasmString(txOut.PkScript)
@@ -48,7 +54,7 @@ func (h *Handler) doInscriptionsInOutput(ctx *gin.Context, outputStr string) err
 	ctx.JSON(http.StatusOK, gin.H{
 		"value":         txOut.Value,
 		"script_pubkey": scriptPk,
-		"address":       address,
+		"address":       addressStr,
 		"transaction":   output.Hash.String(),
 		"inscriptions":  inscriptions,
 	})

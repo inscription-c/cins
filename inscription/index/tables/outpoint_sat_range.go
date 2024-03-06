@@ -3,7 +3,7 @@ package tables
 import (
 	"encoding/binary"
 	"errors"
-	"github.com/inscription-c/cins/internal/math/uint128"
+	"github.com/inscription-c/cins/pkg/math/uint128"
 	"time"
 )
 

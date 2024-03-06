@@ -36,8 +36,6 @@ func (h *Handler) InitRouter() {
 	// cbrc20
 	h.Engine().GET("/cbrc20/token/:tkid", h.BRC20CToken)
 	h.Engine().GET("/cbrc20/tokens/:tk/:page", h.BRC20CTokens)
-	//h.Engine().GET("/cbrc20/mint-history/:tkidOrAddr/:page", h.BRC20CMintHistory)
-	//h.Engine().GET("/cbrc20/holders/:tkid/:page", h.BRC20CHolders)
 
 	// block
 	h.Engine().GET("/blockhash", h.BlockHash)
@@ -45,11 +43,6 @@ func (h *Handler) InitRouter() {
 	h.Engine().GET("/blockheight", h.BlockHeight)
 	h.Engine().GET("/clock", h.BlockClock)
 	h.Engine().GET("/block/:height", h.InscriptionsInBlock)
-
-	// scan
-	scan := h.Engine().Group("/scan")
-	scan.GET("/home/page/statistics", h.HomePageStatistics)
-	scan.POST("/inscriptions", h.ScanInscriptions)
 
 	r := h.Engine().Group("/r")
 	r.GET("/blockheight", h.BlockHeight)

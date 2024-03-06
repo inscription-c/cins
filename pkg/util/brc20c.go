@@ -5,16 +5,12 @@ import (
 	"errors"
 	"fmt"
 	"github.com/inscription-c/cins/constants"
-	"regexp"
 	"strconv"
 )
 
 func init() {
 	RegisterProtocol(&CBRC20{})
 }
-
-// tickNameRegexp is a regular expression that matches valid tick names.
-var tickNameRegexp = regexp.MustCompile(`^[a-zA-Z0-9-]+$`)
 
 // CBRC20 is a struct that represents a BRC20C protocol.
 // It contains the protocol name, operation, tick, max, limit, decimals, tkId, amount, and to.
@@ -65,7 +61,7 @@ func (b *CBRC20) Check() error {
 	if p.Protocol != constants.ProtocolCBRC20 {
 		return errors.New("protocol not match")
 	}
-	if !tickNameRegexp.MatchString(p.Tick) {
+	if !constants.TickNameRegexp.MatchString(p.Tick) {
 		return errors.New("tick name invalid")
 	}
 
