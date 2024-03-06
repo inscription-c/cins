@@ -12,6 +12,7 @@ import (
 	"github.com/inscription-c/cins/inscription/index/dao"
 	"github.com/inscription-c/cins/inscription/index/model"
 	"github.com/inscription-c/cins/inscription/index/tables"
+	"github.com/inscription-c/cins/inscription/log"
 	"github.com/inscription-c/cins/pkg/signal"
 	"github.com/inscription-c/cins/pkg/util"
 	"golang.org/x/sync/errgroup"
@@ -466,6 +467,7 @@ func (u *InscriptionUpdater) indexEnvelopers(
 		}
 		totalFee := totalInputValue - totalOutputValue
 		if totalFee <= 0 {
+			log.Srv.Errorf("totalFee <= 0, totalInputValue: %d totalOutputValue: %d", totalInputValue, totalOutputValue)
 			return fmt.Errorf("totalFee <= 0, %d", totalFee)
 		}
 		flotsam.Origin.New.Fee = totalFee / int64(idCounter)
