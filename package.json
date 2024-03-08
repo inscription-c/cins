@@ -8,11 +8,12 @@
   "scripts": {
     "dev": "vuepress dev docs",
     "build": "vuepress build -d ./dist docs",
-    "deploy": "netlify deploy --build"
+    "deploy": "npx wrangler pages deploy ./dist --project-name c-ins-doc"
   },
   "devDependencies": {
     "@vuepress/client": "2.0.0-rc.0",
     "@vuepress/plugin-back-to-top": "2.0.0-rc.0",
+    "@vuepress/plugin-docsearch": "2.0.0-rc.18",
     "@vuepress/plugin-search": "2.0.0-rc.0",
     "@vuepress/plugin-toc": "2.0.0-rc.0",
     "vue": "^3.4.5",

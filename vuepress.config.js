@@ -2,6 +2,7 @@ import { defineUserConfig, defaultTheme } from 'vuepress'
 import { tocPlugin } from '@vuepress/plugin-toc'
 import { searchPlugin } from '@vuepress/plugin-search'
 import { backToTopPlugin } from '@vuepress/plugin-back-to-top'
+// import { docsearchPlugin } from '@vuepress/plugin-docsearch'
 
 export default defineUserConfig({
     locales: {
@@ -29,7 +30,7 @@ export default defineUserConfig({
                 text: 'Data Structure',
                 children: [
                     '/data-structure/inscription.md',
-                    '/data-structure/brc-20-c.md',
+                    '/data-structure/c-brc-20.md',
                 ],
             },
             {
@@ -45,11 +46,16 @@ export default defineUserConfig({
         ],
         themePlugins: {
             backToTop: true,
-        }
+        },
     }),
     plugins: [
         searchPlugin({}),
         backToTopPlugin(),
         tocPlugin({}),
+        // docsearchPlugin({
+        //     apiKey: 'cbbbdeff395fe42e5bed238d2070940e',
+        //     indexName: 'c-ins',
+        //     appId: '1RVH5HEXDA'
+        // }),
     ],
 })
