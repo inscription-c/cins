@@ -9,7 +9,7 @@ While the Ordinals Inscription is an excellent evolution, it is not flawless and
 - It has a longer transaction confirmation time, which is not user-friendly for small retail investors.
 - It lacks composability due to the absence of "Turing completeness" smart contract.
 
-See the [docs](https://github.com/inscription-c/cins/wiki) for documentation and guides.
+See the [docs](https://docs.c-ins.com/) for documentation and guides.
 
 # Installation
 
