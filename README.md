@@ -49,3 +49,34 @@ cins inscribe -f <inscription_file_path> --c_ins_description <c_ins_description_
 ```bash
 cins indexer -u root -P root --mysql_addr <mysql_addr> --mysql_user <mysql_user> --mysql_pass <mysql_pass> --mysql_db <mysql_db> --chain_url <bitcoin_rpc_connect>
 ```
+
+or run with config file
+
+```bash
+cins indexer -c <path_to_config_file> 
+```
+
+config example
+```yaml
+server:
+  testnet: true
+  rpc_listen: ":18335"
+  no_api: false
+  index_sats: true
+  index_spend_sats: false
+chain:
+  url: "http://127.0.0.1:18334"
+  username: "root"
+  password: "root"
+db:
+  mysql:
+    addr: "127.0.0.1:3306"
+    user: "root"
+    password: "root"
+    db: "cins"
+sentry:
+  dsn: ""
+  traces_sample_rate: 1.0
+origins:
+  - ".*"
+```
