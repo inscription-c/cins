@@ -48,11 +48,6 @@ require (
 	gotest.tools v2.2.0+incompatible
 )
 
-replace (
-	github.com/go-ldap/ldap/v3 => github.com/YangKeao/ldap/v3 v3.4.5-0.20230421065457-369a3bab1117
-	github.com/pingcap/badger => github.com/pingcap/badger v1.5.1-0.20230103063557-828f39b09b6d
-)
-
 require (
 	github.com/BurntSushi/toml v1.3.2 // indirect
 	github.com/Shopify/goreferrer v0.0.0-20220729165902-8cddb4f5de06 // indirect
