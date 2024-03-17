@@ -44,6 +44,31 @@ Inscribe inscriptions:
 cins inscribe -f <inscription_file_path> --c_ins_description <c_ins_description_file_path> --dest <dest_owner_address> --indexer_url <cins_indexer_url>
 ```
 
+inscribe flags:
+```bash
+Usage:
+  cins inscribe [flags]
+
+Flags:
+      --c_brc_20                   is c-brc-20 protocol, add this flag will auto check protocol content effectiveness
+      --c_ins_description string   cins protocol description.
+      --cbor_metadata string       Include CBOR in file at <METADATA> as inscription metadata
+      --compress                   Compress inscription content with brotli.
+      --dest string                Send inscription to <DESTINATION> address.
+      --dry_run                    Don't sign or broadcast transactions.
+  -f, --filepath string            inscription file path
+  -h, --help                       help for inscribe
+      --indexer_url string         the URL of indexer server (default http://localhost:8335, testnet: http://localhost:18335) (default "http://localhost:8335")
+      --json_metadata string       Include JSON in file at <METADATA> converted to CBOR as inscription metadata  
+      --no_backup                  Do not back up recovery key.
+  -p, --postage uint               Amount of postage to include in the inscription. (default 10000)
+  -t, --testnet                    bitcoin testnet3
+      --wallet_pass string         wallet password for master private key (default "root")
+      --wallet_rpc_pass string     wallet rpc server password (default "root")
+      --wallet_rpc_user string     wallet rpc server user (default "root")
+      --wallet_url string          the URL of wallet RPC server to connect to (default http://localhost:8332, testnet: localhost:18332) (default "localhost:8332")
+```
+
 # Indexer
 
 ```bash
