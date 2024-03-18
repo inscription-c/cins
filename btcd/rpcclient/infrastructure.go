@@ -1669,13 +1669,20 @@ func (c *Client) BackendVersion() (BackendVersion, error) {
 	// GetNetworkInfo.
 	networkInfo, err := c.GetNetworkInfo()
 	if err != nil {
-		return 0, fmt.Errorf("unable to detect bitcoind version: %v", err)
+		var rpcErr *btcjson.RPCError
+		if !errors.As(err, &rpcErr) || rpcErr.Code != btcjson.ErrRPCMethodNotFound.Code {
+			return 0, fmt.Errorf("unable to detect bitcoind version: %v", err)
+		}
+	}
+	if networkInfo == nil {
+		c.backendVersion = new(BackendVersion)
+	} else {
+		version := parseBitcoindVersion(networkInfo.SubVersion)
+		c.backendVersion = &version
 	}
 
 	// Parse the bitcoind version and cache it.
-	log.Debugf("Detected bitcoind version: %v", networkInfo.SubVersion)
-	version := parseBitcoindVersion(networkInfo.SubVersion)
-	c.backendVersion = &version
+	log.Debugf("Detected bitcoind version: %v", c.backendVersion)
 
 	return *c.backendVersion, nil
 }

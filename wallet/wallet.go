@@ -251,6 +251,7 @@ func startChainRPC() (chain2.Interface, error) {
 	if err != nil {
 		return nil, err
 	}
+
 	switch backendVersion {
 	case rpcclient.BitcoindPre19, rpcclient.BitcoindPre22,
 		rpcclient.BitcoindPre25, rpcclient.BitcoindPost25:

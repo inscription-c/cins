@@ -2,7 +2,9 @@ package chain
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
+	"github.com/btcsuite/btcd/btcjson"
 
 	"github.com/btcsuite/btcd/chaincfg/chainhash"
 	"github.com/btcsuite/btcd/wire"
@@ -50,7 +52,10 @@ func NewBitcoindEventSubscriber(cfg *BitcoindConfig, client *rpcclient.Client,
 	// clients.
 	hasRPC, err := hasSpendingPrevoutRPC(client)
 	if err != nil {
-		return nil, err
+		var rpcErr *btcjson.RPCError
+		if !errors.As(err, &rpcErr) || rpcErr.Code != btcjson.ErrRPCMethodNotFound.Code {
+			return nil, err
+		}
 	}
 
 	if cfg.PollingConfig != nil {
