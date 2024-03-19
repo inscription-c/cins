@@ -18,6 +18,14 @@ go version >= 1.21 is required.
 go install github.com/inscription-c/cins@latest
 ```
 
+# Btcd
+btcd is a full node implementation of the bitcoin protocol written in Go. It is a fork of the original btcd code with some modifications to support the cins protocol.
+
+Start btcd:
+```bash
+cins btcd -u root -P root
+```
+
 # Wallet
 
 cins wallet is modifications made based on btcd, So you can manage your wallet through [btcctl](https://github.com/btcsuite/btcd/tree/master/cmd/btcctl).
@@ -31,6 +39,7 @@ Start wallet service with:
 ```bash
 cins wallet --wallet_pass root --chain_url <bitcoin_rpc_connect>
 ```
+It is recommended to use btcd as the wallet's bitcoin node service. Currently, QuickNode's node service is also supported, but the synchronization speed will be slower.
 
 ## example
 
