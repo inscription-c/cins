@@ -1,6 +1,5 @@
 package dao
 
-import "C"
 import (
 	"errors"
 	"github.com/inscription-c/cins/inscription/index/tables"

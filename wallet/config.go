@@ -30,7 +30,7 @@ const (
 	defaultLogLevel         = "info"
 	defaultLogDirname       = "logs"
 	defaultLogFilename      = "btcwallet.log"
-	defaultRPCMaxClients    = 10
+	defaultRPCMaxClients    = 64
 	defaultRPCMaxWebsockets = 25
 )
 

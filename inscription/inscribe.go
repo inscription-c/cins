@@ -168,6 +168,10 @@ func inscribe() error {
 
 	// Create commit and reveal transactions
 	if err := inscription.CreateInscriptionTx(); err != nil {
+		if errors.Is(err, InsufficientBalanceError) {
+			log.Log.Warn("no enough balance")
+			return nil
+		}
 		return err
 	}
 

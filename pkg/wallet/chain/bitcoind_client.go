@@ -3,9 +3,11 @@ package chain
 import (
 	"container/list"
 	"encoding/hex"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"github.com/btcsuite/btcwallet/chain"
+	"github.com/inscription-c/cins/btcd/rpcclient"
 	"github.com/inscription-c/cins/wallet/log"
 	"github.com/lightningnetwork/lnd/queue"
 	"sync"
@@ -218,6 +220,19 @@ func (c *BitcoindClient) SendRawTransaction(tx *wire.MsgTx,
 	allowHighFees bool) (*chainhash.Hash, error) {
 
 	return c.chainConn.client.SendRawTransaction(tx, allowHighFees)
+}
+
+// RawRequest allows the caller to send a raw or custom request to the server.
+// This method may be used to send and receive requests and responses for
+// requests that are not handled by this client package, or to proxy partially
+// unmarshaled requests to another JSON-RPC server if a request cannot be
+// handled directly.
+func (c *BitcoindClient) RawRequest(method string, params []json.RawMessage) (json.RawMessage, error) {
+	return c.chainConn.client.RawRequestAsync(method, params).Receive()
+}
+
+func (c *BitcoindClient) RawRequestAsync(method string, params []json.RawMessage) rpcclient.FutureRawResult {
+	return c.chainConn.client.RawRequestAsync(method, params)
 }
 
 // TestMempoolAcceptCmd returns result of mempool acceptance tests indicating

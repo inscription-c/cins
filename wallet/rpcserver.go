@@ -2,8 +2,8 @@ package wallet
 
 import (
 	"errors"
-	"github.com/btcsuite/btcwallet/rpc/legacyrpc"
-	"github.com/btcsuite/btcwallet/wallet"
+	"github.com/inscription-c/cins/pkg/wallet/rpc/legacyrpc"
+	"github.com/inscription-c/cins/pkg/wallet/wallet"
 	"github.com/inscription-c/cins/wallet/log"
 	"net"
 	"runtime"
