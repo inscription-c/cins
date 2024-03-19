@@ -46,7 +46,7 @@ const (
 	// recoveryBatchSize is the default number of blocks that will be
 	// scanned successively by the recovery manager, in the event that the
 	// wallet is started in recovery mode.
-	recoveryBatchSize = 200
+	recoveryBatchSize = 2000
 
 	// defaultSyncRetryInterval is the default amount of time to wait
 	// between re-tries on errors during initial sync.
@@ -764,7 +764,7 @@ func (w *Wallet) recovery(chainClient chain.Interface,
 			if atomic.LoadUint32(&syncer.quit) == 1 {
 				return errors.New("recovery: forced shutdown")
 			}
-			height := currentBatch*batchNum + j + startHeight
+			height := currentBatch*currentNum + j + startHeight
 			if height > bestHeight {
 				break
 			}
