@@ -7,6 +7,7 @@ import (
 	"github.com/inscription-c/cins/inscription/index/model"
 	"github.com/inscription-c/cins/pkg/util"
 	"net/http"
+	"strings"
 )
 
 func (h *Handler) InscriptionsInOutput(ctx *gin.Context) {
@@ -29,6 +30,12 @@ func (h *Handler) doInscriptionsInOutput(ctx *gin.Context, outputStr string) err
 	}
 	tx, err := h.RpcClient().GetRawTransaction(&output.Hash)
 	if err != nil {
+		errStr := strings.ToLower(err.Error())
+		errExp := strings.ToLower("-5: No such mempool")
+		if strings.Contains(errStr, errExp) {
+			ctx.Status(http.StatusNotFound)
+			return nil
+		}
 		return err
 	}
 	txOut := tx.MsgTx().TxOut[output.Index]
