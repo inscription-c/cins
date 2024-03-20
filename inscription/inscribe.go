@@ -120,8 +120,8 @@ var Cmd = &cobra.Command{
 }
 
 // inscribe is a function that performs the inscription process.
-// It checks the configuration, gets the UTXO, creates the commit and reveal transactions, and signs and sends the transactions.
-// It also handles any errors that occur during these processes.
+// It checks the configuration, gets the UTXO, creates the commit and reveal transactions,
+// and signs and sends the transactions. It also handles any errors that occur during these processes.
 func inscribe() error {
 	// Check the configuration
 	if err := configCheck(); err != nil {
@@ -161,6 +161,11 @@ func inscribe() error {
 		return err
 	}
 
+	if err := inscription.Wallet().WalletPassphrase(walletPass, 60); err != nil {
+		return err
+	}
+	defer inscription.Wallet().WalletLock()
+
 	// Get all UTXO for all unspent addresses and exclude the UTXO where the inscription
 	if err := inscription.getUtxo(); err != nil {
 		return err
@@ -188,24 +193,16 @@ func inscribe() error {
 		return nil
 	}
 
-	// Sign the reveal transaction
-	if err := inscription.SignRevealTx(); err != nil {
-		return err
-	}
 	// Sign the commit transaction
 	if err := inscription.SignCommitTx(); err != nil {
 		return err
 	}
-
-	// backup temporary private key
-	if !noBackup {
-		wif, err := btcutil.NewWIF(inscription.priKey, util.ActiveNet.Params, true)
-		if err != nil {
-			return err
-		}
-		if err := walletCli.ImportPrivKey(wif); err != nil {
-			return err
-		}
+	// Sign the reveal transaction
+	if err := inscription.SignRevealTx(); err != nil {
+		return err
+	}
+	if err := inscription.backupPrivKey(); err != nil {
+		return err
 	}
 
 	// Send the commit transaction

@@ -11,17 +11,18 @@ import (
 	"github.com/btcsuite/btcd/btcec/v2/schnorr"
 	"github.com/btcsuite/btcd/btcjson"
 	"github.com/btcsuite/btcd/btcutil"
+	"github.com/btcsuite/btcd/chaincfg"
 	"github.com/btcsuite/btcd/chaincfg/chainhash"
 	txscript2 "github.com/btcsuite/btcd/txscript"
 	"github.com/btcsuite/btcd/wire"
 	"github.com/btcsuite/btcwallet/waddrmgr"
+	"github.com/btcsuite/btcwallet/wallet/txauthor"
 	secp "github.com/decred/dcrd/dcrec/secp256k1/v4"
 	"github.com/go-playground/validator/v10"
 	"github.com/gogf/gf/v2/util/gconv"
 	"github.com/inscription-c/cins/btcd/rpcclient"
 	"github.com/inscription-c/cins/constants"
 	"github.com/inscription-c/cins/inscription/index"
-	"github.com/inscription-c/cins/inscription/index/model"
 	"github.com/inscription-c/cins/inscription/index/tables"
 	"github.com/inscription-c/cins/inscription/log"
 	"github.com/inscription-c/cins/pkg/indexer"
@@ -72,7 +73,6 @@ type Inscription struct {
 	utxo []btcjson.ListUnspentResult
 
 	// commitTx is the commit transaction of the inscription.
-	// revealTx is the reveal transaction of the inscription.
 	commitTx, revealTx *wire.MsgTx
 
 	// priKey is the private key for the transaction.
@@ -461,10 +461,6 @@ func (i *Inscription) BuildCommitTx() error {
 
 	// input begin
 	for _, v := range i.utxo {
-		script, err := util.AddressScript(v.Address, util.ActiveNet.Params)
-		if err != nil {
-			return err
-		}
 		hash, err := chainhash.NewHashFromStr(v.TxID)
 		if err != nil {
 			return err
@@ -472,7 +468,7 @@ func (i *Inscription) BuildCommitTx() error {
 		txIn := wire.NewTxIn(&wire.OutPoint{
 			Hash:  *hash,
 			Index: v.Vout,
-		}, script, nil)
+		}, nil, nil)
 		commitTx.AddTxIn(txIn)
 		inTotal += decimal.NewFromFloat(v.Amount).Mul(decimal.NewFromInt(int64(constants.OneBtc))).IntPart()
 	}
@@ -509,11 +505,6 @@ func (i *Inscription) BuildCommitTx() error {
 	commitTx.TxOut[len(commitTx.TxOut)-1].Value = change
 	if change < constants.DustLimit {
 		commitTx.TxOut = commitTx.TxOut[:len(commitTx.TxOut)-1]
-	}
-
-	//delete input script
-	for _, v := range commitTx.TxIn {
-		v.SignatureScript = nil
 	}
 	return nil
 }
@@ -595,90 +586,42 @@ func (i *Inscription) BuildRevealTx() error {
 // hashes, and signs the transaction inputs. It returns an error if there is an
 // error in any of the steps.
 func (i *Inscription) SignCommitTx() error {
-	// This block of code is part of the signCommitTx method of the Inscription struct.
-	// It is responsible for signing the commit transaction of the Inscription.
-
-	// First, it unlocks the wallet using the wallet passphrase.
-	if err := i.Wallet().WalletPassphrase(walletPass, 5); err != nil {
-		return err
-	}
-
-	// It creates a map to hold the private keys for the transaction inputs.
 	priKeyMap := make(map[string]*btcutil.WIF)
+	prevPkScripts := make([][]byte, 0)
+	prevPkScriptsMap := make(map[string][]byte)
+	inputValues := make([]btcutil.Amount, 0)
 
-	// It creates a new MultiPrevOutFetcher to fetch previous outputs.
-	feature := txscript.NewMultiPrevOutFetcher(nil)
-
-	// It iterates over the unspent transaction outputs (UTXOs) of the Inscription.
 	for j := 0; j < len(i.utxo); j++ {
 		utxo := i.utxo[j]
-
-		// It decodes the address of the UTXO.
 		address, err := btcutil.DecodeAddress(utxo.Address, util.ActiveNet.Params)
 		if err != nil {
 			return err
 		}
-
-		// It dumps the private key for the address.
 		wif, err := i.Wallet().DumpPrivKey(address)
 		if err != nil {
 			return err
 		}
-
-		// It creates a new OutPoint for the UTXO and adds the private key to the map.
-		outpoint := model.NewOutPoint(utxo.TxID, utxo.Vout)
-		priKeyMap[outpoint.String()] = wif
-
-		// It converts the OutPoint to a wire.OutPoint.
-		outpointObj, err := outpoint.WireOutpoint()
-		if err != nil {
-			return err
-		}
-
-		// It decodes the script public key of the UTXO.
+		priKeyMap[address.String()] = wif
 		pkScript, err := hex.DecodeString(utxo.ScriptPubKey)
 		if err != nil {
 			return err
 		}
+		prevPkScriptsMap[address.String()] = pkScript
+		prevPkScripts = append(prevPkScripts, pkScript)
 
-		// It converts the amount of the UTXO to satoshis.
-		value := int64(index.Amount(utxo.Amount).Sat())
-
-		// It adds the previous output to the MultiPrevOutFetcher.
-		feature.AddPrevOut(*outpointObj, wire.NewTxOut(value, pkScript))
-	}
-
-	// It creates new transaction signature hashes using the commit transaction and the MultiPrevOutFetcher.
-	sigHashes := txscript.NewTxSigHashes(i.commitTx, feature)
-
-	// It iterates over the UTXOs of the Inscription again.
-	for j := 0; j < len(i.utxo); j++ {
-		utxo := i.utxo[j]
-
-		// It creates a new OutPoint for the UTXO and retrieves the private key from the map.
-		outpoint := model.NewOutPoint(utxo.TxID, utxo.Vout)
-		wif := priKeyMap[outpoint.String()]
-
-		// It converts the address of the UTXO to a script.
-		pkScript, err := util.AddressScript(utxo.Address, util.ActiveNet.Params)
+		amount, err := btcutil.NewAmount(utxo.Amount)
 		if err != nil {
 			return err
 		}
-
-		// It converts the amount of the UTXO to satoshis.
-		value := int64(index.Amount(utxo.Amount).Sat())
-
-		// It creates a witness signature for the transaction input.
-		witness, err := txscript.WitnessSignature(i.commitTx, sigHashes, j, value, pkScript, txscript.SigHashAll, wif.PrivKey, wif.CompressPubKey)
-		if err != nil {
-			return err
-		}
-
-		// It sets the witness of the transaction input.
-		i.commitTx.TxIn[j].Witness = witness
+		inputValues = append(inputValues, amount)
 	}
 
-	// It returns nil if there were no errors during the process.
+	if err := txauthor.AddAllInputScripts(i.commitTx, prevPkScripts, inputValues, secretSource{
+		priKeys: priKeyMap,
+		scripts: prevPkScriptsMap,
+	}); err != nil {
+		return err
+	}
 	return nil
 }
 
@@ -865,6 +808,26 @@ func (i *Inscription) getUtxo() error {
 	return nil
 }
 
+// backupPrivKey is a method of the Inscription struct.
+// It is responsible for backing up the private key of the Inscription.
+// If the noBackup flag is set, it returns immediately.
+// Otherwise, it unlocks the wallet, generates a Wallet Import Format (WIF) from the private key,
+// imports the WIF into the wallet, and then locks the wallet.
+// It returns an error if there is an error in any of the steps.
+func (i *Inscription) backupPrivKey() error {
+	if noBackup {
+		return nil
+	}
+	wif, err := btcutil.NewWIF(i.priKey, util.ActiveNet.Params, true)
+	if err != nil {
+		return err
+	}
+	if err := i.Wallet().ImportPrivKey(wif); err != nil {
+		return err
+	}
+	return nil
+}
+
 // Data is a method of the Inscription struct. It returns the body of the inscription.
 func (i *Inscription) Data() []byte {
 	return i.body
@@ -886,6 +849,31 @@ func CalculateTxFee(tx *wire.MsgTx, feeRate int64) int64 {
 		fee = constants.DustLimit
 	}
 	return fee
+}
+
+type secretSource struct {
+	priKeys map[string]*btcutil.WIF
+	scripts map[string][]byte
+}
+
+func (s secretSource) GetKey(addr btcutil.Address) (*btcec.PrivateKey, bool, error) {
+	priKey, ok := s.priKeys[addr.String()]
+	if !ok {
+		return nil, false, nil
+	}
+	return priKey.PrivKey, priKey.CompressPubKey, nil
+}
+
+func (s secretSource) GetScript(addr btcutil.Address) ([]byte, error) {
+	script, ok := s.scripts[addr.String()]
+	if !ok {
+		return nil, errors.New("no script")
+	}
+	return script, nil
+}
+
+func (s secretSource) ChainParams() *chaincfg.Params {
+	return util.ActiveNet.Params
 }
 
 type Output struct {
