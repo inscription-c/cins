@@ -23,7 +23,7 @@ btcd is a full node implementation of the bitcoin protocol written in Go. It is 
 
 Start btcd:
 ```bash
-cins btcd -u root -P root
+cins btcd -u root -P root #-t
 ```
 
 # Wallet
@@ -37,20 +37,45 @@ go install  github.com/btcsuite/btcd/cmd/btcctl@v0.24.0
 
 Start wallet service with:
 ```bash
-cins wallet --wallet_pass root --chain_url <bitcoin_rpc_connect>
+cins wallet -u root -P root -w root -s <bitcoin_rpc_connect> #-t
 ```
 It is recommended to use btcd as the wallet's bitcoin node service. Currently, QuickNode's node service is also supported, but the synchronization speed will be slower.
 
 ## example
 
-Get the default wallet balance:
 ```bash
-btcctl getbalance default --wallet --notls --rpcuser root --rpcpass root
+# create a new address
+btcctl getnewaddress default bech32 --wallet --notls --rpcuser root --rpcpass root #--testnet
+# list wallet address
+btcctl listreceivedbyaddress --wallet --notls --rpcuser root --rpcpass root #--testnet
+# send btc to address 
+# get balance
+btcctl getbalance default --wallet --notls --rpcuser root --rpcpass root #--testnet
 ```
 
 Inscribe inscriptions:
 ```bash
-cins inscribe -f <inscription_file_path> --c_ins_description <c_ins_description_file_path> --dest <dest_owner_address> --indexer_url <cins_indexer_url>
+cins inscribe -f <inscription_file_path> --c_ins_description <c_ins_description_file_path> --dest <dest_owner_address> --indexer_url <cins_indexer_url> #-t
+```
+
+<inscription_file_path> content example:
+```json
+{
+  "p": "c-brc-20",
+  "op": "deploy",
+  "tick": "c-ins",
+  "max": "21000000",
+  "lim": "1000"
+}
+```
+
+<c_ins_description_file_path> content example:
+```json
+{
+  "type": "blockchain",
+  "chain": "309",
+  "contract": "ckt1qqexmutxu0c2jq9q4msy8cc6fh4q7q02xvr7dc347zw3ks3qka0m6qggqupnqt6y5nu39j0704jvw770esjfdzulzsyqwqes9az2f7gje8l86ex8008ucfyk3w03gk2pfrr"
+}
 ```
 
 inscribe flags:
@@ -81,7 +106,7 @@ Flags:
 # Indexer
 
 ```bash
-cins indexer -u root -P root --mysql_addr <mysql_addr> --mysql_user <mysql_user> --mysql_pass <mysql_pass> --mysql_db <mysql_db> --chain_url <bitcoin_rpc_connect>
+cins indexer -u root -P root --mysql_addr <mysql_addr> --mysql_user <mysql_user> --mysql_pass <mysql_pass> --mysql_db <mysql_db> --chain_url <bitcoin_rpc_connect> #-t
 ```
 
 or run with config file
