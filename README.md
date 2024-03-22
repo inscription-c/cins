@@ -12,8 +12,9 @@ While the Ordinals Inscription is an excellent evolution, it is not flawless and
 See the [docs](https://docs.c-ins.com/) for documentation and guides.
 
 # Installation
+- go version >= 1.21 is required.
+- Tt test for macOS(14.3) and linux(Ubuntu 22.04.2 LTS), not recommended to use Windows as there may be unknown problems.
 
-go version >= 1.21 is required.
 ```bash
 go install github.com/inscription-c/cins@latest
 ```
